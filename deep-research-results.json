@@ -1,0 +1,114 @@
+{
+  "Deepcoin": {
+    "ticker": {
+      "success": true,
+      "sample": "{\"action\":\"PushMarketDataOverView\",\"requestNo\":0,\"errorCode\":0,\"errorMsg\":\"Success\",\"result\":[{\"table\":\"MarketDataOverView\",\"data\":{\"ExchangeID\":\"DeepCoin\",\"InstrumentID\":\"BTCUSDT\",\"ProductGroup\":\"Swa"
+    },
+    "trades": {
+      "success": true,
+      "sample": "{\"action\":\"RecvTopicAction\",\"requestNo\":0,\"errorCode\":0,\"errorMsg\":\"Success\",\"result\":[{\"table\":\"TopicAction\",\"data\":{\"Action\":\"1\",\"LocalNo\":9,\"TopicID\":\"2\",\"FilterValue\":\"DeepCoin_BTCUSDT\",\"ResumeNo\""
+    },
+    "orderbook": {
+      "success": true,
+      "sample": "{\"action\":\"PushMarketOrder\",\"requestNo\":0,\"errorCode\":0,\"errorMsg\":\"DeepCoin_BTCUSDT\",\"result\":[{\"table\":\"MarketOrder\",\"data\":{\"ExchangeID\":\"DeepCoin\",\"InstrumentID\":\"BTCUSDT\",\"Direction\":\"0\",\"Price\":"
+    },
+    "klines": {
+      "success": true,
+      "sample": "{\"action\":\"PushKLine\",\"requestNo\":0,\"errorCode\":0,\"errorMsg\":\"Success\",\"result\":[{\"table\":\"KLine\",\"data\":{\"ExchangeID\":\"DeepCoin\",\"InstrumentID\":\"BTCUSDT\",\"PeriodID\":\"1m\",\"BeginTime\":1770320880,\"OpenP"
+    },
+    "spot_ticker": {
+      "success": true,
+      "sample": "{\"action\":\"\",\"requestNo\":0,\"errorCode\":0,\"errorMsg\":\"Error=PublishFlow(7)PubStartID(-2)<FirstID(0)\"}"
+    }
+  },
+  "Phemex": {
+    "trade": {
+      "success": false,
+      "error": "Unexpected server response: 410"
+    },
+    "trade_usdt": {
+      "success": false,
+      "error": "Unexpected server response: 410"
+    },
+    "ticker": {
+      "success": false,
+      "error": "Unexpected server response: 410"
+    },
+    "orderbook": {
+      "success": false,
+      "error": "Unexpected server response: 410"
+    },
+    "kline": {
+      "success": false,
+      "error": "Unexpected server response: 410"
+    },
+    "spot_trade": {
+      "success": false,
+      "error": "Unexpected server response: 410"
+    }
+  },
+  "WooX": {
+    "trade": {
+      "success": true,
+      "sample": "{\"event\":\"ping\",\"ts\":1770320960000}"
+    },
+    "ticker": {
+      "success": true,
+      "sample": "{\"topic\":\"SPOT_BTC_USDT@ticker\",\"ts\":1770320961000,\"data\":{\"symbol\":\"SPOT_BTC_USDT\",\"open\":73676.12,\"close\":65593.32,\"high\":74167.32,\"low\":65370.03,\"volume\":46.100580,\"amount\":3276318.71503703,\"aggreg"
+    },
+    "orderbook": {
+      "success": true,
+      "sample": "{\"topic\":\"SPOT_BTC_USDT@orderbook\",\"ts\":1770320962466,\"data\":{\"symbol\":\"SPOT_BTC_USDT\",\"asks\":[[65549.72,0.305111],[65550.22,0.000080],[65550.35,0.000080],[65550.36,0.055970],[65550.50,0.247500],[6555"
+    },
+    "kline": {
+      "success": true,
+      "sample": "{\"topic\":\"SPOT_BTC_USDT@kline_1m\",\"ts\":1770320968006,\"data\":{\"symbol\":\"SPOT_BTC_USDT\",\"type\":\"1m\",\"open\":65537.61,\"close\":65490.76,\"high\":65612.49,\"low\":65490.76,\"volume\":2.110800,\"amount\":138355.4169"
+    },
+    "bbo": {
+      "success": true,
+      "sample": "{\"topic\":\"SPOT_BTC_USDT@bbo\",\"ts\":1770320968950,\"data\":{\"symbol\":\"SPOT_BTC_USDT\",\"ask\":65535.57,\"askSize\":0.305177,\"bid\":65507.66,\"bidSize\":0.305307}}"
+    },
+    "perp_trade": {
+      "success": true,
+      "sample": "{\"event\":\"ping\",\"ts\":1770320970000}"
+    },
+    "openinterest": {
+      "success": true,
+      "sample": "{\"event\":\"ping\",\"ts\":1770320980000}"
+    },
+    "markprice": {
+      "success": true,
+      "sample": "{\"topic\":\"PERP_BTC_USDT@markprice\",\"ts\":1770320982002,\"data\":{\"symbol\":\"PERP_BTC_USDT\",\"price\":65499}}"
+    }
+  },
+  "ToobitFutures": {
+    "trade": {
+      "success": true,
+      "sample": "{\"symbol\":\"BTC-SWAP-USDT\",\"symbolName\":\"BTC-SWAP-USDT\",\"topic\":\"trade\",\"params\":{\"realtimeInterval\":\"24h\",\"binary\":\"false\"},\"data\":[{\"v\":\"4900197869680768519\",\"t\":1770320975356,\"p\":\"65503.2\",\"q\":\"1\",\""
+    },
+    "ticker": {
+      "success": true,
+      "sample": "{\"symbol\":\"BTC-SWAP-USDT\",\"symbolName\":\"BTC-SWAP-USDT\",\"topic\":\"realtimes\",\"params\":{\"realtimeInterval\":\"24h\",\"binary\":\"false\"},\"data\":[{\"t\":1770320986892,\"s\":\"BTC-SWAP-USDT\",\"sn\":\"BTC-SWAP-USDT\",\"c\":"
+    },
+    "kline": {
+      "success": true,
+      "sample": "{\"symbol\":\"BTC-SWAP-USDT\",\"symbolName\":\"BTC-SWAP-USDT\",\"klineType\":\"1m\",\"topic\":\"kline\",\"params\":{\"realtimeInterval\":\"24h\",\"klineType\":\"1m\",\"binary\":\"false\"},\"data\":[{\"t\":1770320940000,\"s\":\"BTC-SWAP-U"
+    },
+    "orderbook": {
+      "success": true,
+      "sample": "{\"symbol\":\"BTC-SWAP-USDT\",\"symbolName\":\"BTC-SWAP-USDT\",\"topic\":\"depth\",\"params\":{\"realtimeInterval\":\"24h\",\"binary\":\"false\"},\"data\":[{\"e\":301,\"s\":\"BTC-SWAP-USDT\",\"t\":1770320991210,\"v\":\"16766804_1E-18_9"
+    },
+    "markPrice": {
+      "success": true,
+      "sample": "{\"symbol\":\"BTC-SWAP-USDT\",\"topic\":\"markPrice\",\"params\":{\"realtimeInterval\":\"24h\"},\"data\":[],\"f\":true}"
+    },
+    "indexPrice": {
+      "success": true,
+      "sample": "{\"symbol\":\"BTCUSDT\",\"symbolName\":\"BTCUSDT\",\"topic\":\"index\",\"params\":{\"realtimeInterval\":\"24h\",\"binary\":\"false\"},\"data\":[{\"symbol\":\"BTCUSDT\",\"index\":\"65531.92\",\"edp\":\"65773.61474565\",\"formula\":\"BYBIT.B"
+    },
+    "spot_trade": {
+      "success": true,
+      "sample": "{\"symbol\":\"BTCUSDT\",\"symbolName\":\"BTCUSDT\",\"topic\":\"trade\",\"params\":{\"realtimeInterval\":\"24h\",\"binary\":\"false\"},\"data\":[{\"v\":\"4864169072627355996\",\"t\":1770320984126,\"p\":\"65516.3\",\"q\":\"0.00038\",\"m\":fal"
+    }
+  }
+}

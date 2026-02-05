@@ -1,0 +1,1442 @@
+{
+  "bingx": {
+    "name": "BingX",
+    "tests": {
+      "spot_ticker": {
+        "name": "spot_ticker",
+        "success": true,
+        "connected": true,
+        "messages": 5,
+        "samples": [
+          {
+            "type": "ticker",
+            "data": {
+              "e": "24hTicker",
+              "E": 1770195112766,
+              "s": "BTC-USDT",
+              "p": -2335.2,
+              "P": "-2.96%",
+              "o": 78891.75,
+              "h": 78891.75,
+              "l": 72960,
+              "c": 76556.55,
+              "v": 7376.39,
+              "q": 563310340.13,
+              "O": 1770108712766,
+              "C": 1770195112766,
+              "A": 76556.56,
+              "a": 0.00632,
+              "B": 76556.54,
+              "b": 0.003548
+            }
+          },
+          {
+            "type": "ticker",
+            "data": {
+              "e": "24hTicker",
+              "E": 1770195113778,
+              "s": "BTC-USDT",
+              "p": -2335.2,
+              "P": "-2.96%",
+              "o": 78891.75,
+              "h": 78891.75,
+              "l": 72960,
+              "c": 76556.55,
+              "v": 7376.39,
+              "q": 563310340.13,
+              "O": 1770108713778,
+              "C": 1770195113778,
+              "A": 76556.56,
+              "a": 0.00632,
+              "B": 76556.54,
+              "b": 0.003548
+            }
+          },
+          {
+            "type": "ticker",
+            "data": {
+              "e": "24hTicker",
+              "E": 1770195114790,
+              "s": "BTC-USDT",
+              "p": -2335.2,
+              "P": "-2.96%",
+              "o": 78891.75,
+              "h": 78891.75,
+              "l": 72960,
+              "c": 76556.55,
+              "v": 7376.39,
+              "q": 563310340.13,
+              "O": 1770108714790,
+              "C": 1770195114790,
+              "A": 76556.56,
+              "a": 0.00632,
+              "B": 76556.54,
+              "b": 0.003548
+            }
+          }
+        ],
+        "duration": 5715,
+        "error": null
+      },
+      "spot_kline": {
+        "name": "spot_kline",
+        "success": false,
+        "connected": true,
+        "messages": 0,
+        "samples": [],
+        "duration": 12002,
+        "error": "Timeout - no data received"
+      },
+      "futures_ticker": {
+        "name": "futures_ticker",
+        "success": true,
+        "connected": true,
+        "messages": 5,
+        "samples": [
+          {
+            "type": "ticker",
+            "data": {
+              "e": "24hTicker",
+              "E": 1770195131004,
+              "s": "BTC-USDT",
+              "p": "-2177.2",
+              "P": "-2.77",
+              "c": "76508.9",
+              "L": "0.0583",
+              "h": "78853.6",
+              "l": "72873.1",
+              "v": "46817.1500",
+              "q": "3560807216.87",
+              "o": "78686.1",
+              "O": 1770195008319,
+              "C": 1770195130927,
+              "A": "76509.1",
+              "a": "7.6847",
+              "B": "76508.9",
+              "b": "4.1091"
+            }
+          },
+          {
+            "type": "ticker",
+            "data": {
+              "e": "24hTicker",
+              "E": 1770195132005,
+              "s": "BTC-USDT",
+              "p": "-2177.2",
+              "P": "-2.77",
+              "c": "76508.9",
+              "L": "0.0063",
+              "h": "78853.6",
+              "l": "72873.1",
+              "v": "46817.1500",
+              "q": "3560807216.87",
+              "o": "78686.1",
+              "O": 1770195008528,
+              "C": 1770195131927,
+              "A": "76509.1",
+              "a": "7.5444",
+              "B": "76508.9",
+              "b": "4.2782"
+            }
+          },
+          {
+            "type": "ticker",
+            "data": {
+              "e": "24hTicker",
+              "E": 1770195133004,
+              "s": "BTC-USDT",
+              "p": "-2177.2",
+              "P": "-2.77",
+              "c": "76508.9",
+              "L": "0.0415",
+              "h": "78853.6",
+              "l": "72873.1",
+              "v": "46817.1500",
+              "q": "3560807216.87",
+              "o": "78686.1",
+              "O": 1770195009727,
+              "C": 1770195132930,
+              "A": "76509.1",
+              "a": "9.8566",
+              "B": "76508.9",
+              "b": "5.2214"
+            }
+          }
+        ],
+        "duration": 5166,
+        "error": null
+      },
+      "futures_kline": {
+        "name": "futures_kline",
+        "success": true,
+        "connected": true,
+        "messages": 5,
+        "samples": [
+          {
+            "type": "kline",
+            "data": [
+              {
+                "c": "76504.6",
+                "o": "76531.5",
+                "h": "76532.2",
+                "l": "76501.9",
+                "v": "7.1506",
+                "T": 1770195120000
+              }
+            ]
+          },
+          {
+            "type": "kline",
+            "data": [
+              {
+                "c": "76504.8",
+                "o": "76531.5",
+                "h": "76532.2",
+                "l": "76501.9",
+                "v": "7.2320",
+                "T": 1770195120000
+              }
+            ]
+          },
+          {
+            "type": "kline",
+            "data": [
+              {
+                "c": "76504.6",
+                "o": "76531.5",
+                "h": "76532.2",
+                "l": "76501.9",
+                "v": "7.2497",
+                "T": 1770195120000
+              }
+            ]
+          }
+        ],
+        "duration": 2744,
+        "error": null
+      }
+    }
+  },
+  "bitmex": {
+    "name": "BitMEX",
+    "tests": {
+      "futures_kline": {
+        "name": "futures_kline",
+        "success": true,
+        "connected": true,
+        "messages": 1,
+        "samples": [
+          {
+            "type": "kline",
+            "data": [
+              {
+                "timestamp": "2026-02-04T08:52:00.000Z",
+                "symbol": "XBTUSD",
+                "open": 76421.3,
+                "high": 76459.9,
+                "low": 76420.6,
+                "close": 76435.1,
+                "trades": 24,
+                "volume": 53300,
+                "vwap": 76433.3158,
+                "lastSize": 500,
+                "turnover": 69734050,
+                "homeNotional": 0.6973405,
+                "foreignNotional": 53300
+              }
+            ]
+          }
+        ],
+        "duration": 12001,
+        "error": null
+      },
+      "futures_quote": {
+        "name": "futures_quote",
+        "success": true,
+        "connected": true,
+        "messages": 5,
+        "samples": [
+          {
+            "type": "quote",
+            "data": [
+              {
+                "timestamp": "2026-02-04T08:52:29.471Z",
+                "symbol": "XBTUSD",
+                "bidSize": 300,
+                "bidPrice": 76367,
+                "askPrice": 76379.9,
+                "askSize": 500
+              }
+            ]
+          },
+          {
+            "type": "quote",
+            "data": [
+              {
+                "timestamp": "2026-02-04T08:52:33.510Z",
+                "symbol": "XBTUSD",
+                "bidSize": 300,
+                "bidPrice": 76367,
+                "askPrice": 76388,
+                "askSize": 500
+              }
+            ]
+          },
+          {
+            "type": "quote",
+            "data": [
+              {
+                "timestamp": "2026-02-04T08:52:33.531Z",
+                "symbol": "XBTUSD",
+                "bidSize": 300,
+                "bidPrice": 76367,
+                "askPrice": 76387.9,
+                "askSize": 500
+              }
+            ]
+          }
+        ],
+        "duration": 5570,
+        "error": null
+      }
+    }
+  },
+  "mexc": {
+    "name": "MEXC",
+    "tests": {
+      "spot_orderbook_v2": {
+        "name": "spot_orderbook_v2",
+        "success": false,
+        "connected": true,
+        "messages": 0,
+        "samples": [],
+        "duration": 12007,
+        "error": "Timeout - no data received"
+      },
+      "spot_trades_v2": {
+        "name": "spot_trades_v2",
+        "success": false,
+        "connected": true,
+        "messages": 0,
+        "samples": [],
+        "duration": 12013,
+        "error": "Timeout - no data received"
+      },
+      "spot_kline_v2": {
+        "name": "spot_kline_v2",
+        "success": false,
+        "connected": true,
+        "messages": 0,
+        "samples": [],
+        "duration": 12006,
+        "error": "Timeout - no data received"
+      },
+      "futures_trades": {
+        "name": "futures_trades",
+        "success": true,
+        "connected": true,
+        "messages": 5,
+        "samples": [
+          {
+            "type": "trades",
+            "data": [
+              {
+                "p": 76468.2,
+                "v": 15,
+                "T": 1,
+                "O": 3,
+                "M": 1,
+                "t": 1770195197102,
+                "i": "13245318404"
+              }
+            ]
+          },
+          {
+            "type": "trades",
+            "data": [
+              {
+                "p": 76468.1,
+                "v": 12,
+                "T": 2,
+                "O": 3,
+                "M": 1,
+                "t": 1770195198102,
+                "i": "13245318532"
+              }
+            ]
+          },
+          {
+            "type": "trades",
+            "data": [
+              {
+                "p": 76468.2,
+                "v": 1,
+                "T": 1,
+                "O": 3,
+                "M": 1,
+                "t": 1770195198603,
+                "i": "13245318635"
+              }
+            ]
+          }
+        ],
+        "duration": 4356,
+        "error": null
+      },
+      "futures_kline": {
+        "name": "futures_kline",
+        "success": true,
+        "connected": true,
+        "messages": 5,
+        "samples": [
+          {
+            "type": "kline",
+            "data": {
+              "symbol": "BTC_USDT",
+              "interval": "Min1",
+              "t": 1770195180,
+              "o": 76463.3,
+              "c": 76468.2,
+              "h": 76468.4,
+              "l": 76463.3,
+              "a": 522430.97611,
+              "q": 68321,
+              "ro": 76463.3,
+              "rc": 76468.2,
+              "rh": 76468.4,
+              "rl": 76463.3
+            }
+          },
+          {
+            "type": "kline",
+            "data": {
+              "symbol": "BTC_USDT",
+              "interval": "Min1",
+              "t": 1770195180,
+              "o": 76463.3,
+              "c": 76468.1,
+              "h": 76468.4,
+              "l": 76463.3,
+              "a": 522499.7974,
+              "q": 68330,
+              "ro": 76463.3,
+              "rc": 76468.1,
+              "rh": 76468.4,
+              "rl": 76463.3
+            }
+          },
+          {
+            "type": "kline",
+            "data": {
+              "symbol": "BTC_USDT",
+              "interval": "Min1",
+              "t": 1770195180,
+              "o": 76463.3,
+              "c": 76468.2,
+              "h": 76468.4,
+              "l": 76463.3,
+              "a": 523700.34814,
+              "q": 68487,
+              "ro": 76463.3,
+              "rc": 76468.2,
+              "rh": 76468.4,
+              "rl": 76463.3
+            }
+          }
+        ],
+        "duration": 4247,
+        "error": null
+      }
+    }
+  },
+  "coinbase": {
+    "name": "Coinbase",
+    "tests": {
+      "spot_ticker_batch": {
+        "name": "spot_ticker_batch",
+        "success": true,
+        "connected": true,
+        "messages": 5,
+        "samples": [
+          {
+            "type": "ticker",
+            "symbol": "SOL-USD",
+            "price": "97.51"
+          },
+          {
+            "type": "ticker",
+            "symbol": "BTC-USD",
+            "price": "76401.31"
+          },
+          {
+            "type": "ticker",
+            "symbol": "ETH-USD",
+            "price": "2276.45"
+          }
+        ],
+        "duration": 2245,
+        "error": null
+      },
+      "spot_full_channel": {
+        "name": "spot_full_channel",
+        "success": false,
+        "connected": true,
+        "messages": 0,
+        "samples": [],
+        "duration": 12002,
+        "error": "Timeout - no data received"
+      },
+      "spot_status": {
+        "name": "spot_status",
+        "success": true,
+        "connected": true,
+        "messages": 1,
+        "samples": [
+          {
+            "type": "status",
+            "currencies": 453
+          }
+        ],
+        "duration": 12003,
+        "error": null
+      }
+    }
+  },
+  "bitstamp": {
+    "name": "Bitstamp",
+    "tests": {
+      "spot_trades": {
+        "name": "spot_trades",
+        "success": true,
+        "connected": true,
+        "messages": 4,
+        "samples": [
+          {
+            "type": "trade",
+            "price": 76425,
+            "amount": 0.00068989
+          },
+          {
+            "type": "trade",
+            "price": 76426,
+            "amount": 0.00261691
+          },
+          {
+            "type": "trade",
+            "price": 76433,
+            "amount": 0.00068988
+          }
+        ],
+        "duration": 12009,
+        "error": null
+      },
+      "spot_orderbook_full": {
+        "name": "spot_orderbook_full",
+        "success": true,
+        "connected": true,
+        "messages": 5,
+        "samples": [
+          {
+            "type": "orderbook_diff",
+            "bids": 1
+          },
+          {
+            "type": "orderbook_diff",
+            "bids": 2
+          },
+          {
+            "type": "orderbook_diff",
+            "bids": 3
+          }
+        ],
+        "duration": 3936,
+        "error": null
+      },
+      "spot_orders": {
+        "name": "spot_orders",
+        "success": true,
+        "connected": true,
+        "messages": 5,
+        "samples": [
+          {
+            "type": "order",
+            "event": "order_created"
+          },
+          {
+            "type": "order",
+            "event": "order_created"
+          },
+          {
+            "type": "order",
+            "event": "order_created"
+          }
+        ],
+        "duration": 1211,
+        "error": null
+      }
+    }
+  },
+  "bitmart": {
+    "name": "BitMart",
+    "tests": {
+      "spot_depth": {
+        "name": "spot_depth",
+        "success": true,
+        "connected": true,
+        "messages": 5,
+        "samples": [
+          {
+            "type": "orderbook",
+            "data": [
+              {
+                "asks": [
+                  [
+                    "76521.59",
+                    "0.02616"
+                  ],
+                  [
+                    "76521.61",
+                    "1.81215"
+                  ],
+                  [
+                    "76521.62",
+                    "0.15956"
+                  ],
+                  [
+                    "76521.63",
+                    "0.16745"
+                  ],
+                  [
+                    "76521.64",
+                    "0.16435"
+                  ]
+                ],
+                "bids": [
+                  [
+                    "76521.58",
+                    "1.97884"
+                  ],
+                  [
+                    "76521.57",
+                    "0.14522"
+                  ],
+                  [
+                    "76521.56",
+                    "0.15026"
+                  ],
+                  [
+                    "76521.55",
+                    "0.06931"
+                  ],
+                  [
+                    "76521.54",
+                    "0.23200"
+                  ]
+                ],
+                "ms_t": 1770195253055,
+                "symbol": "BTC_USDT"
+              }
+            ]
+          },
+          {
+            "type": "orderbook",
+            "data": [
+              {
+                "asks": [
+                  [
+                    "76521.59",
+                    "0.02616"
+                  ],
+                  [
+                    "76521.61",
+                    "1.81215"
+                  ],
+                  [
+                    "76521.62",
+                    "0.15956"
+                  ],
+                  [
+                    "76521.63",
+                    "0.16745"
+                  ],
+                  [
+                    "76521.64",
+                    "0.16435"
+                  ]
+                ],
+                "bids": [
+                  [
+                    "76521.58",
+                    "1.97884"
+                  ],
+                  [
+                    "76521.57",
+                    "0.20263"
+                  ],
+                  [
+                    "76521.56",
+                    "0.15026"
+                  ],
+                  [
+                    "76521.55",
+                    "0.06931"
+                  ],
+                  [
+                    "76521.54",
+                    "0.23200"
+                  ]
+                ],
+                "ms_t": 1770195253130,
+                "symbol": "BTC_USDT"
+              }
+            ]
+          },
+          {
+            "type": "orderbook",
+            "data": [
+              {
+                "asks": [
+                  [
+                    "76521.61",
+                    "2.25477"
+                  ],
+                  [
+                    "76521.62",
+                    "0.14354"
+                  ],
+                  [
+                    "76521.63",
+                    "0.46420"
+                  ],
+                  [
+                    "76521.64",
+                    "0.16435"
+                  ],
+                  [
+                    "76521.65",
+                    "0.16400"
+                  ]
+                ],
+                "bids": [
+                  [
+                    "76521.58",
+                    "2.29029"
+                  ],
+                  [
+                    "76521.57",
+                    "0.14261"
+                  ],
+                  [
+                    "76521.56",
+                    "0.15026"
+                  ],
+                  [
+                    "76521.55",
+                    "0.06931"
+                  ],
+                  [
+                    "76521.54",
+                    "0.23200"
+                  ]
+                ],
+                "ms_t": 1770195253788,
+                "symbol": "BTC_USDT"
+              }
+            ]
+          }
+        ],
+        "duration": 4195,
+        "error": null
+      },
+      "spot_trade": {
+        "name": "spot_trade",
+        "success": true,
+        "connected": true,
+        "messages": 5,
+        "samples": [
+          {
+            "type": "trade",
+            "data": [
+              {
+                "ms_t": 1770195257487,
+                "price": "76526.80",
+                "s_t": 1770195257,
+                "side": "sell",
+                "size": "0.00241",
+                "symbol": "BTC_USDT"
+              }
+            ]
+          },
+          {
+            "type": "trade",
+            "data": [
+              {
+                "ms_t": 1770195257696,
+                "price": "76526.80",
+                "s_t": 1770195257,
+                "side": "sell",
+                "size": "0.00453",
+                "symbol": "BTC_USDT"
+              }
+            ]
+          },
+          {
+            "type": "trade",
+            "data": [
+              {
+                "ms_t": 1770195257696,
+                "price": "76526.80",
+                "s_t": 1770195257,
+                "side": "buy",
+                "size": "0.00046",
+                "symbol": "BTC_USDT"
+              }
+            ]
+          }
+        ],
+        "duration": 2163,
+        "error": null
+      },
+      "spot_kline": {
+        "name": "spot_kline",
+        "success": true,
+        "connected": true,
+        "messages": 3,
+        "samples": [
+          {
+            "type": "kline",
+            "data": [
+              {
+                "candle": [
+                  1770195240,
+                  "76533.48",
+                  "76536.39",
+                  "76518.88",
+                  "76518.88",
+                  "1.33598"
+                ],
+                "symbol": "BTC_USDT"
+              }
+            ]
+          },
+          {
+            "type": "kline",
+            "data": [
+              {
+                "candle": [
+                  1770195240,
+                  "76533.48",
+                  "76536.39",
+                  "76518.73",
+                  "76518.73",
+                  "1.47777"
+                ],
+                "symbol": "BTC_USDT"
+              }
+            ]
+          },
+          {
+            "type": "kline",
+            "data": [
+              {
+                "candle": [
+                  1770195240,
+                  "76533.48",
+                  "76536.39",
+                  "76511.91",
+                  "76511.91",
+                  "1.49057"
+                ],
+                "symbol": "BTC_USDT"
+              }
+            ]
+          }
+        ],
+        "duration": 12014,
+        "error": null
+      },
+      "futures_depth": {
+        "name": "futures_depth",
+        "success": true,
+        "connected": true,
+        "messages": 5,
+        "samples": [
+          {
+            "type": "orderbook"
+          },
+          {
+            "type": "orderbook",
+            "data": {
+              "symbol": "BTCUSDT",
+              "way": 1,
+              "depths": [
+                {
+                  "price": "76472.3",
+                  "vol": "10751"
+                },
+                {
+                  "price": "76472.2",
+                  "vol": "726"
+                },
+                {
+                  "price": "76472.1",
+                  "vol": "870"
+                },
+                {
+                  "price": "76472",
+                  "vol": "807"
+                },
+                {
+                  "price": "76471.9",
+                  "vol": "846"
+                },
+                {
+                  "price": "76471.8",
+                  "vol": "819"
+                },
+                {
+                  "price": "76469.8",
+                  "vol": "1325"
+                },
+                {
+                  "price": "76464.9",
+                  "vol": "20515"
+                },
+                {
+                  "price": "76459.8",
+                  "vol": "30346"
+                },
+                {
+                  "price": "76457.2",
+                  "vol": "30162"
+                },
+                {
+                  "price": "76456",
+                  "vol": "1374"
+                },
+                {
+                  "price": "76454.8",
+                  "vol": "102"
+                },
+                {
+                  "price": "76453.7",
+                  "vol": "36"
+                },
+                {
+                  "price": "76452.9",
+                  "vol": "25556"
+                },
+                {
+                  "price": "76449.8",
+                  "vol": "22802"
+                },
+                {
+                  "price": "76448.3",
+                  "vol": "1638"
+                },
+                {
+                  "price": "76445",
+                  "vol": "30836"
+                },
+                {
+                  "price": "76444.7",
+                  "vol": "37"
+                },
+                {
+                  "price": "76440.1",
+                  "vol": "27816"
+                },
+                {
+                  "price": "76439.4",
+                  "vol": "1655"
+                }
+              ],
+              "ms_t": 1770195273709
+            }
+          },
+          {
+            "type": "orderbook",
+            "data": {
+              "symbol": "BTCUSDT",
+              "way": 2,
+              "depths": [
+                {
+                  "price": "76472.4",
+                  "vol": "7256"
+                },
+                {
+                  "price": "76472.5",
+                  "vol": "633"
+                },
+                {
+                  "price": "76472.6",
+                  "vol": "594"
+                },
+                {
+                  "price": "76472.7",
+                  "vol": "579"
+                },
+                {
+                  "price": "76472.8",
+                  "vol": "639"
+                },
+                {
+                  "price": "76472.9",
+                  "vol": "664"
+                },
+                {
+                  "price": "76476.5",
+                  "vol": "367"
+                },
+                {
+                  "price": "76479.1",
+                  "vol": "2922"
+                },
+                {
+                  "price": "76483.7",
+                  "vol": "18974"
+                },
+                {
+                  "price": "76485.5",
+                  "vol": "1347"
+                },
+                {
+                  "price": "76487.4",
+                  "vol": "1307"
+                },
+                {
+                  "price": "76490.5",
+                  "vol": "15561"
+                },
+                {
+                  "price": "76491.8",
+                  "vol": "1465"
+                },
+                {
+                  "price": "76492.2",
+                  "vol": "26"
+                },
+                {
+                  "price": "76494.6",
+                  "vol": "14594"
+                },
+                {
+                  "price": "76497.5",
+                  "vol": "87"
+                },
+                {
+                  "price": "76501.7",
+                  "vol": "19617"
+                },
+                {
+                  "price": "76502.7",
+                  "vol": "26"
+                },
+                {
+                  "price": "76504.7",
+                  "vol": "1382"
+                },
+                {
+                  "price": "76506.4",
+                  "vol": "15841"
+                }
+              ],
+              "ms_t": 1770195273709
+            }
+          }
+        ],
+        "duration": 3129,
+        "error": null
+      },
+      "futures_trade": {
+        "name": "futures_trade",
+        "success": true,
+        "connected": true,
+        "messages": 5,
+        "samples": [
+          {
+            "type": "trade"
+          },
+          {
+            "type": "trade",
+            "data": [
+              {
+                "trade_id": 3000001103133687,
+                "symbol": "BTCUSDT",
+                "deal_price": "76472.4",
+                "deal_vol": "1",
+                "way": 2,
+                "m": false,
+                "created_at": "2026-02-04T08:54:37.963451002Z"
+              }
+            ]
+          },
+          {
+            "type": "trade",
+            "data": [
+              {
+                "trade_id": 3000001103133689,
+                "symbol": "BTCUSDT",
+                "deal_price": "76472.4",
+                "deal_vol": "2",
+                "way": 2,
+                "m": false,
+                "created_at": "2026-02-04T08:54:38.019503477Z"
+              }
+            ]
+          }
+        ],
+        "duration": 4543,
+        "error": null
+      }
+    }
+  },
+  "kucoin": {
+    "name": "KuCoin",
+    "tests": {
+      "spot_ticker": {
+        "name": "spot_ticker",
+        "success": true,
+        "connected": true,
+        "messages": 5,
+        "samples": [
+          {
+            "type": "ticker",
+            "data": {
+              "bestAsk": "76503.2",
+              "bestAskSize": "0.32876233",
+              "bestBid": "76503.1",
+              "bestBidSize": "0.16793122",
+              "price": "76506.7",
+              "sequence": "28763329207",
+              "size": "0.00261416",
+              "time": 1770195281385
+            }
+          },
+          {
+            "type": "ticker",
+            "data": {
+              "bestAsk": "76503.2",
+              "bestAskSize": "0.32876233",
+              "bestBid": "76503.1",
+              "bestBidSize": "0.16793122",
+              "price": "76506.7",
+              "sequence": "28763329300",
+              "size": "0.00261416",
+              "time": 1770195281385
+            }
+          },
+          {
+            "type": "ticker",
+            "data": {
+              "bestAsk": "76503.2",
+              "bestAskSize": "0.32876233",
+              "bestBid": "76503.1",
+              "bestBidSize": "0.16793122",
+              "price": "76506.7",
+              "sequence": "28763329336",
+              "size": "0.00261416",
+              "time": 1770195281385
+            }
+          }
+        ],
+        "duration": 1729,
+        "error": null
+      },
+      "spot_orderbook": {
+        "name": "spot_orderbook",
+        "success": false,
+        "connected": true,
+        "messages": 0,
+        "samples": [],
+        "duration": 12001,
+        "error": "Timeout - no data received"
+      },
+      "spot_trades": {
+        "name": "spot_trades",
+        "success": true,
+        "connected": true,
+        "messages": 4,
+        "samples": [
+          {
+            "type": "trade",
+            "data": {
+              "makerOrderId": "69830956ee41cb0007b07880",
+              "price": "76506.7",
+              "sequence": "21029190565380096",
+              "side": "sell",
+              "size": "0.00261416",
+              "symbol": "BTC-USDT",
+              "takerOrderId": "698309650d208f00072f48b7",
+              "time": "1770195301616000000",
+              "tradeId": "21029190565380096",
+              "type": "match"
+            }
+          },
+          {
+            "type": "trade",
+            "data": {
+              "makerOrderId": "69830956965f200007fac5ab",
+              "price": "76506.7",
+              "sequence": "21029190565380097",
+              "side": "sell",
+              "size": "0.01638584",
+              "symbol": "BTC-USDT",
+              "takerOrderId": "698309650d208f00072f48b7",
+              "time": "1770195301616000000",
+              "tradeId": "21029190565380097",
+              "type": "match"
+            }
+          },
+          {
+            "type": "trade",
+            "data": {
+              "makerOrderId": "69830956965f200007fac5ab",
+              "price": "76506.7",
+              "sequence": "21029191192690688",
+              "side": "sell",
+              "size": "0.00018361",
+              "symbol": "BTC-USDT",
+              "takerOrderId": "698309686742190007e8e381",
+              "time": "1770195304892000000",
+              "tradeId": "21029191192690688",
+              "type": "match"
+            }
+          }
+        ],
+        "duration": 12013,
+        "error": null
+      },
+      "spot_kline": {
+        "name": "spot_kline",
+        "success": true,
+        "connected": true,
+        "messages": 2,
+        "samples": [
+          {
+            "type": "kline",
+            "data": {
+              "symbol": "BTC-USDT",
+              "candles": [
+                "1770195300",
+                "76506.7",
+                "76487.3",
+                "76506.7",
+                "76487.3",
+                "0.68109221",
+                "52100.393626153"
+              ],
+              "time": 1770195313727167700
+            }
+          },
+          {
+            "type": "kline",
+            "data": {
+              "symbol": "BTC-USDT",
+              "candles": [
+                "1770195300",
+                "76506.7",
+                "76487.2",
+                "76506.7",
+                "76487.2",
+                "0.68111648",
+                "52102.249970497"
+              ],
+              "time": 1770195315120442400
+            }
+          }
+        ],
+        "duration": 12008,
+        "error": null
+      },
+      "futures_ticker": {
+        "name": "futures_ticker",
+        "success": true,
+        "connected": true,
+        "messages": 5,
+        "samples": [
+          {
+            "type": "ticker",
+            "data": {
+              "symbol": "XBTUSDTM",
+              "sequence": 1734287812242,
+              "bestBidSize": 154,
+              "bestBidPrice": "76483.8",
+              "bestAskPrice": "76483.9",
+              "bestAskSize": 546,
+              "ts": 1770195321657000000
+            }
+          },
+          {
+            "type": "ticker",
+            "data": {
+              "symbol": "XBTUSDTM",
+              "sequence": 1734287812269,
+              "bestBidSize": 142,
+              "bestBidPrice": "76483.8",
+              "bestAskPrice": "76483.9",
+              "bestAskSize": 546,
+              "ts": 1770195321666000000
+            }
+          },
+          {
+            "type": "ticker",
+            "data": {
+              "symbol": "XBTUSDTM",
+              "sequence": 1734287812314,
+              "bestBidSize": 124,
+              "bestBidPrice": "76483.8",
+              "bestAskPrice": "76483.9",
+              "bestAskSize": 546,
+              "ts": 1770195321678000000
+            }
+          }
+        ],
+        "duration": 1337,
+        "error": null
+      }
+    }
+  },
+  "upbit": {
+    "name": "Upbit",
+    "tests": {
+      "spot_orderbook": {
+        "name": "spot_orderbook",
+        "success": true,
+        "connected": true,
+        "messages": 5,
+        "samples": [
+          {
+            "type": "orderbook",
+            "code": "KRW-BTC",
+            "units": 30
+          },
+          {
+            "type": "orderbook",
+            "code": "KRW-BTC",
+            "units": 30
+          },
+          {
+            "type": "orderbook",
+            "code": "KRW-BTC",
+            "units": 30
+          }
+        ],
+        "duration": 3274,
+        "error": null
+      },
+      "spot_ticker": {
+        "name": "spot_ticker",
+        "success": true,
+        "connected": true,
+        "messages": 5,
+        "samples": [
+          {
+            "type": "ticker",
+            "code": "KRW-BTC",
+            "price": 112669000
+          },
+          {
+            "type": "ticker",
+            "code": "KRW-BTC",
+            "price": 112669000
+          },
+          {
+            "type": "ticker",
+            "code": "KRW-BTC",
+            "price": 112669000
+          }
+        ],
+        "duration": 3042,
+        "error": null
+      },
+      "spot_trades": {
+        "name": "spot_trades",
+        "success": true,
+        "connected": true,
+        "messages": 5,
+        "samples": [
+          {
+            "type": "trade",
+            "code": "KRW-BTC",
+            "price": 112670000,
+            "volume": 0.00028
+          },
+          {
+            "type": "trade",
+            "code": "KRW-BTC",
+            "price": 112670000,
+            "volume": 0.0118
+          },
+          {
+            "type": "trade",
+            "code": "KRW-BTC",
+            "price": 112670000,
+            "volume": 0.003
+          }
+        ],
+        "duration": 4273,
+        "error": null
+      }
+    }
+  },
+  "weex": {
+    "name": "WEEX",
+    "tests": {
+      "futures_orderbook": {
+        "name": "futures_orderbook",
+        "success": false,
+        "connected": false,
+        "messages": 0,
+        "samples": [],
+        "duration": 251,
+        "error": "getaddrinfo ENOTFOUND ws.weex.com"
+      },
+      "futures_ticker": {
+        "name": "futures_ticker",
+        "success": false,
+        "connected": false,
+        "messages": 0,
+        "samples": [],
+        "duration": 4,
+        "error": "getaddrinfo ENOTFOUND ws.weex.com"
+      },
+      "futures_trades": {
+        "name": "futures_trades",
+        "success": false,
+        "connected": false,
+        "messages": 0,
+        "samples": [],
+        "duration": 5,
+        "error": "getaddrinfo ENOTFOUND ws.weex.com"
+      },
+      "futures_kline": {
+        "name": "futures_kline",
+        "success": false,
+        "connected": false,
+        "messages": 0,
+        "samples": [],
+        "duration": 4,
+        "error": "getaddrinfo ENOTFOUND ws.weex.com"
+      },
+      "spot_orderbook": {
+        "name": "spot_orderbook",
+        "success": false,
+        "connected": false,
+        "messages": 0,
+        "samples": [],
+        "duration": 4,
+        "error": "getaddrinfo ENOTFOUND ws.weex.com"
+      },
+      "spot_ticker": {
+        "name": "spot_ticker",
+        "success": false,
+        "connected": false,
+        "messages": 0,
+        "samples": [],
+        "duration": 25,
+        "error": "getaddrinfo ENOTFOUND ws.weex.com"
+      }
+    }
+  }
+}

@@ -1,0 +1,539 @@
+{
+  "bitunix": {
+    "name": "Bitunix",
+    "docs": "https://docs.bitunix.com/",
+    "spot": false,
+    "futures": true,
+    "tests": {
+      "futures_orderbook": {
+        "key": "bitunix_futures_orderbook",
+        "success": true,
+        "sample": "{\"op\":\"connect\",\"data\":{\"result\":true}}",
+        "time": 3033
+      },
+      "futures_trades": {
+        "key": "bitunix_futures_trades",
+        "success": true,
+        "sample": "{\"op\":\"connect\",\"data\":{\"result\":true}}",
+        "time": 1808
+      },
+      "futures_ticker": {
+        "key": "bitunix_futures_ticker",
+        "success": true,
+        "sample": "{\"op\":\"connect\",\"data\":{\"result\":true}}",
+        "time": 2269
+      },
+      "futures_kline": {
+        "key": "bitunix_futures_kline",
+        "success": true,
+        "sample": "{\"op\":\"connect\",\"data\":{\"result\":true}}",
+        "time": 2000
+      }
+    }
+  },
+  "blofin": {
+    "name": "BloFin",
+    "docs": "https://docs.blofin.com/",
+    "spot": false,
+    "futures": true,
+    "tests": {
+      "futures_orderbook": {
+        "key": "blofin_futures_orderbook",
+        "success": true,
+        "sample": "{\"event\":\"subscribe\",\"arg\":{\"channel\":\"books\",\"instId\":\"BTC-USDT\"}}",
+        "time": 3835
+      },
+      "futures_trades": {
+        "key": "blofin_futures_trades",
+        "success": true,
+        "sample": "{\"event\":\"subscribe\",\"arg\":{\"channel\":\"trades\",\"instId\":\"BTC-USDT\"}}",
+        "time": 2096
+      },
+      "futures_ticker": {
+        "key": "blofin_futures_ticker",
+        "success": true,
+        "sample": "{\"event\":\"subscribe\",\"arg\":{\"channel\":\"tickers\",\"instId\":\"BTC-USDT\"}}",
+        "time": 3110
+      },
+      "futures_kline": {
+        "key": "blofin_futures_kline",
+        "success": true,
+        "sample": "{\"event\":\"subscribe\",\"arg\":{\"channel\":\"candle1m\",\"instId\":\"BTC-USDT\"}}",
+        "time": 2780
+      },
+      "futures_fundingrate": {
+        "key": "blofin_futures_fundingrate",
+        "success": true,
+        "sample": "{\"event\":\"subscribe\",\"arg\":{\"channel\":\"funding-rate\",\"instId\":\"BTC-USDT\"}}",
+        "time": 2600
+      }
+    }
+  },
+  "asterdex": {
+    "name": "AsterDEX",
+    "docs": "https://docs.asterdex.com/",
+    "spot": false,
+    "futures": true,
+    "tests": {
+      "futures_orderbook": {
+        "key": "asterdex_futures_orderbook",
+        "success": true,
+        "sample": "{\"id\":1,\"result\":null}",
+        "time": 5346
+      },
+      "futures_trades": {
+        "key": "asterdex_futures_trades",
+        "success": true,
+        "sample": "{\"id\":2,\"result\":null}",
+        "time": 3822
+      },
+      "futures_ticker": {
+        "key": "asterdex_futures_ticker",
+        "success": true,
+        "sample": "{\"id\":3,\"result\":null}",
+        "time": 3659
+      },
+      "futures_kline": {
+        "key": "asterdex_futures_kline",
+        "success": true,
+        "sample": "{\"id\":4,\"result\":null}",
+        "time": 6315
+      },
+      "futures_aggTrade": {
+        "key": "asterdex_futures_aggTrade",
+        "success": true,
+        "sample": "{\"id\":5,\"result\":null}",
+        "time": 5396
+      }
+    }
+  },
+  "ascendex": {
+    "name": "AscendEX",
+    "docs": "https://ascendex.github.io/ascendex-pro-api/",
+    "spot": true,
+    "futures": true,
+    "tests": {
+      "spot_orderbook": {
+        "key": "ascendex_spot_orderbook",
+        "success": true,
+        "sample": "{\"m\":\"connected\",\"type\":\"unauth\"}",
+        "time": 1646
+      },
+      "spot_trades": {
+        "key": "ascendex_spot_trades",
+        "success": true,
+        "sample": "{\"m\":\"connected\",\"type\":\"unauth\"}",
+        "time": 2048
+      },
+      "spot_ticker": {
+        "key": "ascendex_spot_ticker",
+        "success": true,
+        "sample": "{\"m\":\"connected\",\"type\":\"unauth\"}",
+        "time": 2896
+      },
+      "spot_kline": {
+        "key": "ascendex_spot_kline",
+        "success": true,
+        "sample": "{\"m\":\"connected\",\"type\":\"unauth\"}",
+        "time": 2271
+      },
+      "futures_orderbook": {
+        "key": "ascendex_futures_orderbook",
+        "success": true,
+        "sample": "{\"m\":\"connected\",\"type\":\"unauth\"}",
+        "time": 1795
+      },
+      "futures_ticker": {
+        "key": "ascendex_futures_ticker",
+        "success": true,
+        "sample": "{\"m\":\"connected\",\"type\":\"unauth\"}",
+        "time": 1610
+      }
+    }
+  },
+  "whitebit": {
+    "name": "WhiteBIT",
+    "docs": "https://docs.whitebit.com/",
+    "spot": true,
+    "futures": true,
+    "tests": {
+      "spot_orderbook": {
+        "key": "whitebit_spot_orderbook",
+        "success": true,
+        "sample": "{\"error\": null, \"result\": {\"status\": \"success\"}, \"id\": 1}",
+        "time": 2972
+      },
+      "spot_trades": {
+        "key": "whitebit_spot_trades",
+        "success": true,
+        "sample": "{\"error\": null, \"result\": {\"status\": \"success\"}, \"id\": 2}",
+        "time": 1495
+      },
+      "spot_ticker": {
+        "key": "whitebit_spot_ticker",
+        "success": true,
+        "sample": "{\"error\": null, \"result\": {\"status\": \"success\"}, \"id\": 3}",
+        "time": 2551
+      },
+      "spot_kline": {
+        "key": "whitebit_spot_kline",
+        "success": true,
+        "sample": "{\"error\": null, \"result\": {\"status\": \"success\"}, \"id\": 4}",
+        "time": 858
+      },
+      "futures_orderbook": {
+        "key": "whitebit_futures_orderbook",
+        "success": true,
+        "sample": "{\"error\": null, \"result\": {\"status\": \"success\"}, \"id\": 5}",
+        "time": 796
+      },
+      "futures_ticker": {
+        "key": "whitebit_futures_ticker",
+        "success": true,
+        "sample": "{\"error\": null, \"result\": {\"status\": \"success\"}, \"id\": 6}",
+        "time": 1339
+      }
+    }
+  },
+  "btse": {
+    "name": "BTSE",
+    "docs": "https://www.btse.com/docs/futures/en/",
+    "spot": true,
+    "futures": true,
+    "tests": {
+      "spot_orderbook": {
+        "key": "btse_spot_orderbook",
+        "success": true,
+        "sample": "{\"event\":\"subscribe\",\"channel\":[]}",
+        "time": 3172
+      },
+      "spot_trades": {
+        "key": "btse_spot_trades",
+        "success": true,
+        "sample": "{\"event\":\"subscribe\",\"channel\":[\"tradeHistoryApi:BTC-USDT\"]}",
+        "time": 3763
+      },
+      "futures_orderbook": {
+        "key": "btse_futures_orderbook",
+        "success": true,
+        "sample": "{\"event\":\"subscribe\",\"channel\":[]}",
+        "time": 2408
+      },
+      "futures_trades": {
+        "key": "btse_futures_trades",
+        "success": true,
+        "sample": "{\"event\":\"subscribe\",\"channel\":[\"tradeHistoryApi:BTCPFC\"]}",
+        "time": 3221
+      }
+    }
+  },
+  "toobit": {
+    "name": "Toobit",
+    "docs": "https://www.toobit.com/en-US/api",
+    "spot": true,
+    "futures": true,
+    "tests": {
+      "spot_orderbook": {
+        "key": "toobit_spot_orderbook",
+        "success": true,
+        "sample": "{\"symbol\":\"BTCUSDT\",\"symbolName\":\"BTCUSDT\",\"topic\":\"depth\",\"params\":{\"realtimeInterval\":\"24h\",\"binary\":\"false\"},\"data\":[{\"e\":301,\"s\":\"BTCUSDT\",\"t\":1770312530732,\"v\":\"115995860_1E-18\",\"b\":[[\"67329.38\",",
+        "time": 1920
+      },
+      "spot_trades": {
+        "key": "toobit_spot_trades",
+        "success": true,
+        "sample": "{\"symbol\":\"BTCUSDT\",\"symbolName\":\"BTCUSDT\",\"topic\":\"trade\",\"params\":{\"realtimeInterval\":\"24h\",\"binary\":\"false\"},\"data\":[{\"v\":\"4864169072627330089\",\"t\":1770312512672,\"p\":\"67395.32\",\"q\":\"0.083\",\"m\":true",
+        "time": 1782
+      },
+      "spot_ticker": {
+        "key": "toobit_spot_ticker",
+        "success": true,
+        "sample": "{\"symbol\":\"BTCUSDT\",\"symbolName\":\"BTCUSDT\",\"topic\":\"realtimes\",\"params\":{\"realtimeInterval\":\"24h\",\"binary\":\"false\"},\"data\":[{\"t\":1770312534242,\"s\":\"BTCUSDT\",\"sn\":\"BTCUSDT\",\"c\":\"67292.86\",\"h\":\"74144\",\"",
+        "time": 1671
+      },
+      "futures_orderbook": {
+        "key": "toobit_futures_orderbook",
+        "success": false,
+        "error": "Unexpected server response: 404",
+        "time": 1414
+      },
+      "futures_ticker": {
+        "key": "toobit_futures_ticker",
+        "success": false,
+        "error": "Unexpected server response: 404",
+        "time": 1287
+      }
+    }
+  },
+  "tapbit": {
+    "name": "Tapbit",
+    "docs": "https://www.tapbit.com/api-docs",
+    "spot": true,
+    "futures": true,
+    "tests": {
+      "spot_orderbook": {
+        "key": "tapbit_spot_orderbook",
+        "success": false,
+        "error": "getaddrinfo ENOTFOUND stream.tapbit.com",
+        "time": 67
+      },
+      "spot_ticker": {
+        "key": "tapbit_spot_ticker",
+        "success": false,
+        "error": "getaddrinfo ENOTFOUND stream.tapbit.com",
+        "time": 5
+      },
+      "futures_orderbook": {
+        "key": "tapbit_futures_orderbook",
+        "success": false,
+        "error": "getaddrinfo ENOTFOUND stream.tapbit.com",
+        "time": 3
+      },
+      "futures_ticker": {
+        "key": "tapbit_futures_ticker",
+        "success": false,
+        "error": "getaddrinfo ENOTFOUND stream.tapbit.com",
+        "time": 3
+      }
+    }
+  },
+  "coinw": {
+    "name": "CoinW",
+    "docs": "https://www.coinw.com/api",
+    "spot": true,
+    "futures": true,
+    "tests": {
+      "spot_orderbook": {
+        "key": "coinw_spot_orderbook",
+        "success": true,
+        "sample": "{\"result\":false,\"errorCode\":500,\"errorMsg\":\"exception\"}",
+        "time": 1822
+      },
+      "spot_ticker": {
+        "key": "coinw_spot_ticker",
+        "success": true,
+        "sample": "{\"result\":false,\"errorCode\":500,\"errorMsg\":\"exception\"}",
+        "time": 2483
+      },
+      "futures_orderbook": {
+        "key": "coinw_futures_orderbook",
+        "success": true,
+        "sample": "{\"result\":false,\"errorCode\":500,\"errorMsg\":\"exception\"}",
+        "time": 3553
+      },
+      "futures_ticker": {
+        "key": "coinw_futures_ticker",
+        "success": true,
+        "sample": "{\"result\":false,\"errorCode\":500,\"errorMsg\":\"exception\"}",
+        "time": 2353
+      }
+    }
+  },
+  "websea": {
+    "name": "Websea",
+    "docs": "https://www.websea.com/en/api",
+    "spot": true,
+    "futures": true,
+    "tests": {
+      "spot_orderbook": {
+        "key": "websea_spot_orderbook",
+        "success": false,
+        "error": "Unexpected server response: 200",
+        "time": 2257
+      },
+      "spot_trades": {
+        "key": "websea_spot_trades",
+        "success": false,
+        "error": "Unexpected server response: 200",
+        "time": 1264
+      },
+      "futures_orderbook": {
+        "key": "websea_futures_orderbook",
+        "success": false,
+        "error": "Unexpected server response: 200",
+        "time": 1564
+      }
+    }
+  },
+  "batonex": {
+    "name": "Batonex",
+    "docs": "N/A - Binance-clone attempt",
+    "spot": false,
+    "futures": true,
+    "tests": {
+      "futures_orderbook": {
+        "key": "batonex_futures_orderbook",
+        "success": false,
+        "error": "Unexpected server response: 404",
+        "time": 3938
+      },
+      "futures_trades": {
+        "key": "batonex_futures_trades",
+        "success": false,
+        "error": "Unexpected server response: 404",
+        "time": 5848
+      },
+      "futures_ticker": {
+        "key": "batonex_futures_ticker",
+        "success": false,
+        "error": "Unexpected server response: 404",
+        "time": 7160
+      }
+    }
+  },
+  "pionex": {
+    "name": "Pionex",
+    "docs": "https://docs.pionex.com/",
+    "spot": true,
+    "futures": true,
+    "tests": {
+      "spot_orderbook": {
+        "key": "pionex_spot_orderbook",
+        "success": true,
+        "sample": "{\"type\":\"SUBSCRIBED\",\"topic\":\"TRADE\",\"symbol\":\"BTC_USDT\"}",
+        "time": 13851
+      },
+      "spot_ticker": {
+        "key": "pionex_spot_ticker",
+        "success": false,
+        "error": "Timeout",
+        "time": 15009
+      },
+      "futures_ticker": {
+        "key": "pionex_futures_ticker",
+        "success": true,
+        "sample": "{\"type\":\"ERROR\",\"code\":\"INVALID_SYMBOL\",\"message\":\"invalid `symbol`\",\"timestamp\":1770312612656}",
+        "time": 12321
+      }
+    }
+  },
+  "phemex": {
+    "name": "Phemex",
+    "docs": "https://github.com/phemex/phemex-api-docs",
+    "spot": true,
+    "futures": true,
+    "tests": {
+      "spot_orderbook": {
+        "key": "phemex_spot_orderbook",
+        "success": false,
+        "error": "Unexpected server response: 403",
+        "time": 10967
+      },
+      "spot_trades": {
+        "key": "phemex_spot_trades",
+        "success": false,
+        "error": "Unexpected server response: 403",
+        "time": 704
+      },
+      "futures_orderbook": {
+        "key": "phemex_futures_orderbook",
+        "success": false,
+        "error": "Unexpected server response: 403",
+        "time": 676
+      },
+      "futures_trades": {
+        "key": "phemex_futures_trades",
+        "success": false,
+        "error": "Unexpected server response: 403",
+        "time": 613
+      },
+      "futures_ticker": {
+        "key": "phemex_futures_ticker",
+        "success": false,
+        "error": "Unexpected server response: 403",
+        "time": 1698
+      }
+    }
+  },
+  "btcc": {
+    "name": "BTCC",
+    "docs": "https://www.btcc.com/en-US/api",
+    "spot": false,
+    "futures": true,
+    "tests": {
+      "futures_orderbook": {
+        "key": "btcc_futures_orderbook",
+        "success": false,
+        "error": "Timeout",
+        "time": 15004
+      },
+      "futures_ticker": {
+        "key": "btcc_futures_ticker",
+        "success": false,
+        "error": "Timeout",
+        "time": 15011
+      },
+      "futures_trades": {
+        "key": "btcc_futures_trades",
+        "success": false,
+        "error": "Timeout",
+        "time": 15000
+      }
+    }
+  },
+  "azbit": {
+    "name": "Azbit",
+    "docs": "https://azbit.com/en/api",
+    "spot": true,
+    "futures": false,
+    "tests": {
+      "spot_orderbook": {
+        "key": "azbit_spot_orderbook",
+        "success": false,
+        "error": "Unexpected server response: 404",
+        "time": 1622
+      },
+      "spot_trades": {
+        "key": "azbit_spot_trades",
+        "success": false,
+        "error": "Unexpected server response: 404",
+        "time": 1774
+      },
+      "spot_ticker": {
+        "key": "azbit_spot_ticker",
+        "success": false,
+        "error": "Unexpected server response: 404",
+        "time": 1383
+      }
+    }
+  },
+  "deepcoin": {
+    "name": "Deepcoin",
+    "docs": "https://www.deepcoin.com/docs",
+    "spot": true,
+    "futures": true,
+    "tests": {
+      "spot_orderbook": {
+        "key": "deepcoin_spot_orderbook",
+        "success": false,
+        "error": "Unexpected server response: 400",
+        "time": 1778
+      },
+      "spot_trades": {
+        "key": "deepcoin_spot_trades",
+        "success": false,
+        "error": "Unexpected server response: 400",
+        "time": 557
+      },
+      "futures_orderbook": {
+        "key": "deepcoin_futures_orderbook",
+        "success": false,
+        "error": "Unexpected server response: 400",
+        "time": 463
+      },
+      "futures_ticker": {
+        "key": "deepcoin_futures_ticker",
+        "success": false,
+        "error": "Unexpected server response: 400",
+        "time": 759
+      }
+    }
+  },
+  "ourbit": {
+    "name": "Ourbit",
+    "docs": "N/A - No public API",
+    "skipped": true,
+    "reason": "No public API documentation found",
+    "tests": {}
+  }
+}

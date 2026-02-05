@@ -1,0 +1,19 @@
+{
+  "name": "crypto-streaming",
+  "version": "1.0.0",
+  "description": "Stream orderbook and open interest data from crypto exchanges",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "binance": "node index.js",
+    "mexc": "node mexc-stream.js",
+    "test-exchanges": "node exchange-tester.js",
+    "fix-exchanges": "node exchange-fixer.js"
+  },
+  "keywords": ["websocket", "crypto", "binance", "mexc", "orderbook", "open-interest"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

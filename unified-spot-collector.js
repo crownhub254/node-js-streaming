@@ -74,10 +74,10 @@ function initStats(exchange) {
     });
 }
 
-function recordMessage(exchange, coin) {
+function recordMessage(exchange, coin, count = 1) {
     if (!stats[exchange] || !stats[exchange][coin]) return;
-    stats[exchange][coin].total++;
-    currentSecond[exchange][coin]++;
+    stats[exchange][coin].total += count;
+    currentSecond[exchange][coin] += count;
 }
 
 function log(exchange, msg) {
@@ -164,9 +164,10 @@ const EXCHANGES = {
                     // Kraken sends arrays: [channelID, [[price,volume,time,side,type,misc]], channelName, pair]
                     if (Array.isArray(d) && d.length >= 4) {
                         const pair = d[d.length - 1];
-                        if (pair === 'XBT/USDT') return 'BTC';
-                        if (pair === 'ETH/USDT') return 'ETH';
-                        if (pair === 'SOL/USDT') return 'SOL';
+                        const trades = Array.isArray(d[1]) ? d[1].length : 1;
+                        if (pair === 'XBT/USDT') return { coin: 'BTC', count: trades };
+                        if (pair === 'ETH/USDT') return { coin: 'ETH', count: trades };
+                        if (pair === 'SOL/USDT') return { coin: 'SOL', count: trades };
                     }
                 } catch (e) {}
                 return null;
@@ -243,9 +244,10 @@ const EXCHANGES = {
                     const d = JSON.parse(msg);
                     if (d.data && d.arg && d.arg.channel === 'trades') {
                         const inst = d.arg.instId;
-                        if (inst === 'BTC-USDT') return 'BTC';
-                        if (inst === 'ETH-USDT') return 'ETH';
-                        if (inst === 'SOL-USDT') return 'SOL';
+                        const count = Array.isArray(d.data) ? d.data.length : 1;
+                        if (inst === 'BTC-USDT') return { coin: 'BTC', count };
+                        if (inst === 'ETH-USDT') return { coin: 'ETH', count };
+                        if (inst === 'SOL-USDT') return { coin: 'SOL', count };
                     }
                 } catch (e) {}
                 return null;
@@ -270,9 +272,10 @@ const EXCHANGES = {
                     const d = JSON.parse(msg);
                     if (d.op === 'pong' || d.ret_msg === 'pong') return null;
                     if (d.topic && d.data) {
-                        if (d.topic === 'publicTrade.BTCUSDT') return 'BTC';
-                        if (d.topic === 'publicTrade.ETHUSDT') return 'ETH';
-                        if (d.topic === 'publicTrade.SOLUSDT') return 'SOL';
+                        const count = Array.isArray(d.data) ? d.data.length : 1;
+                        if (d.topic === 'publicTrade.BTCUSDT') return { coin: 'BTC', count };
+                        if (d.topic === 'publicTrade.ETHUSDT') return { coin: 'ETH', count };
+                        if (d.topic === 'publicTrade.SOLUSDT') return { coin: 'SOL', count };
                     }
                 } catch (e) {}
                 return null;
@@ -361,9 +364,10 @@ const EXCHANGES = {
                     const d = JSON.parse(msg);
                     if (d.ping) return null; // Handled by handlePing
                     if (d.ch && d.tick) {
-                        if (d.ch.includes('btcusdt')) return 'BTC';
-                        if (d.ch.includes('ethusdt')) return 'ETH';
-                        if (d.ch.includes('solusdt')) return 'SOL';
+                        const count = (d.tick.data && Array.isArray(d.tick.data)) ? d.tick.data.length : 1;
+                        if (d.ch.includes('btcusdt')) return { coin: 'BTC', count };
+                        if (d.ch.includes('ethusdt')) return { coin: 'ETH', count };
+                        if (d.ch.includes('solusdt')) return { coin: 'SOL', count };
                     }
                 } catch (e) {}
                 return null;
@@ -387,9 +391,11 @@ const EXCHANGES = {
                     const d = JSON.parse(msg);
                     if (d.event === 'pong' || d.event === 'subscribe') return null;
                     if (d.topic) {
-                        if (d.topic.includes('SPOT_BTC_USDT')) return 'BTC';
-                        if (d.topic.includes('SPOT_ETH_USDT')) return 'ETH';
-                        if (d.topic.includes('SPOT_SOL_USDT')) return 'SOL';
+                        // data can be single trade or array
+                        const count = (d.data && Array.isArray(d.data)) ? d.data.length : 1;
+                        if (d.topic.includes('SPOT_BTC_USDT')) return { coin: 'BTC', count };
+                        if (d.topic.includes('SPOT_ETH_USDT')) return { coin: 'ETH', count };
+                        if (d.topic.includes('SPOT_SOL_USDT')) return { coin: 'SOL', count };
                     }
                 } catch (e) {}
                 return null;
@@ -416,20 +422,21 @@ const EXCHANGES = {
                     // Trade data format: {code:0, method:'subscribe', result:{channel:'trade', instrument_name:'BTC_USDT', subscription:'trade.BTC_USDT', data:[{i,p,q,s,d,t,dataTime}]}}
                     // Check for trade data FIRST (has result.channel='trade' AND result.data array)
                     if (d.result && d.result.channel === 'trade' && d.result.data && Array.isArray(d.result.data) && d.result.data.length > 0) {
+                        const count = d.result.data.length;
                         const inst = d.result.instrument_name || '';
-                        if (inst === 'BTC_USDT') return 'BTC';
-                        if (inst === 'ETH_USDT') return 'ETH';
-                        if (inst === 'SOL_USDT') return 'SOL';
+                        if (inst === 'BTC_USDT') return { coin: 'BTC', count };
+                        if (inst === 'ETH_USDT') return { coin: 'ETH', count };
+                        if (inst === 'SOL_USDT') return { coin: 'SOL', count };
                         // Fallback: check subscription field
                         const sub = d.result.subscription || '';
-                        if (sub === 'trade.BTC_USDT') return 'BTC';
-                        if (sub === 'trade.ETH_USDT') return 'ETH';
-                        if (sub === 'trade.SOL_USDT') return 'SOL';
+                        if (sub === 'trade.BTC_USDT') return { coin: 'BTC', count };
+                        if (sub === 'trade.ETH_USDT') return { coin: 'ETH', count };
+                        if (sub === 'trade.SOL_USDT') return { coin: 'SOL', count };
                         // Fallback: check first trade item's instrument
                         const firstI = d.result.data[0].i || '';
-                        if (firstI === 'BTC_USDT') return 'BTC';
-                        if (firstI === 'ETH_USDT') return 'ETH';
-                        if (firstI === 'SOL_USDT') return 'SOL';
+                        if (firstI === 'BTC_USDT') return { coin: 'BTC', count };
+                        if (firstI === 'ETH_USDT') return { coin: 'ETH', count };
+                        if (firstI === 'SOL_USDT') return { coin: 'SOL', count };
                     }
                     // Ignore subscription confirmations (have id but no trade data), heartbeats, etc.
                 } catch (e) {}
@@ -475,9 +482,10 @@ const EXCHANGES = {
                     const d = JSON.parse(msg);
                     if (d.method === 'trades_update' && d.params) {
                         const pair = d.params[0];
-                        if (pair === 'BTC_USDT') return 'BTC';
-                        if (pair === 'ETH_USDT') return 'ETH';
-                        if (pair === 'SOL_USDT') return 'SOL';
+                        const count = (Array.isArray(d.params[1])) ? d.params[1].length : 1;
+                        if (pair === 'BTC_USDT') return { coin: 'BTC', count };
+                        if (pair === 'ETH_USDT') return { coin: 'ETH', count };
+                        if (pair === 'SOL_USDT') return { coin: 'SOL', count };
                     }
                 } catch (e) {}
                 return null;
@@ -501,9 +509,10 @@ const EXCHANGES = {
                     const d = JSON.parse(msg);
                     if (d.m === 'pong') return null;
                     if (d.m === 'trades' && d.symbol) {
-                        if (d.symbol === 'BTC/USDT') return 'BTC';
-                        if (d.symbol === 'ETH/USDT') return 'ETH';
-                        if (d.symbol === 'SOL/USDT') return 'SOL';
+                        const count = (d.data && Array.isArray(d.data)) ? d.data.length : 1;
+                        if (d.symbol === 'BTC/USDT') return { coin: 'BTC', count };
+                        if (d.symbol === 'ETH/USDT') return { coin: 'ETH', count };
+                        if (d.symbol === 'SOL/USDT') return { coin: 'SOL', count };
                     }
                 } catch (e) {}
                 return null;
@@ -529,9 +538,11 @@ const EXCHANGES = {
                 try {
                     const d = JSON.parse(msg);
                     if (d.dataType && d.data) {
-                        if (d.dataType.includes('BTC-USDT')) return 'BTC';
-                        if (d.dataType.includes('ETH-USDT')) return 'ETH';
-                        if (d.dataType.includes('SOL-USDT')) return 'SOL';
+                        const trades = Array.isArray(d.data) ? d.data : (d.data.trades || [d.data]);
+                        const count = trades.length || 1;
+                        if (d.dataType.includes('BTC-USDT')) return { coin: 'BTC', count };
+                        if (d.dataType.includes('ETH-USDT')) return { coin: 'ETH', count };
+                        if (d.dataType.includes('SOL-USDT')) return { coin: 'SOL', count };
                     }
                 } catch (e) {}
                 return null;
@@ -570,15 +581,17 @@ const EXCHANGES = {
                     const d = JSON.parse(msg);
                     if (d.pong) return null;
                     if (d.data && d.topic === 'trade' && d.symbol) {
-                        if (d.symbol === 'BTCUSDT') return 'BTC';
-                        if (d.symbol === 'ETHUSDT') return 'ETH';
-                        if (d.symbol === 'SOLUSDT') return 'SOL';
+                        const count = Array.isArray(d.data) ? d.data.length : 1;
+                        if (d.symbol === 'BTCUSDT') return { coin: 'BTC', count };
+                        if (d.symbol === 'ETHUSDT') return { coin: 'ETH', count };
+                        if (d.symbol === 'SOLUSDT') return { coin: 'SOL', count };
                     }
                     // Array format
                     if (d.data && d.symbolName) {
-                        if (d.symbolName === 'BTCUSDT') return 'BTC';
-                        if (d.symbolName === 'ETHUSDT') return 'ETH';
-                        if (d.symbolName === 'SOLUSDT') return 'SOL';
+                        const count = Array.isArray(d.data) ? d.data.length : 1;
+                        if (d.symbolName === 'BTCUSDT') return { coin: 'BTC', count };
+                        if (d.symbolName === 'ETHUSDT') return { coin: 'ETH', count };
+                        if (d.symbolName === 'SOLUSDT') return { coin: 'SOL', count };
                     }
                 } catch (e) {}
                 return null;
@@ -605,10 +618,11 @@ const EXCHANGES = {
                     const d = JSON.parse(msg);
                     // Trade data format: {"a":"PMT","b":0,"r":[{"d":{"TradeID":"...","I":"BTCUSDT","P":price,"V":volume,"T":ts}}]}
                     if (d.a === 'PMT' && d.r && Array.isArray(d.r)) {
+                        const count = d.r.length;
                         const inst = d.r[0] && d.r[0].d && d.r[0].d.I || '';
-                        if (inst === 'BTCUSDT' || inst.includes('BTC')) return 'BTC';
-                        if (inst === 'ETHUSDT' || inst.includes('ETH')) return 'ETH';
-                        if (inst === 'SOLUSDT' || inst.includes('SOL')) return 'SOL';
+                        if (inst === 'BTCUSDT' || inst.includes('BTC')) return { coin: 'BTC', count };
+                        if (inst === 'ETHUSDT' || inst.includes('ETH')) return { coin: 'ETH', count };
+                        if (inst === 'SOLUSDT' || inst.includes('SOL')) return { coin: 'SOL', count };
                     }
                     // Subscription confirmation: {"a":"RecvTopicAction","m":"Success",...}
                     if (d.a === 'RecvTopicAction') return null;
@@ -665,9 +679,11 @@ const EXCHANGES = {
                     const d = JSON.parse(msg);
                     if (d.action === 'pong') return null;
                     if (d.trade && d.pair) {
-                        if (d.pair === 'btc_usdt') return 'BTC';
-                        if (d.pair === 'eth_usdt') return 'ETH';
-                        if (d.pair === 'sol_usdt') return 'SOL';
+                        // trade can contain array of trades
+                        const count = (d.trade && Array.isArray(d.trade)) ? d.trade.length : 1;
+                        if (d.pair === 'btc_usdt') return { coin: 'BTC', count };
+                        if (d.pair === 'eth_usdt') return { coin: 'ETH', count };
+                        if (d.pair === 'sol_usdt') return { coin: 'SOL', count };
                     }
                     // Alternative format
                     if (d.type === 'trade' || d.action === 'trade') {
@@ -697,10 +713,11 @@ const EXCHANGES = {
                 try {
                     const d = JSON.parse(msg);
                     if (d.table === 'spot/trade' && d.data) {
+                        const count = Array.isArray(d.data) ? d.data.length : 1;
                         const s = d.data[0]?.symbol;
-                        if (s === 'BTC_USDT') return 'BTC';
-                        if (s === 'ETH_USDT') return 'ETH';
-                        if (s === 'SOL_USDT') return 'SOL';
+                        if (s === 'BTC_USDT') return { coin: 'BTC', count };
+                        if (s === 'ETH_USDT') return { coin: 'ETH', count };
+                        if (s === 'SOL_USDT') return { coin: 'SOL', count };
                     }
                 } catch (e) {}
                 return null;
@@ -724,9 +741,10 @@ const EXCHANGES = {
                     const d = JSON.parse(msg);
                     if (d.op === 'PONG') return null;
                     if (d.topic === 'TRADE' && d.data) {
-                        if (d.symbol === 'BTC_USDT') return 'BTC';
-                        if (d.symbol === 'ETH_USDT') return 'ETH';
-                        if (d.symbol === 'SOL_USDT') return 'SOL';
+                        const count = Array.isArray(d.data) ? d.data.length : 1;
+                        if (d.symbol === 'BTC_USDT') return { coin: 'BTC', count };
+                        if (d.symbol === 'ETH_USDT') return { coin: 'ETH', count };
+                        if (d.symbol === 'SOL_USDT') return { coin: 'SOL', count };
                     }
                 } catch (e) {}
                 return null;
@@ -749,11 +767,11 @@ const EXCHANGES = {
                     if (d.event === 'pong') return null;
                     if (d.channel === 'trades' && d.data) {
                         const items = Array.isArray(d.data) ? d.data : [d.data];
-                        for (const item of items) {
-                            if (item.symbol === 'BTC_USDT') return 'BTC';
-                            if (item.symbol === 'ETH_USDT') return 'ETH';
-                            if (item.symbol === 'SOL_USDT') return 'SOL';
-                        }
+                        // All items in one message are same symbol, count them all
+                        const sym = items[0]?.symbol;
+                        if (sym === 'BTC_USDT') return { coin: 'BTC', count: items.length };
+                        if (sym === 'ETH_USDT') return { coin: 'ETH', count: items.length };
+                        if (sym === 'SOL_USDT') return { coin: 'SOL', count: items.length };
                     }
                 } catch (e) {}
                 return null;
@@ -780,15 +798,16 @@ const EXCHANGES = {
                     if (d.event === 'subscribe') return null;
                     // Trade data: {topic:'tradeHistoryApi:BTC-USD', data:[{symbol,side,size,price,tradeId,timestamp}]}
                     if (d.topic && d.data && Array.isArray(d.data)) {
+                        const count = d.data.length;
                         const topic = d.topic;
-                        if (topic.includes('BTC-USD')) return 'BTC';
-                        if (topic.includes('ETH-USD')) return 'ETH';
-                        if (topic.includes('SOL-USD')) return 'SOL';
+                        if (topic.includes('BTC-USD')) return { coin: 'BTC', count };
+                        if (topic.includes('ETH-USD')) return { coin: 'ETH', count };
+                        if (topic.includes('SOL-USD')) return { coin: 'SOL', count };
                         // Fallback: check symbol in data
                         const sym = d.data[0]?.symbol || '';
-                        if (sym.includes('BTC')) return 'BTC';
-                        if (sym.includes('ETH')) return 'ETH';
-                        if (sym.includes('SOL')) return 'SOL';
+                        if (sym.includes('BTC')) return { coin: 'BTC', count };
+                        if (sym.includes('ETH')) return { coin: 'ETH', count };
+                        if (sym.includes('SOL')) return { coin: 'SOL', count };
                     }
                 } catch (e) {}
                 return null;
@@ -817,12 +836,14 @@ const EXCHANGES = {
                     // Trade update: {ch:'trades', update:{BTCUSDT:[{t,i,p,q,s}]}}
                     if (d.ch === 'trades') {
                         const data = d.snapshot || d.update || {};
-                        const marketIds = Object.keys(data);
-                        for (const mkt of marketIds) {
-                            if (mkt === 'BTCUSDT' || mkt.includes('BTC')) return 'BTC';
-                            if (mkt === 'ETHUSDT' || mkt.includes('ETH')) return 'ETH';
-                            if (mkt === 'SOLUSDT' || mkt.includes('SOL')) return 'SOL';
+                        const results = [];
+                        for (const [mkt, trades] of Object.entries(data)) {
+                            const count = Array.isArray(trades) ? trades.length : 1;
+                            if (mkt === 'BTCUSDT' || mkt.includes('BTC')) results.push({ coin: 'BTC', count });
+                            else if (mkt === 'ETHUSDT' || mkt.includes('ETH')) results.push({ coin: 'ETH', count });
+                            else if (mkt === 'SOLUSDT' || mkt.includes('SOL')) results.push({ coin: 'SOL', count });
                         }
+                        if (results.length > 0) return results;
                     }
                 } catch (e) {}
                 return null;
@@ -980,7 +1001,14 @@ function doConnect(name, config, exchangeDef) {
                     if (Array.isArray(d) && d.length >= 2 && d[1] !== 'hb') {
                         const coin = bitfinexChannels[d[0]];
                         if (coin) {
-                            recordMessage(name, coin);
+                            // 'te' = trade executed (individual), snapshot = array of arrays
+                            if (d[1] === 'te') {
+                                recordMessage(name, coin);
+                            } else if (Array.isArray(d[1])) {
+                                // Snapshot: [[id, mts, amount, price], ...]
+                                recordMessage(name, coin, d[1].length);
+                            }
+                            // Skip 'tu' (trade update) to avoid double-counting
                         }
                         return;
                     }
@@ -989,9 +1017,20 @@ function doConnect(name, config, exchangeDef) {
             }
 
             // Parse message with exchange-specific parser
-            const coin = config.parseMessage(str);
-            if (coin && COINS.includes(coin)) {
-                recordMessage(name, coin);
+            const result = config.parseMessage(str);
+            if (result) {
+                if (typeof result === 'string' && COINS.includes(result)) {
+                    recordMessage(name, result);
+                } else if (Array.isArray(result)) {
+                    // Multiple coin results from one message (e.g., HitBTC)
+                    for (const r of result) {
+                        if (r && r.coin && COINS.includes(r.coin)) {
+                            recordMessage(name, r.coin, r.count || 1);
+                        }
+                    }
+                } else if (result.coin && COINS.includes(result.coin)) {
+                    recordMessage(name, result.coin, result.count || 1);
+                }
             }
         });
 

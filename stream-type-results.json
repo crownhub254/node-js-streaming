@@ -1,44 +1,46 @@
 {
-  "timestamp": "2026-02-05T22:40:48.859Z",
+  "timestamp": "2026-02-05T23:26:32.974Z",
   "duration": "15s per exchange",
   "totalTests": 216,
-  "passed": 190,
-  "failed": 20,
-  "na": 6,
+  "passed": 199,
+  "failed": 2,
+  "na": 15,
   "exchanges": {
     "Binance": {
       "tier": 1,
       "status": "ok",
       "orderbook": {
-        "BTC": 15,
-        "ETH": 15,
-        "SOL": 15
+        "BTC": 2,
+        "ETH": 2,
+        "SOL": 3
       },
       "trades": {
-        "BTC": 1525,
-        "ETH": 1021,
-        "SOL": 478
+        "BTC": 415,
+        "ETH": 622,
+        "SOL": 195
       },
       "ticker": {
-        "BTC": 15,
-        "ETH": 15,
-        "SOL": 15
+        "BTC": 2,
+        "ETH": 2,
+        "SOL": 3
       },
       "noTicker": false,
+      "noOrderbook": false,
+      "lowVolumeTrades": false,
       "errors": []
     },
     "Bitfinex": {
       "tier": 1,
       "status": "ok",
       "orderbook": {
-        "BTC": 1494,
-        "ETH": 1511,
-        "SOL": 1558
+        "BTC": 954,
+        "ETH": 855,
+        "SOL": 955
       },
       "trades": {
-        "BTC": 35,
-        "ETH": 31,
-        "SOL": 5
+        "BTC": 3,
+        "ETH": 1,
+        "SOL": 1
       },
       "ticker": {
         "BTC": 2,
@@ -46,69 +48,77 @@
         "SOL": 2
       },
       "noTicker": false,
+      "noOrderbook": false,
+      "lowVolumeTrades": false,
       "errors": []
     },
     "Bybit": {
       "tier": 1,
       "status": "ok",
       "orderbook": {
-        "BTC": 734,
-        "ETH": 748,
-        "SOL": 526
+        "BTC": 740,
+        "ETH": 768,
+        "SOL": 668
       },
       "trades": {
-        "BTC": 130,
-        "ETH": 81,
-        "SOL": 29
+        "BTC": 270,
+        "ETH": 301,
+        "SOL": 61
       },
       "ticker": {
-        "BTC": 70,
-        "ETH": 67,
-        "SOL": 37
+        "BTC": 112,
+        "ETH": 126,
+        "SOL": 55
       },
       "noTicker": false,
+      "noOrderbook": false,
+      "lowVolumeTrades": false,
       "errors": []
     },
     "Coinbase": {
       "tier": 1,
       "status": "ok",
       "orderbook": {
-        "BTC": 256,
-        "ETH": 255,
-        "SOL": 248
+        "BTC": 203,
+        "ETH": 204,
+        "SOL": 205
       },
       "trades": {
-        "BTC": 289,
-        "ETH": 131,
-        "SOL": 62
+        "BTC": 287,
+        "ETH": 187,
+        "SOL": 80
       },
       "ticker": {
-        "BTC": 289,
-        "ETH": 131,
-        "SOL": 62
+        "BTC": 287,
+        "ETH": 187,
+        "SOL": 80
       },
       "noTicker": false,
+      "noOrderbook": false,
+      "lowVolumeTrades": false,
       "errors": []
     },
     "Gate.io": {
       "tier": 1,
       "status": "ok",
       "orderbook": {
-        "BTC": 15,
-        "ETH": 15,
-        "SOL": 15
+        "BTC": 12,
+        "ETH": 12,
+        "SOL": 11
       },
       "trades": {
-        "BTC": 258,
-        "ETH": 210,
-        "SOL": 52
+        "BTC": 55,
+        "ETH": 55,
+        "SOL": 12
       },
       "ticker": {
-        "BTC": 15,
-        "ETH": 15,
-        "SOL": 15
+        "BTC": 10,
+        "ETH": 11,
+        "SOL": 8
       },
       "noTicker": false,
+      "noOrderbook": false,
+      "lowVolumeTrades": false,
       "errors": []
     },
     "HTX": {
@@ -116,160 +126,174 @@
       "status": "ok",
       "orderbook": {
         "BTC": 14,
-        "ETH": 16,
-        "SOL": 16
+        "ETH": 14,
+        "SOL": 14
       },
       "trades": {
-        "BTC": 19,
-        "ETH": 32,
-        "SOL": 5
+        "BTC": 1,
+        "ETH": 5,
+        "SOL": 1
       },
       "ticker": {
-        "BTC": 104,
-        "ETH": 116,
-        "SOL": 113
+        "BTC": 95,
+        "ETH": 81,
+        "SOL": 92
       },
       "noTicker": false,
+      "noOrderbook": false,
+      "lowVolumeTrades": false,
       "errors": []
     },
     "Kraken": {
       "tier": 1,
       "status": "ok",
       "orderbook": {
-        "BTC": 1057,
-        "ETH": 1097,
-        "SOL": 880
+        "BTC": 1191,
+        "ETH": 1434,
+        "SOL": 1201
       },
       "trades": {
-        "BTC": 1,
-        "ETH": 0,
-        "SOL": 0
+        "BTC": 4,
+        "ETH": 15,
+        "SOL": 5
       },
       "ticker": {
-        "BTC": 2,
-        "ETH": 1,
-        "SOL": 1
+        "BTC": 4,
+        "ETH": 16,
+        "SOL": 5
       },
       "noTicker": false,
+      "noOrderbook": false,
+      "lowVolumeTrades": false,
       "errors": []
     },
     "KuCoin": {
       "tier": 1,
       "status": "ok",
       "orderbook": {
-        "BTC": 144,
-        "ETH": 140,
-        "SOL": 121
+        "BTC": 142,
+        "ETH": 142,
+        "SOL": 132
       },
       "trades": {
-        "BTC": 98,
-        "ETH": 76,
-        "SOL": 44
+        "BTC": 146,
+        "ETH": 101,
+        "SOL": 40
       },
       "ticker": {
-        "BTC": 142,
-        "ETH": 140,
-        "SOL": 121
+        "BTC": 141,
+        "ETH": 141,
+        "SOL": 132
       },
       "noTicker": false,
+      "noOrderbook": false,
+      "lowVolumeTrades": false,
       "errors": []
     },
     "OKX": {
       "tier": 1,
       "status": "ok",
       "orderbook": {
-        "BTC": 147,
-        "ETH": 136,
-        "SOL": 119
+        "BTC": 174,
+        "ETH": 172,
+        "SOL": 171
       },
       "trades": {
-        "BTC": 91,
-        "ETH": 81,
-        "SOL": 126
+        "BTC": 236,
+        "ETH": 300,
+        "SOL": 80
       },
       "ticker": {
-        "BTC": 116,
-        "ETH": 98,
-        "SOL": 85
+        "BTC": 143,
+        "ETH": 145,
+        "SOL": 133
       },
       "noTicker": false,
+      "noOrderbook": false,
+      "lowVolumeTrades": false,
       "errors": []
     },
     "WOO X": {
       "tier": 1,
       "status": "ok",
       "orderbook": {
-        "BTC": 30,
-        "ETH": 25,
-        "SOL": 24
-      },
-      "trades": {
-        "BTC": 4,
-        "ETH": 80,
+        "BTC": 27,
+        "ETH": 22,
         "SOL": 22
       },
+      "trades": {
+        "BTC": 0,
+        "ETH": 58,
+        "SOL": 7
+      },
       "ticker": {
-        "BTC": 8,
-        "ETH": 15,
-        "SOL": 14
+        "BTC": 5,
+        "ETH": 14,
+        "SOL": 12
       },
       "noTicker": false,
+      "noOrderbook": false,
+      "lowVolumeTrades": false,
       "errors": []
     },
     "AscendEX": {
       "tier": 2,
       "status": "ok",
       "orderbook": {
-        "BTC": 47,
-        "ETH": 47,
-        "SOL": 46
+        "BTC": 48,
+        "ETH": 48,
+        "SOL": 48
       },
       "trades": {
-        "BTC": 13,
-        "ETH": 14,
+        "BTC": 14,
+        "ETH": 15,
         "SOL": 4
       },
       "ticker": {
-        "BTC": 46,
-        "ETH": 44,
-        "SOL": 36
+        "BTC": 42,
+        "ETH": 47,
+        "SOL": 33
       },
       "noTicker": false,
+      "noOrderbook": false,
+      "lowVolumeTrades": false,
       "errors": []
     },
     "BingX": {
       "tier": 2,
       "status": "ok",
       "orderbook": {
-        "BTC": 0,
-        "ETH": 0,
-        "SOL": 0
+        "BTC": 33,
+        "ETH": 43,
+        "SOL": 28
       },
       "trades": {
-        "BTC": 11,
-        "ETH": 11,
-        "SOL": 38
+        "BTC": 7,
+        "ETH": 13,
+        "SOL": 18
       },
       "ticker": {
-        "BTC": 15,
-        "ETH": 15,
-        "SOL": 15
+        "BTC": 16,
+        "ETH": 16,
+        "SOL": 16
       },
       "noTicker": false,
+      "noOrderbook": false,
+      "lowVolumeTrades": false,
       "errors": []
     },
     "Bitstamp": {
       "tier": 2,
       "status": "ok",
       "orderbook": {
-        "BTC": 149,
-        "ETH": 75,
-        "SOL": 75
+        "BTC": 133,
+        "ETH": 67,
+        "SOL": 67
       },
       "trades": {
-        "BTC": 54,
-        "ETH": 55,
-        "SOL": 10
+        "BTC": 45,
+        "ETH": 11,
+        "SOL": 5
       },
       "ticker": {
         "BTC": 0,
@@ -277,27 +301,31 @@
         "SOL": 0
       },
       "noTicker": true,
+      "noOrderbook": false,
+      "lowVolumeTrades": false,
       "errors": []
     },
     "Crypto.com": {
       "tier": 2,
       "status": "ok",
       "orderbook": {
-        "BTC": 29,
-        "ETH": 29,
-        "SOL": 30
+        "BTC": 25,
+        "ETH": 25,
+        "SOL": 26
       },
       "trades": {
-        "BTC": 117,
-        "ETH": 113,
-        "SOL": 40
+        "BTC": 31,
+        "ETH": 119,
+        "SOL": 2
       },
       "ticker": {
-        "BTC": 44,
-        "ETH": 50,
-        "SOL": 43
+        "BTC": 36,
+        "ETH": 40,
+        "SOL": 41
       },
       "noTicker": false,
+      "noOrderbook": false,
+      "lowVolumeTrades": false,
       "errors": []
     },
     "Deepcoin": {
@@ -309,37 +337,41 @@
         "SOL": 0
       },
       "trades": {
-        "BTC": 124,
-        "ETH": 87,
-        "SOL": 52
+        "BTC": 125,
+        "ETH": 73,
+        "SOL": 63
       },
       "ticker": {
-        "BTC": 0,
-        "ETH": 0,
-        "SOL": 0
+        "BTC": 75,
+        "ETH": 67,
+        "SOL": 51
       },
       "noTicker": false,
+      "noOrderbook": true,
+      "lowVolumeTrades": false,
       "errors": []
     },
     "Toobit": {
       "tier": 2,
       "status": "ok",
       "orderbook": {
-        "BTC": 46,
-        "ETH": 46,
-        "SOL": 43
+        "BTC": 25,
+        "ETH": 25,
+        "SOL": 24
       },
       "trades": {
-        "BTC": 46,
-        "ETH": 38,
-        "SOL": 37
+        "BTC": 21,
+        "ETH": 23,
+        "SOL": 19
       },
       "ticker": {
-        "BTC": 35,
-        "ETH": 35,
-        "SOL": 35
+        "BTC": 20,
+        "ETH": 19,
+        "SOL": 20
       },
       "noTicker": false,
+      "noOrderbook": false,
+      "lowVolumeTrades": false,
       "errors": []
     },
     "WhiteBIT": {
@@ -347,55 +379,59 @@
       "status": "ok",
       "orderbook": {
         "BTC": 151,
-        "ETH": 149,
-        "SOL": 150
+        "ETH": 151,
+        "SOL": 145
       },
       "trades": {
-        "BTC": 13,
-        "ETH": 28,
-        "SOL": 21
+        "BTC": 44,
+        "ETH": 124,
+        "SOL": 38
       },
       "ticker": {
-        "BTC": 7,
-        "ETH": 15,
-        "SOL": 15
+        "BTC": 6,
+        "ETH": 10,
+        "SOL": 16
       },
       "noTicker": false,
+      "noOrderbook": false,
+      "lowVolumeTrades": false,
       "errors": []
     },
     "BitMart": {
       "tier": 3,
-      "status": "ok",
+      "status": "timeout",
       "orderbook": {
-        "BTC": 24,
-        "ETH": 23,
-        "SOL": 24
+        "BTC": 12,
+        "ETH": 12,
+        "SOL": 11
       },
       "trades": {
-        "BTC": 255,
-        "ETH": 183,
-        "SOL": 71
+        "BTC": 142,
+        "ETH": 135,
+        "SOL": 34
       },
       "ticker": {
-        "BTC": 27,
-        "ETH": 26,
-        "SOL": 26
+        "BTC": 12,
+        "ETH": 14,
+        "SOL": 13
       },
       "noTicker": false,
+      "noOrderbook": false,
+      "lowVolumeTrades": false,
       "errors": []
     },
     "BTSE": {
       "tier": 3,
-      "status": "ok",
+      "status": "timeout",
       "orderbook": {
-        "BTC": 0,
-        "ETH": 0,
-        "SOL": 0
+        "BTC": 59,
+        "ETH": 76,
+        "SOL": 32
       },
       "trades": {
-        "BTC": 77,
-        "ETH": 21,
-        "SOL": 1
+        "BTC": 57,
+        "ETH": 22,
+        "SOL": 3
       },
       "ticker": {
         "BTC": 0,
@@ -403,15 +439,17 @@
         "SOL": 0
       },
       "noTicker": true,
+      "noOrderbook": false,
+      "lowVolumeTrades": false,
       "errors": []
     },
     "HitBTC": {
       "tier": 3,
-      "status": "ok",
+      "status": "timeout",
       "orderbook": {
-        "BTC": 106,
-        "ETH": 121,
-        "SOL": 101
+        "BTC": 45,
+        "ETH": 50,
+        "SOL": 46
       },
       "trades": {
         "BTC": 0,
@@ -419,95 +457,105 @@
         "SOL": 0
       },
       "ticker": {
-        "BTC": 1,
-        "ETH": 1,
-        "SOL": 1
+        "BTC": 7,
+        "ETH": 7,
+        "SOL": 9
       },
       "noTicker": false,
+      "noOrderbook": false,
+      "lowVolumeTrades": true,
       "errors": []
     },
     "LBank": {
       "tier": 3,
       "status": "timeout",
       "orderbook": {
-        "BTC": 6,
-        "ETH": 10,
-        "SOL": 14
+        "BTC": 4,
+        "ETH": 6,
+        "SOL": 6
       },
       "trades": {
         "BTC": 12,
-        "ETH": 20,
-        "SOL": 12
+        "ETH": 0,
+        "SOL": 2
       },
       "ticker": {
         "BTC": 14,
-        "ETH": 22,
-        "SOL": 14
+        "ETH": 2,
+        "SOL": 4
       },
       "noTicker": false,
+      "noOrderbook": false,
+      "lowVolumeTrades": false,
       "errors": []
     },
     "Pionex": {
       "tier": 3,
       "status": "ok",
       "orderbook": {
-        "BTC": 26,
-        "ETH": 25,
-        "SOL": 26
+        "BTC": 15,
+        "ETH": 14,
+        "SOL": 15
       },
       "trades": {
-        "BTC": 41,
-        "ETH": 64,
-        "SOL": 31
+        "BTC": 26,
+        "ETH": 33,
+        "SOL": 17
       },
       "ticker": {
         "BTC": 0,
         "ETH": 0,
         "SOL": 0
       },
-      "noTicker": false,
+      "noTicker": true,
+      "noOrderbook": false,
+      "lowVolumeTrades": false,
       "errors": []
     },
     "Poloniex": {
       "tier": 3,
-      "status": "ok",
+      "status": "timeout",
       "orderbook": {
-        "BTC": 116,
-        "ETH": 104,
-        "SOL": 110
-      },
-      "trades": {
-        "BTC": 67,
-        "ETH": 58,
+        "BTC": 58,
+        "ETH": 54,
         "SOL": 58
       },
+      "trades": {
+        "BTC": 32,
+        "ETH": 33,
+        "SOL": 42
+      },
       "ticker": {
-        "BTC": 16,
-        "ETH": 16,
-        "SOL": 16
+        "BTC": 7,
+        "ETH": 7,
+        "SOL": 7
       },
       "noTicker": false,
+      "noOrderbook": false,
+      "lowVolumeTrades": false,
       "errors": []
     },
     "Upbit": {
       "tier": 3,
       "status": "ok",
       "orderbook": {
-        "BTC": 141,
-        "ETH": 146,
-        "SOL": 135
+        "BTC": 17,
+        "ETH": 18,
+        "SOL": 20
       },
       "trades": {
-        "BTC": 165,
-        "ETH": 274,
-        "SOL": 36
+        "BTC": 10,
+        "ETH": 3,
+        "SOL": 2
       },
       "ticker": {
-        "BTC": 149,
-        "ETH": 197,
-        "SOL": 48
+        "BTC": 16,
+        "ETH": 6,
+        "SOL": 5
       },
       "noTicker": false,
+      "noOrderbook": false,
+      "lowVolumeTrades": false,
       "errors": []
     }
   }

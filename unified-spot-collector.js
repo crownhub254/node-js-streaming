@@ -1,10 +1,10 @@
 /**
  * ╔══════════════════════════════════════════════════════════════════╗
  * ║         UNIFIED SPOT COLLECTOR - BTC / ETH / SOL               ║
- * ║     22 Exchanges | Real-Time WebSocket | Per-Second Analytics   ║
+ * ║     24 Exchanges | Real-Time WebSocket | Per-Second Analytics   ║
  * ╚══════════════════════════════════════════════════════════════════╝
  * 
- * Streams spot trade data from 22 exchanges simultaneously for BTC, ETH, SOL.
+ * Streams spot trade data from 24 exchanges simultaneously for BTC, ETH, SOL.
  * Displays per-second collection rates per coin per exchange for throughput analysis.
  * 
  * Features:
@@ -760,6 +760,75 @@ const EXCHANGES = {
             }
         })
     },
+
+    'BTSE': {
+        tier: 3,
+        getConfig: () => ({
+            url: 'wss://ws.btse.com/ws/spot',
+            onOpen: (ws) => {
+                ws.send(JSON.stringify({ op: 'subscribe', args: ['tradeHistoryApi:BTC-USD'] }));
+                ws.send(JSON.stringify({ op: 'subscribe', args: ['tradeHistoryApi:ETH-USD'] }));
+                ws.send(JSON.stringify({ op: 'subscribe', args: ['tradeHistoryApi:SOL-USD'] }));
+            },
+            pingInterval: 30000,
+            pingMessage: 'ping',
+            parseMessage: (msg) => {
+                if (msg === 'pong') return null;
+                try {
+                    const d = JSON.parse(msg);
+                    // Subscription confirmation: {event:'subscribe', channel:[...]}
+                    if (d.event === 'subscribe') return null;
+                    // Trade data: {topic:'tradeHistoryApi:BTC-USD', data:[{symbol,side,size,price,tradeId,timestamp}]}
+                    if (d.topic && d.data && Array.isArray(d.data)) {
+                        const topic = d.topic;
+                        if (topic.includes('BTC-USD')) return 'BTC';
+                        if (topic.includes('ETH-USD')) return 'ETH';
+                        if (topic.includes('SOL-USD')) return 'SOL';
+                        // Fallback: check symbol in data
+                        const sym = d.data[0]?.symbol || '';
+                        if (sym.includes('BTC')) return 'BTC';
+                        if (sym.includes('ETH')) return 'ETH';
+                        if (sym.includes('SOL')) return 'SOL';
+                    }
+                } catch (e) {}
+                return null;
+            }
+        })
+    },
+
+    'HitBTC': {
+        tier: 3,
+        getConfig: () => ({
+            url: 'wss://api.hitbtc.com/api/3/ws/public',
+            onOpen: (ws) => {
+                ws.send(JSON.stringify({
+                    method: 'subscribe',
+                    ch: 'trades',
+                    params: { symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'] },
+                    id: 123
+                }));
+            },
+            parseMessage: (msg) => {
+                try {
+                    const d = JSON.parse(msg);
+                    // Subscription confirmation: {result:{ch:'trades', subscriptions:[...]}, id:123}
+                    if (d.result && d.result.ch === 'trades') return null;
+                    // Trade snapshot: {ch:'trades', snapshot:{BTCUSDT:[{t,i,p,q,s}]}}
+                    // Trade update: {ch:'trades', update:{BTCUSDT:[{t,i,p,q,s}]}}
+                    if (d.ch === 'trades') {
+                        const data = d.snapshot || d.update || {};
+                        const marketIds = Object.keys(data);
+                        for (const mkt of marketIds) {
+                            if (mkt === 'BTCUSDT' || mkt.includes('BTC')) return 'BTC';
+                            if (mkt === 'ETHUSDT' || mkt.includes('ETH')) return 'ETH';
+                            if (mkt === 'SOLUSDT' || mkt.includes('SOL')) return 'SOL';
+                        }
+                    }
+                } catch (e) {}
+                return null;
+            }
+        })
+    },
 };
 
 // ======================== BITFINEX CHANNEL TRACKING ========================
@@ -1091,7 +1160,7 @@ function avgRate(history) {
 async function main() {
     console.log('\n' + '╔'.padEnd(109, '═') + '╗');
     console.log('║  UNIFIED SPOT COLLECTOR - BTC / ETH / SOL                                                               ║');
-    console.log('║  Streaming from 22 exchanges simultaneously                                                              ║');
+    console.log('║  Streaming from 24 exchanges simultaneously                                                              ║');
     console.log('║  Press Ctrl+C to stop                                                                                    ║');
     console.log('╚'.padEnd(109, '═') + '╝\n');
 

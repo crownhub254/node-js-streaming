@@ -1,9 +1,9 @@
 # CONFIRMED WORKING EXCHANGES - Data Streams Verified
 
-**Test Date:** February 6, 2026 (Updated)  
-**Test Duration:** 79.2 seconds  
+**Test Date:** February 6, 2026 (Updated - Deep 5-min Test)  
+**Test Duration:** 189.3s verification + 943.1s deep test  
 **Symbol Tested:** BTC/USDT  
-**Success Rate:** 66.7% of testable exchanges (12/18)
+**Success Rate:** 100% (10/10 exchanges, all streams perfect)
 
 ---
 
@@ -334,38 +334,31 @@ zoomexFuturesWS.on('open', () => {
 // ═══════════════════════════════════════════════
 
 // 6. Bullish
-// GET https://api.exchange.bullish.com/trading-api/v1/markets
 // GET https://api.exchange.bullish.com/trading-api/v1/markets/BTCUSDT/orderbook/hybrid
 // GET https://api.exchange.bullish.com/trading-api/v1/markets/BTCUSDT/trades
 
-// 7. Darkex
-// GET https://openapi.darkex.com/sapi/v1/ticker/24hr?symbol=BTCUSDT
+// 7. Darkex (ticker needs API key, removed)
 // GET https://openapi.darkex.com/sapi/v1/depth?symbol=BTCUSDT&limit=5
 // GET https://openapi.darkex.com/sapi/v1/trades?symbol=BTCUSDT&limit=5
-// GET https://openapi.darkex.com/sapi/v1/klines?symbol=BTCUSDT&interval=1m&limit=5
 
 // 8. Bitrue
 // GET https://openapi.bitrue.com/api/v1/ticker/24hr?symbol=BTCUSDT
 // GET https://openapi.bitrue.com/api/v1/depth?symbol=BTCUSDT&limit=5
 // GET https://openapi.bitrue.com/api/v1/trades?symbol=BTCUSDT&limit=5
 
-// 9. SuperEx
-// GET https://api.superex.com/api/public/v1/market/ticker?symbol=btc_usdt
-// GET https://api.superex.com/api/public/v1/market/depth?symbol=btc_usdt&limit=5
+// 9. REMOVED: SuperEx (requires auth tokens since Feb 2026)
+// 10. REMOVED: UZX (returns HTML, API no longer available)
 
-// 10. UZX
-// GET https://www.uzx.com/api/v1/ticker/24hr?symbol=BTCUSDT
-// GET https://www.uzx.com/api/v1/depth?symbol=BTCUSDT&limit=5
-
-// 11. FameEX
-// GET https://api.fameex.com/v2/public/orderbook?symbol=BTC-USDT&limit=5
+// 11. FameEX (symbol fixed: BTCUSDT not BTC-USDT)
+// GET https://api.fameex.com/v2/public/ticker
+// GET https://api.fameex.com/v2/public/orderbook?symbol=BTCUSDT&limit=5
 
 // 12. OrangeX (Deribit-style JSON-RPC 2.0)
 // Spot:
 // GET https://api.orangex.com/api/v1/public/get_order_book?instrument_name=BTC-USDT-SPOT&depth=5
 // GET https://api.orangex.com/api/v1/public/get_last_trades_by_instrument?instrument_name=BTC-USDT-SPOT&count=5
 // Futures (USDT Perpetual):
-// GET https://api.orangex.com/api/v1/public/ticker?instrument_name=BTC-USDT-PERPETUAL
+// GET https://api.orangex.com/api/v1/public/ticker?instrument_name=BTC-USDT-PERPETUALmi
 // GET https://api.orangex.com/api/v1/public/get_order_book?instrument_name=BTC-USDT-PERPETUAL&depth=5
 // GET https://api.orangex.com/api/v1/public/get_last_trades_by_instrument?instrument_name=BTC-USDT-PERPETUAL&count=5
 ```
@@ -376,21 +369,33 @@ zoomexFuturesWS.on('open', () => {
 
 | Category | Count | Exchanges |
 |----------|-------|-----------|
-| ✅ WS Fully Working | 5 | Biconomy, NovaEx, XT.com, Hotcoin, Zoomex |
-| ✅ REST Working | 7 | Bullish, Darkex, Bitrue, SuperEx, UZX, FameEX, OrangeX |
+| ✅ WS Fully Working | 5 | Biconomy, NovaEx, XT.com, Hotcoin (trades+REST ticker), Zoomex |
+| ✅ REST Working | 5 | Bullish, Darkex, Bitrue, FameEX, OrangeX |
+| ❌ Removed (API Changed) | 2 | SuperEx (requires auth tokens), UZX (returns HTML) |
 | ❌ Failed | 6 | Hibt, DigiFinex, WEEX, Ju.com, KCEX, TruBitPro |
 | ⏭️ Skipped (No API) | 17 | Various - see list above |
-| **Total Confirmed** | **12** | **36 streams across 12 exchanges** |
+| **Total Confirmed** | **10** | **31 streams across 10 exchanges** |
 
 ### Stream Coverage on Working Exchanges
 
 | Stream Type | Available On |
 |-------------|-------------|
-| **Orderbook** | Biconomy, NovaEx, XT.com (Spot+Futures), Hotcoin, Zoomex (Spot+Futures), Bullish, Darkex, Bitrue, UZX, FameEX, OrangeX (Spot+Futures) |
+| **Orderbook** | Biconomy, NovaEx, XT.com (Spot+Futures), Zoomex (Spot+Futures), Bullish, Darkex, Bitrue, FameEX, OrangeX (Futures) |
 | **Trades** | Biconomy, NovaEx, XT.com, Hotcoin, Zoomex (Spot+Futures), Bullish, Darkex, Bitrue, OrangeX (Spot+Futures) |
-| **Ticker** | Biconomy, XT.com (Spot+Futures), Hotcoin, Zoomex (Spot+Futures), Darkex, Bitrue, SuperEx, UZX, OrangeX (Futures) |
-| **Kline/OHLCV** | Biconomy, XT.com, Hotcoin, Zoomex (Spot+Futures), Darkex |
+| **Ticker** | Biconomy, XT.com (Spot+Futures), Hotcoin (REST), Zoomex (Spot+Futures), Bitrue, FameEX, OrangeX (Futures) |
+
+### Exchanges Removed After Deep Testing
+
+| Exchange | Reason |
+|----------|--------|
+| SuperEx | API now requires auth tokens (`code:403` on all public endpoints) |
+| UZX | Website restructured - all API URLs return HTML instead of JSON |
+| Darkex ticker | Ticker endpoint requires API key (`code:-1002`), orderbook+trades still public |
+| Bullish ticker | `/v1/markets` returns all markets (too large, timeouts) |
+| FameEX symbol | Fixed: `BTC-USDT` → `BTCUSDT` |
+| Hotcoin depth | Server accepts subscription but never sends depth/detail data; only trades work via WS |
 
 ---
 
-*Generated from test-35-exchanges.js test results on February 6, 2026 (Updated with deeper research on OrangeX, TruBitPro, KCEX, DigiFinex, BTDUex, BiKing, Yubit)*
+*Generated from test-confirmed-exchanges.js deep test results on February 6, 2026*
+*Verification test: 10/10 exchanges perfect, 0 errors, 100% health rate*

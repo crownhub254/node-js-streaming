@@ -329,7 +329,8 @@ const EXCHANGES = {
     type: 'rest',
     endpoints: {
       ticker:    'https://api.fameex.com/v2/public/ticker',
-      orderbook: 'https://api.fameex.com/v2/public/orderbook?symbol=BTCUSDT&limit=10'
+      orderbook: 'https://api.fameex.com/v2/public/orderbook?symbol=BTCUSDT&limit=10',
+      trades:    'https://api.fameex.com/sapi/v1/trades?symbol=BTCUSDT&limit=10'
     }
   },
 

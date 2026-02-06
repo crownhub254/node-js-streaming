@@ -5,8 +5,8 @@ const zlib = require('zlib');
 const fs = require('fs');
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 35-EXCHANGE COMPREHENSIVE TESTER
-// Tests WebSocket and REST API streams for all 35 researched exchanges
+// 12-EXCHANGE COMPREHENSIVE TESTER
+// Tests WebSocket and REST API streams for all 12 remaining exchanges
 // Collects data for 2 minutes, reports results, auto-fixes errors
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -165,14 +165,7 @@ function testWS(name, url, options = {}) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 const EXCHANGES = {
-  // ── 1. BTDUex ──
-  btduex: {
-    name: 'BTDUex',
-    skip: true,
-    reason: 'No public API - new exchange (Oct 2025), API undocumented'
-  },
-
-  // ── 2. Biconomy ──
+  // ── 1. Biconomy ──
   biconomy: {
     name: 'Biconomy.com',
     type: 'ws',
@@ -188,14 +181,7 @@ const EXCHANGES = {
     }
   },
 
-  // ── 3. KTX Finance ──
-  ktx: {
-    name: 'KTX Finance',
-    skip: true,
-    reason: 'DeFi DEX - no traditional CEX API'
-  },
-
-  // ── 4. NovaEx ──
+  // ── 2. NovaEx ──
   novaex: {
     name: 'NovaEx',
     type: 'ws',
@@ -208,28 +194,7 @@ const EXCHANGES = {
     }
   },
 
-  // ── 5. VOOX ──
-  voox: {
-    name: 'VOOX Exchange',
-    skip: true,
-    reason: 'No public API documentation'
-  },
-
-  // ── 6. CoinUp.io ──
-  coinup: {
-    name: 'CoinUp.io',
-    skip: true,
-    reason: 'No public API documentation'
-  },
-
-  // ── 7. Batonex ──
-  batonex: {
-    name: 'Batonex',
-    skip: true,
-    reason: 'SHUT DOWN - No longer provides crypto trading'
-  },
-
-  // ── 8. Bullish ──
+  // ── 3. Bullish ──
   bullish: {
     name: 'Bullish.com',
     type: 'rest',
@@ -241,19 +206,7 @@ const EXCHANGES = {
     }
   },
 
-  // ── 9. Hibt ──
-  hibt: {
-    name: 'Hibt.com',
-    type: 'rest',
-    spot: true, futures: true,
-    endpoints: {
-      spot_ticker: 'https://api.hibt0.com/exchange-open-api/open/api/get_ticker?symbol=btcusdt',
-      spot_orderbook: 'https://api.hibt0.com/exchange-open-api/open/api/market_dept?symbol=btcusdt&type=step0',
-      spot_kline: 'https://api.hibt0.com/exchange-open-api/open/api/get_records?symbol=btcusdt&period=1'
-    }
-  },
-
-  // ── 10. XT.com ──
+  // ── 4. XT.com ──
   xt: {
     name: 'XT.com',
     type: 'ws',
@@ -272,21 +225,7 @@ const EXCHANGES = {
     }
   },
 
-  // ── 11. Biking ──
-  biking: {
-    name: 'Biking',
-    skip: true,
-    reason: 'Claims API support but no public docs found'
-  },
-
-  // ── 12. GroveX ──
-  grovex: {
-    name: 'GroveX',
-    skip: true,
-    reason: 'Site did not return meaningful content'
-  },
-
-  // ── 13. UZX.com ──
+  // ── 5. UZX.com ──
   uzx: {
     name: 'UZX.com',
     type: 'rest',
@@ -297,76 +236,7 @@ const EXCHANGES = {
     }
   },
 
-  // ── 14. KCEX ──
-  kcex: {
-    name: 'KCEX',
-    type: 'rest',
-    spot: true, futures: true,
-    endpoints: {
-      spot_ticker: 'https://api.kcex.com/api/v1/ticker?symbol=BTC_USDT',
-      spot_orderbook: 'https://api.kcex.com/api/v1/depth?symbol=BTC_USDT&limit=5'
-    }
-  },
-
-  // ── 15. ASTX.io ──
-  astx: {
-    name: 'ASTX.io',
-    skip: true,
-    reason: 'Chinese-focused, no public API docs'
-  },
-
-  // ── 16. Tebbit.io ──
-  tebbit: {
-    name: 'Tebbit.io',
-    skip: true,
-    reason: 'No API documentation found'
-  },
-
-  // ── 17. XXKK.COM ──
-  xxkk: {
-    name: 'XXKK.COM',
-    skip: true,
-    reason: 'No public API documentation'
-  },
-
-  // ── 18. BitxEX ──
-  bitxex: {
-    name: 'BitxEX',
-    skip: true,
-    reason: 'Site inaccessible/offline'
-  },
-
-  // ── 19. DigiFinex ──
-  digifinex: {
-    name: 'DigiFinex',
-    type: 'rest',
-    spot: true, futures: true,
-    endpoints: {
-      spot_ticker: 'https://openapi.digifinex.com/v3/ticker?symbol=btc_usdt',
-      spot_orderbook: 'https://openapi.digifinex.com/v3/order_book?symbol=btc_usdt&limit=5',
-      spot_trades: 'https://openapi.digifinex.com/v3/trades?symbol=btc_usdt&limit=5',
-      spot_kline: 'https://openapi.digifinex.com/v3/kline?symbol=btc_usdt&period=1&limit=5'
-    }
-  },
-
-  // ── 20. WEEX ──
-  weex: {
-    name: 'WEEX',
-    type: 'ws',
-    spot: true, futures: true,
-    ws: 'wss://ws.weex.com/v5/public/linear',
-    wsAlt: 'wss://contract.weex.com/v5/public/linear',
-    streams: {
-      futures_orderbook: { op: 'subscribe', args: ['orderbook.50.BTCUSDT'] },
-      futures_trades: { op: 'subscribe', args: ['publicTrade.BTCUSDT'] },
-      futures_ticker: { op: 'subscribe', args: ['tickers.BTCUSDT'] },
-      futures_kline: { op: 'subscribe', args: ['kline.1.BTCUSDT'] }
-    },
-    pingInterval: 20000,
-    ping: { op: 'ping' }
-  },
-
-  // ── 21. SuperEx ──
+  // ── 6. SuperEx ──
   superex: {
     name: 'SuperEx.com',
     type: 'rest',
@@ -377,19 +247,19 @@ const EXCHANGES = {
     }
   },
 
-  // ── 22. FameEX ──
+  // ── 7. FameEX ──
   fameex: {
     name: 'FameEX.com',
     type: 'rest',
     spot: true, futures: true,
     endpoints: {
       spot_ticker: 'https://api.fameex.com/v2/public/ticker',
-      spot_orderbook: 'https://api.fameex.com/v2/public/orderbook?symbol=BTC-USDT&limit=5',
-      spot_trades: 'https://api.fameex.com/v2/public/trades?symbol=BTC-USDT&limit=5'
+      spot_orderbook: 'https://api.fameex.com/v2/public/orderbook?symbol=BTCUSDT&limit=5',
+      spot_trades: 'https://api.fameex.com/sapi/v1/trades?symbol=BTCUSDT&limit=5'
     }
   },
 
-  // ── 23. Hotcoin ──
+  // ── 8. Hotcoin ──
   hotcoin: {
     name: 'Hotcoin.com',
     type: 'ws',
@@ -407,7 +277,7 @@ const EXCHANGES = {
     ping: { ping: Date.now() }
   },
 
-  // ── 24. OrangeX ──
+  // ── 9. OrangeX ──
   orangex: {
     name: 'OrangeX.com',
     type: 'rest',
@@ -421,14 +291,7 @@ const EXCHANGES = {
     }
   },
 
-  // ── 25. CrypFine ──
-  crypfine: {
-    name: 'CrypFine',
-    skip: true,
-    reason: 'No public API documentation'
-  },
-
-  // ── 26. Darkex ──
+  // ── 10. Darkex ──
   darkex: {
     name: 'Darkex.com',
     type: 'rest',
@@ -441,59 +304,7 @@ const EXCHANGES = {
     }
   },
 
-  // ── 27. SunX.vip ──
-  sunx: {
-    name: 'SunX.vip',
-    skip: true,
-    reason: 'Minimal site, no exchange content'
-  },
-
-  // ── 28. Yubit ──
-  yubit: {
-    name: 'Yubit',
-    skip: true,
-    reason: 'Domain parked/defunct - no longer operational'
-  },
-
-  // ── 29. Ju.com ──
-  ju: {
-    name: 'Ju.com',
-    type: 'rest',
-    spot: true, futures: true,
-    endpoints: {
-      spot_ticker: 'https://api.ju.com/api/v1/tickers',
-      spot_orderbook: 'https://api.ju.com/api/v1/depth?symbol=BTC_USDT&size=5',
-      spot_trades: 'https://api.ju.com/api/v1/trades?symbol=BTC_USDT&size=5'
-    }
-  },
-
-  // ── 30. TruBitPro ──
-  trubitpro: {
-    name: 'TruBitPro',
-    type: 'rest',
-    spot: true, futures: true,
-    endpoints: {
-      spot_ticker: 'https://api.trubit.com/openapi/quote/v1/ticker/24hr?symbol=BTCUSDT',
-      spot_orderbook: 'https://api.trubit.com/openapi/quote/v1/depth?symbol=BTCUSDT&limit=5',
-      spot_trades: 'https://api.trubit.com/openapi/quote/v1/trades?symbol=BTCUSDT&limit=5'
-    }
-  },
-
-  // ── 31. Top.one ──
-  topone: {
-    name: 'Top.one',
-    skip: true,
-    reason: 'No public API documentation'
-  },
-
-  // ── 32. Echobit ──
-  echobit: {
-    name: 'Echobit',
-    skip: true,
-    reason: 'GEO-RESTRICTED - inaccessible'
-  },
-
-  // ── 33. Bitrue ──
+  // ── 11. Bitrue ──
   bitrue: {
     name: 'Bitrue.com',
     type: 'rest',
@@ -506,14 +317,7 @@ const EXCHANGES = {
     }
   },
 
-  // ── 34. Cofinex ──
-  cofinex: {
-    name: 'Cofinex',
-    skip: true,
-    reason: 'Domain parked - not an exchange'
-  },
-
-  // ── 35. Zoomex ──
+  // ── 12. Zoomex ──
   zoomex: {
     name: 'Zoomex',
     type: 'ws',
@@ -747,9 +551,9 @@ async function main() {
   
   console.log(`
 ╔═══════════════════════════════════════════════════════════════════════════╗
-║     35-EXCHANGE COMPREHENSIVE STREAM TEST                                 ║
-║     Testing WebSocket & REST API streams for ALL 35 researched exchanges  ║
-║     Duration: 2 minutes max | Auto-retry on failure                       ║
+║     12-EXCHANGE COMPREHENSIVE STREAM TEST                                 ║
+║     Testing WebSocket & REST API streams for ALL 12 remaining exchanges   ║
+║     Duration: 5 minutes max | Auto-retry on failure                       ║
 ╚═══════════════════════════════════════════════════════════════════════════╝
   `);
   console.log(`⏱️  Started at ${new Date().toISOString()}\n`);
@@ -759,7 +563,7 @@ async function main() {
   for (const key of exchangeKeys) {
     // Check time limit
     if (Date.now() - startTime > TEST_DURATION) {
-      console.log(`\n⏰ TIME LIMIT REACHED (2 minutes). Stopping remaining tests.`);
+      console.log(`\n⏰ TIME LIMIT REACHED (5 minutes). Stopping remaining tests.`);
       // Mark remaining as skipped
       for (const remaining of exchangeKeys.slice(exchangeKeys.indexOf(key))) {
         RESULTS[remaining] = {

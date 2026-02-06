@@ -722,25 +722,6 @@ const exchanges = {
         parseMessage: (m) => m.data?.price ? { type: 'trade', price: m.data.price } : null
       }
     }
-  },
-
-  // 17. WEEX
-  weex: {
-    name: 'WEEX',
-    spot: true,
-    futures: true,
-    tests: {
-      futures_orderbook: {
-        url: 'wss://ws.weex.com/v2/ws/public',
-        subscribeMsg: { op: 'subscribe', args: [{ instType: 'USDT-FUTURES', channel: 'books15', instId: 'BTCUSDT' }] },
-        parseMessage: (m) => m.data ? { type: 'orderbook', data: m.data } : null
-      },
-      futures_ticker: {
-        url: 'wss://ws.weex.com/v2/ws/public',
-        subscribeMsg: { op: 'subscribe', args: [{ instType: 'USDT-FUTURES', channel: 'ticker', instId: 'BTCUSDT' }] },
-        parseMessage: (m) => m.data ? { type: 'ticker', data: m.data } : null
-      }
-    }
   }
 };
 

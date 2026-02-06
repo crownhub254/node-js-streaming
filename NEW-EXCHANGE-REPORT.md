@@ -57,7 +57,7 @@
 
 ---
 
-### 3. BTSE (BTDUex)
+### 3. BTSE
 - **Status:** ✅ FULLY WORKING
 - **Markets:** Spot + Futures
 - **WebSocket:** 
@@ -175,7 +175,7 @@
 
 ## 🟡 PARTIALLY WORKING EXCHANGES
 
-### 9. AsterDEX (ASTX)
+### 9. AsterDEX
 - **Status:** 🟡 PARTIAL (Futures only)
 - **Markets:** Futures Only (DEX on BNB Smart Chain)
 - **WebSocket:** `wss://fstream.asterdex.com/ws/btcusdt@depth`

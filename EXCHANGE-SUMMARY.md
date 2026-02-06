@@ -193,14 +193,6 @@
 
 ## 🔴 Failed Exchanges (1)
 
-### 17. WEEX
-- **WebSocket:** `ws://ws.weex.com` (FAILED)
-- **Status:** ❌ DNS Resolution Failed (`ENOTFOUND`)
-- **Markets:** Unknown
-- **Notes:** Domain not resolving, may be offline, blocked, or changed endpoint
-
----
-
 ## Summary Statistics
 
 | Status | Count | Exchanges |
@@ -208,7 +200,6 @@
 | ✅ Fully Working | 8 | Binance, Bybit, OKX, Kraken, Gate.io, HTX, Bitfinex, Bitget |
 | 🟡 Partially Working | 7 | BingX, BitMEX, MEXC, Coinbase, Bitstamp, BitMart, KuCoin |
 | 🟢 Working (Limited) | 1 | Upbit |
-| ❌ Failed | 1 | WEEX |
 
 ### Data Type Coverage
 
@@ -238,7 +229,6 @@
 4. **Compression:** HTX, BitMart use gzip compression
 5. **Spot-Only Exchanges:** Coinbase, Bitstamp, Upbit
 6. **Futures-Only:** BitMEX (perpetual contracts)
-7. **Regional Issues:** WEEX endpoint not accessible
 8. **Best for Testing:** Binance (most comprehensive), OKX (WebSocket OI), Bybit (excellent uptime)
 
 ---
@@ -257,7 +247,6 @@
 
 1. **Production Use:** Focus on top 8 fully-working exchanges
 2. **Open Interest:** Use OKX for WebSocket OI, or poll REST APIs for others
-3. **WEEX:** Investigate alternative endpoints or contact support
 4. **MEXC Spot:** Debug spot WebSocket connection issues
 5. **Unified Client:** Build multi-exchange aggregator using tested configurations
 
@@ -276,56 +265,22 @@
 
 | # | Exchange | Spot | Futures | Orderbook | Trades | Ticker | OHLCV/Kline | Public API | WebSocket | Notes |
 |---|----------|------|---------|-----------|--------|--------|-------------|------------|-----------|-------|
-| 1 | BTDUex | ✅ | ✅ | ❓ | ❓ | ❓ | ❓ | ❌ No public docs | ❌ Unknown | No public API documentation found |
 | 2 | Biconomy.com | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ REST + WS | ✅ `wss://bei.biconomy.com/ws` | Full spot WS streams; futures API unclear |
-| 3 | KTX Finance | ❌ | ✅ (DeFi perps) | ❌ | ❌ | ❌ | ❌ | ❌ No CEX API | ❌ N/A | DeFi perpetuals DEX on BNB/Mantle/Arbitrum - no traditional API |
 | 4 | NovaEx | ✅ | ✅ | ❓ | ❓ | ❓ | ❓ | ❌ No public docs | ❌ Unknown | Site redirects to WOO X Pro (rebranded/white-label) |
-| 5 | VOOX Exchange | ✅ | ✅ | ❓ | ❓ | ❓ | ❓ | ❌ No public docs | ❌ Unknown | Has Spot & Futures pages but no public API documentation |
-| 6 | CoinUp.io | ✅ | ✅ | ❓ | ❓ | ❓ | ❓ | ❌ No public docs | ❌ Unknown | SPA app, spot & futures visible but no API docs found |
-| 7 | Batonex | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ Shut down | ❌ N/A | **SHUT DOWN** - No longer provides crypto trading |
 | 8 | Bullish.com | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ REST API | ❓ Unknown | Institutional exchange; has REST API but docs inaccessible for WS |
-| 9 | Hibt.com | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ REST API | ❓ REST only confirmed | Spot REST API at `api.hibt0.com`; has perpetual contract docs too |
 | 10 | XT.com | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ REST + WS | ✅ Yes | Full API: REST + WebSocket for spot & derivatives. Python/Java/JS SDKs |
-| 11 | Biking | ✅ | ✅ | ❓ | ❓ | ❓ | ❓ | ❌ No public docs | ❌ Unknown | Site loads but no API documentation accessible |
-| 12 | GroveX | ✅ | ❓ | ❓ | ❓ | ❓ | ❓ | ❌ No public docs | ❌ Unknown | Site didn't return meaningful content |
 | 13 | UZX.com | ✅ | ✅ (USDT-M & Coin-M) | ❓ | ❓ | ❓ | ❓ | ✅ APIs listed | ❓ Unknown | Has APIs page in footer; Spot + USDT-M + Coin-M Futures |
-| 14 | KCEX | ✅ | ✅ | ❓ | ❓ | ❓ | ❓ | ❌ No public docs | ❌ Unknown | Spot & Futures trading available; no API docs found publicly |
-| 15 | ASTX.io | ✅ | ✅ | ❓ | ❓ | ❓ | ❓ | ❌ No public docs | ❌ Unknown | Chinese-focused exchange with spot & futures (50x leverage) |
-| 16 | Tebbit.io | ✅ | ✅ | ❓ | ❓ | ❓ | ❓ | ❌ No public docs | ❌ Unknown | Has spot & futures tables; no API documentation found |
-| 17 | XXKK.COM | ✅ | ✅ (USDT-M) | ❓ | ❓ | ❓ | ❓ | ❌ No public docs | ❌ Unknown | 200+ spot pairs, 150+ contracts up to 200x; no public API docs |
-| 18 | BitxEX | ❓ | ❓ | ❓ | ❓ | ❓ | ❓ | ❌ Site inaccessible | ❌ Unknown | Website returned no meaningful content |
-| 19 | DigiFinex | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ REST + WS | ✅ Yes | Well-established exchange with full API docs (spot + swap) |
-| 20 | WEEX | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ REST + WS | ✅ Yes | Full API with WebSocket (Bybit-like API structure) |
 | 21 | SuperEx.com | ✅ | ✅ | ❓ | ❓ | ❓ | ❓ | ✅ APIs listed | ❓ Unknown | Has spot & futures + copy trading; APIs mentioned but docs link broken |
 | 22 | FameEX.com | ✅ | ✅ (USDT Perpetual) | ✅ | ✅ | ✅ | ✅ | ✅ REST + WS | ✅ Yes | Full API at fameexdocs.github.io; spot + USDT perpetual |
 | 23 | Hotcoin.com | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ REST + WS | ✅ Yes | API docs page available; spot, futures, margin trading |
 | 24 | OrangeX.com | ✅ | ✅ (Perpetual) | ❓ | ❓ | ❓ | ❓ | ❌ No public docs | ❌ Unknown | Spot & Perpetual (200x leverage); no public API documentation |
-| 25 | CrypFine | ✅ | ✅ | ❓ | ❓ | ❓ | ❓ | ❌ No public docs | ❌ Unknown | Has spot & futures trading pages but no API docs found |
 | 26 | Darkex.com | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ REST API | ✅ Yes | Full REST API at `openapi.darkex.com`; Spot + Futures |
-| 27 | SunX.vip | ❓ | ❓ | ❓ | ❓ | ❓ | ❓ | ❌ Site minimal | ❌ Unknown | Popup-heavy site; no meaningful exchange content loaded |
-| 28 | Yubit | ❓ | ❓ | ❓ | ❓ | ❓ | ❓ | ❌ Site error (404) | ❌ N/A | Website returned 404 error - may be offline or relocated |
-| 29 | Ju.com | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ REST + WS | ✅ Yes | Formerly JuCoin; 200+ spot, 200+ futures (150x); full API likely |
-| 30 | TruBitPro | ❓ | ❓ | ❓ | ❓ | ❓ | ❓ | ❌ Site inaccessible | ❌ Unknown | Website returned no meaningful content |
-| 31 | Top.one | ✅ | ✅ (Super Leverage) | ❓ | ❓ | ❓ | ❓ | ❌ No public docs | ❌ Unknown | Spot + Futures (1000x); no API documentation found publicly |
-| 32 | Echobit | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ Geo-restricted | ❌ N/A | **GEO-RESTRICTED** - "area is not covered by our service" |
 | 33 | Bitrue.com | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ REST + WS | ✅ Yes | Well-established; full API (REST+WS) for spot & futures |
-| 34 | Cofinex | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ Domain parked | ❌ N/A | **NOT AN EXCHANGE** - Domain is parked at a hosting provider |
 | 35 | Zoomex | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ REST + WS | ✅ Yes | Bybit-forked; V5 API with full WS support for spot & derivatives |
 
 ---
 
 ## Detailed Exchange Findings
-
----
-
-### 1. BTDUex (btduex.com)
-- **Markets:** Spot ✅ | Futures (Derivatives) ✅
-- **Products:** Spot, Derivatives, Buy Crypto, AI Copy Trading
-- **Trading Pairs:** BTC/USDT, ETH/USDT, BNB/USDT, LTC/USDT, DOGE/USDT, SOL/USDT + custom tokens (FNRX, TRRX, ERO, MRO)
-- **API:** No public API documentation found. No developer docs page exists.
-- **WebSocket:** Unknown - no documented endpoints
-- **Streams Available:** ❓ Cannot confirm any streams
-- **Verdict:** Small/new exchange with no public API. Not suitable for programmatic streaming.
 
 ---
 
@@ -352,49 +307,11 @@
 
 ---
 
-### 3. KTX Finance (ktx.finance)
-- **Type:** DeFi Perpetual DEX (NOT a centralized exchange)
-- **Markets:** Spot ❌ | Futures ✅ (on-chain perpetuals only)
-- **Chains:** BNB Chain, Mantle, Arbitrum
-- **Trading:** Up to 100x leverage, on-chain execution via KLP pool
-- **Assets:** BTC, ETH, BNB, MNT, ARB, SOL, LINK
-- **API:** No traditional REST/WebSocket API - it's a DeFi protocol
-- **Verdict:** ❌ **NOT SUITABLE** for traditional WebSocket streaming. Requires smart contract interaction.
-
----
-
 ### 4. NovaEx (novaex.com)
 - **Status:** Redirects to / is white-label of **WOO X Pro** (wooxpro.com)
 - **Markets:** Spot ✅ | Futures ✅ (up to 100x leverage, 500+ pairs)
 - **API:** If using WOO X Pro's infrastructure, would use WOO X API
 - **Verdict:** ❓ Appears to be a WOO X Pro white-label. Use WOO X API instead if applicable.
-
----
-
-### 5. VOOX Exchange (voox.com)
-- **Markets:** Spot ✅ | Futures ✅
-- **Products:** Spot Trading, Futures Trading, Strategy Bot (Copy Trading)
-- **Spot URL:** `voox.com/en_US/trade`
-- **Futures URL:** `futures.voox.com/en_US/trade`
-- **API:** No public API documentation found anywhere on site
-- **Registration:** US-based (Denver, CO), MSB licensed
-- **Verdict:** ❌ **No public API** available for programmatic access.
-
----
-
-### 6. CoinUp.io (coinup.io)
-- **Markets:** Spot ✅ | Futures ✅
-- **Products:** Spot, Futures, Earn, Buy Crypto
-- **Tech Stack:** React-based SPA
-- **API:** No public API documentation found
-- **Verdict:** ❌ **No public API** documentation. Cannot confirm streaming capabilities.
-
----
-
-### 7. Batonex (batonex.com)
-- **Status:** ⛔ **SHUT DOWN**
-- **Message:** "We are sorry that Batonex no longer provides crypto trading in your country/region due to local requirements"
-- **Verdict:** ❌ **DEAD EXCHANGE** - No longer operational.
 
 ---
 
@@ -404,24 +321,6 @@
 - **API:** Has REST API at `api.bullish.com` but documentation was inaccessible
 - **WebSocket:** Unknown - documentation not publicly accessible
 - **Verdict:** ❓ Institutional exchange with API but docs not publicly accessible. Spot only.
-
----
-
-### 9. Hibt.com (hibt.com)
-- **Markets:** Spot ✅ | Futures ✅ (up to 125x leverage)
-- **Products:** Buy Crypto, Spot, Futures, Copy Trading, Financial/Earn, Events
-- **API Documentation:** `apidoc.hibt.co`
-- **REST API Base:** `https://api.hibt0.com/user-open-api`
-- **Spot REST Endpoints:**
-  - GET `/v1/common/systemTime` - Server time
-  - GET `/v1/common/symbols` - All trading pairs
-  - GET `/v1/market/ticker/price?symbol=BTC/USDT` - Latest price
-  - POST `/v1/market/kline` - K-line/OHLCV data
-  - GET `/v1/market/depth?symbol=BTC/USDT` - Order book depth
-- **WebSocket:** Not explicitly documented in spot docs; has "Perpetual Contract Trading" section with likely WS
-- **Futures:** Separate perpetual contract API documentation available
-- **Licenses:** Canadian MSB, US MSB
-- **Verdict:** ✅ **REST API confirmed** for spot (orderbook, trades, ticker, kline). Futures API also available.
 
 ---
 
@@ -444,20 +343,6 @@
 
 ---
 
-### 11. Biking (biking.com)
-- **Markets:** Spot ✅ | Futures ✅ (based on site navigation)
-- **API:** Website loaded but no content was extractable; API docs not found
-- **Verdict:** ❌ **No accessible API documentation.**
-
----
-
-### 12. GroveX (grovex.io)
-- **Markets:** Spot ✅ (likely)
-- **API:** Site returned no meaningful content
-- **Verdict:** ❌ **Site issues** - Cannot confirm any capabilities.
-
----
-
 ### 13. UZX.com (uzx.com)
 - **Markets:** Spot ✅ | USDT-M Futures ✅ | Coin-M Futures ✅
 - **Products:** Spot, USDT-M Futures, Coin-M Futures, Earn, Credit Card
@@ -465,71 +350,6 @@
 - **API:** "APIs" listed under Services section in footer
 - **Features:** Proof of Reserves, Global Partner Program
 - **Verdict:** ✅ **Has API** (referenced in site). Spot + both futures types available. Needs further API doc investigation.
-
----
-
-### 14. KCEX (kcex.com)
-- **Markets:** Spot ✅ | Futures ✅
-- **Products:** Spot, Futures, Flexible Savings
-- **Fees:** 0% Spot, 0% Futures Maker, 0.01% Futures Taker, 0 Withdrawal Fees
-- **API:** No public API documentation page found
-- **Verdict:** ❌ **No public API docs** found. Exchange operational but no developer resources.
-
----
-
-### 15. ASTX.io (astx.io)
-- **Markets:** Spot ✅ (`/spot/trade/btc_usdt`) | Futures ✅ (`/futures/contract/u_based/btc_usdt`)
-- **Language:** Primarily Chinese interface
-- **Leverage:** Up to 50x on futures
-- **Products:** Spot, Futures (U-based), Copy Trading, Unified Margin
-- **API:** No public API documentation found
-- **Verdict:** ❌ **No public API docs.** Chinese-focused exchange.
-
----
-
-### 16. Tebbit.io (tebbit.io)
-- **Markets:** Spot ✅ | Futures ✅
-- **Trading:** BTC, ETH, XRP, SOL, TRX, DOGE, LTC visible
-- **API:** No public API documentation found
-- **Verdict:** ❌ **No public API.** Small exchange with limited info.
-
----
-
-### 17. XXKK.COM (xxkk.com)
-- **Markets:** Spot ✅ | USDT-M Futures ✅ | TradFi ✅
-- **Products:** Spot (200+ pairs), USDT-M (150+ contracts, up to 200x leverage), TradFi, Buy Crypto, Copy Trading
-- **Licenses:** US MSB, Canada MSB, SVG FSA
-- **API:** No public API documentation found
-- **Verdict:** ❌ **No public API docs** despite being a sizable exchange.
-
----
-
-### 18. BitxEX (bitxex.com)
-- **Status:** Website returned no meaningful content
-- **Verdict:** ❌ **Site inaccessible or down.**
-
----
-
-### 19. DigiFinex (digifinex.com)
-- **Markets:** Spot ✅ | Futures/Swap ✅
-- **API Documentation:** `docs.digifinex.com` (attempted, needs direct access)
-- **Known API Features:**
-  - ✅ REST API for Spot and Swap
-  - ✅ WebSocket API for real-time data
-  - ✅ Orderbook, Trades, Ticker, Kline all available
-- **Note:** Established exchange listed on CMC/CoinGecko with comprehensive API
-- **Verdict:** ✅ **FULLY USABLE** - Well-known exchange with full REST + WebSocket API support.
-
----
-
-### 20. WEEX (weex.com)
-- **Markets:** Spot ✅ | Futures ✅
-- **API:** Has documented API (Bybit-like structure based on previous research)
-- **Known Features:**
-  - ✅ REST + WebSocket for spot & futures
-  - ✅ Orderbook, Trades, Ticker, Kline streams
-- **Note:** Site blocks some regions but API is functional
-- **Verdict:** ✅ **FULLY USABLE** - Full API with WebSocket support (Bybit-compatible structure).
 
 ---
 
@@ -583,16 +403,6 @@
 
 ---
 
-### 25. CrypFine (crypfine.com)
-- **Markets:** Spot ✅ | Futures ✅
-- **Products:** Spot Exchange, Futures, Deposit Crypto
-- **Spot URL:** `/spot/exchange`
-- **Futures URL:** `/contract/futures`
-- **API:** No public API documentation found
-- **Verdict:** ❌ **No public API docs.** Small exchange.
-
----
-
 ### 26. Darkex.com (darkex.com)
 - **Markets:** Spot (ProTrade) ✅ | Futures ✅
 - **Products:** Buy Crypto (OTC), Spot Trading, Futures Trading
@@ -612,59 +422,6 @@
 
 ---
 
-### 27. SunX.vip (sunx.vip)
-- **Status:** Site loaded minimal content (popup-heavy, CMS-driven)
-- **Verdict:** ❌ **Cannot assess** - Site provides no useful exchange information.
-
----
-
-### 28. Yubit (yubit.io)
-- **Status:** Website returned **404 error**
-- **Verdict:** ❌ **OFFLINE** or relocated. Not operational at this URL.
-
----
-
-### 29. Ju.com (ju.com)
-- **Markets:** Spot ✅ | Futures ✅ | Equity (stocks) ✅
-- **Products:** Spot (200+ crypto), Futures (200+ pairs, 150x leverage), Equity trading, Web3 Wallet
-- **Previously:** JuCoin exchange
-- **Users:** 50+ million users since 2013
-- **Stats:** $101.38B 24h trading volume, 35+ countries
-- **Reserves:** Over $100M in reserves
-- **API:** Likely has full API (established exchange with high volume)
-- **Spot URL:** `/en/trade/btc_usdt`
-- **Futures URL:** `/en/futures/trade/btc_usdt`
-- **Streams (expected):**
-  - ✅ Orderbook
-  - ✅ Trades
-  - ✅ Ticker
-  - ✅ OHLCV/Kline
-- **Verdict:** ✅ **LIKELY FULLY USABLE** - Large established exchange. API docs need direct investigation.
-
----
-
-### 30. TruBitPro (trubitpro.com)
-- **Status:** Website returned no meaningful content
-- **Verdict:** ❌ **Site inaccessible.** Cannot confirm any capabilities.
-
----
-
-### 31. Top.one (top.one)
-- **Markets:** Spot ✅ | Futures ✅ | Super Leverage (up to 1000x) ✅
-- **Products:** Spot, Futures, Super Leverage, Affiliate Program, VIP, Rewards
-- **Licenses:** US MSB, Australian AUSTRAC, Lithuanian VASP
-- **API:** No public API documentation link found
-- **Verdict:** ❌ **No public API docs** found despite being licensed.
-
----
-
-### 32. Echobit (echobit.com)
-- **Status:** ⛔ **GEO-RESTRICTED**
-- **Message:** "According to your IP address, your current area is not covered by our service"
-- **Verdict:** ❌ **INACCESSIBLE** from current region. Cannot assess API capabilities.
-
----
-
 ### 33. Bitrue.com (bitrue.com)
 - **Markets:** Spot ✅ | Futures ✅
 - **API:** Well-established exchange with comprehensive REST + WebSocket API
@@ -674,14 +431,6 @@
   - ✅ Orderbook, Trades, Ticker, Kline all available
 - **Listed on:** CoinMarketCap, CoinGecko (top-ranked)
 - **Verdict:** ✅ **FULLY USABLE** - Well-known exchange with complete API support.
-
----
-
-### 34. Cofinex (cofinex.com)
-- **Status:** ⛔ **NOT AN EXCHANGE**
-- **Current:** Domain is parked at Hostalia (Spanish hosting provider)
-- **Content:** Generic domain parking page in Spanish
-- **Verdict:** ❌ **DEAD/PARKED DOMAIN** - Not a crypto exchange anymore.
 
 ---
 
@@ -705,15 +454,11 @@
 |----------|------|---------|-----------|------|-----------|--------|--------|-------|
 | **Biconomy.com** | ✅ | ✅ | ✅ `wss://bei.biconomy.com/ws` | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **XT.com** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **DigiFinex** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **WEEX** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **FameEX** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Hotcoin** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Darkex** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Bitrue** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Zoomex** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Hibt.com** | ✅ | ✅ | ❓ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Ju.com** | ✅ | ✅ | ✅ (likely) | ✅ (likely) | ✅ | ✅ | ✅ | ✅ |
 | **Bullish** | ✅ | ❌ | ❓ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ### ❓ Exchanges with API but Limited/Broken Documentation (3)
@@ -728,41 +473,22 @@
 
 | Exchange | Spot | Futures | Reason |
 |----------|------|---------|--------|
-| **BTDUex** | ✅ | ✅ | No developer docs |
-| **VOOX** | ✅ | ✅ | No API documentation |
-| **CoinUp.io** | ✅ | ✅ | No API documentation |
-| **Biking** | ✅ | ✅ | Site content inaccessible |
-| **GroveX** | ✅ | ❓ | Site issues |
-| **KCEX** | ✅ | ✅ | No developer docs |
-| **ASTX.io** | ✅ | ✅ | Chinese-focused, no docs |
-| **Tebbit.io** | ✅ | ✅ | No API docs |
-| **XXKK.COM** | ✅ | ✅ | No API docs |
 | **OrangeX** | ✅ | ✅ | No API docs |
-| **CrypFine** | ✅ | ✅ | No API docs |
-| **Top.one** | ✅ | ✅ | No API docs |
 
 ### ⛔ Dead/Inaccessible Exchanges (5)
 
 | Exchange | Status |
 |----------|--------|
-| **Batonex** | Shut down - no longer provides trading |
-| **BitxEX** | Site inaccessible |
-| **Yubit** | 404 error - offline |
-| **Cofinex** | Domain parked (not an exchange) |
-| **Echobit** | Geo-restricted |
 
 ### 🔗 DeFi Protocol (Not CEX) (1)
 
 | Exchange | Type |
 |----------|------|
-| **KTX Finance** | DeFi perpetual DEX on BNB/Mantle/Arbitrum |
 
 ### 🚫 Unverifiable (1)
 
 | Exchange | Status |
 |----------|--------|
-| **TruBitPro** | Site inaccessible - cannot verify |
-| **SunX.vip** | Minimal site content - cannot verify |
 
 ---
 
@@ -773,15 +499,11 @@
 2. **Biconomy.com** - Full WS streams documented with examples
 3. **Bitrue.com** - Well-established, full API
 4. **Zoomex** - Bybit V5 API fork (familiar structure)
-5. **DigiFinex** - Established with full API
 6. **Darkex.com** - Well-documented REST API
-7. **WEEX** - Bybit-compatible API structure
 8. **FameEX** - GitHub-hosted API docs
 9. **Hotcoin** - API docs available
 
 ### Tier 2 - Worth Investigating Further
-10. **Ju.com** - Large exchange, likely has full API
-11. **Hibt.com** - REST confirmed, WS needs verification
 12. **UZX.com** - API mentioned but needs doc verification
 13. **SuperEx** - API exists but docs link broken
 

@@ -153,12 +153,6 @@ async function run() {
     m => m.type === 'orderbook' ? { orderbook: m.orderbook_units?.length } : null,
     (ws) => ws.send(JSON.stringify([{ ticket: 'test' }, { type: 'orderbook', codes: ['KRW-BTC'] }])));
 
-  // 9. WEEX
-  console.log('\n━━━ WEEX ━━━');
-  await quickTest('weex_futures', 'wss://ws.weex.com/v2/ws/public',
-    { op: 'subscribe', args: [{ instType: 'USDT-FUTURES', channel: 'ticker', instId: 'BTCUSDT' }] },
-    m => m.data ? { ticker: m.data } : null);
-
   console.log('\n✅ Quick tests completed!');
 }
 

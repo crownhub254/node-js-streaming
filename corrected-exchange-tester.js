@@ -175,20 +175,6 @@ const EXCHANGES = {
     }
   },
 
-  batonex: {
-    name: 'Batonex',
-    docs: 'N/A - Binance-clone attempt',
-    spot: false,
-    futures: true,
-    // Try Binance-compatible endpoint
-    futuresUrl: 'wss://ws-fapi.batonex.com/ws-fapi/v1',
-    streams: {
-      futures_orderbook: { sub: JSON.stringify({ method: 'SUBSCRIBE', params: ['btcusdt@depth5'], id: 1 }) },
-      futures_trades: { sub: JSON.stringify({ method: 'SUBSCRIBE', params: ['btcusdt@trade'], id: 2 }) },
-      futures_ticker: { sub: JSON.stringify({ method: 'SUBSCRIBE', params: ['btcusdt@ticker'], id: 3 }) }
-    }
-  },
-
   pionex: {
     name: 'Pionex',
     docs: 'https://docs.pionex.com/',

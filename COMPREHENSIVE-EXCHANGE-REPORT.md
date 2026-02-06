@@ -254,7 +254,6 @@
 | Exchange | Error | Notes |
 |----------|-------|-------|
 | **Websea** | 404 Not Found | Endpoint may have changed |
-| **Batonex** | 404 Not Found | No public WS API found |
 | **Deepcoin** | HTTP 200 | Not upgrading to WebSocket |
 
 ### Access Denied
@@ -275,7 +274,6 @@
 
 | Exchange | Reason |
 |----------|--------|
-| **Coinup.io** | No public API documentation found |
 | **Picol** | No public API available |
 
 ---

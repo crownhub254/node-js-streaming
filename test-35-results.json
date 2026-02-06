@@ -1,10 +1,4 @@
 {
-  "btduex": {
-    "name": "BTDUex",
-    "skipped": true,
-    "reason": "No public API - new exchange (Oct 2025), API undocumented",
-    "tests": {}
-  },
   "biconomy": {
     "name": "Biconomy.com",
     "type": "ws",
@@ -33,12 +27,6 @@
       }
     }
   },
-  "ktx": {
-    "name": "KTX Finance",
-    "skipped": true,
-    "reason": "DeFi DEX - no traditional CEX API",
-    "tests": {}
-  },
   "novaex": {
     "name": "NovaEx",
     "type": "ws",
@@ -56,24 +44,6 @@
         "messages": 2
       }
     }
-  },
-  "voox": {
-    "name": "VOOX Exchange",
-    "skipped": true,
-    "reason": "No public API documentation",
-    "tests": {}
-  },
-  "coinup": {
-    "name": "CoinUp.io",
-    "skipped": true,
-    "reason": "No public API documentation",
-    "tests": {}
-  },
-  "batonex": {
-    "name": "Batonex",
-    "skipped": true,
-    "reason": "SHUT DOWN - No longer provides crypto trading",
-    "tests": {}
   },
   "bullish": {
     "name": "Bullish.com",
@@ -95,29 +65,6 @@
         "success": true,
         "data": "[{\"symbol\":\"BTCUSDT\",\"tradeId\":\"100111000019633353\",\"price\":\"66661.7876010\",\"quantity\":\"0.02292700\",\"side\":\"SELL\",\"isTaker\":true,\"createdAtTimestamp\":\"1770379041303\",\"publishedAtTimestamp\":\"1770379041304\",\"lastUpdatedTimestamp\":\"1770379041304\",\"createdAtDatetime\":\"2026-02-06T11:57:21.303Z\"},{\"symbol\":\"BTCUSDT\",\"tradeId\":\"100111000019633339\",\"price\":\"66664.8275211\",\"quantity\":\"0.00327500\",\"side\":\"SELL\",\"isTaker\":true,\"createdAtTimestamp\":\"1770379041302\",\"publishedAtTimestamp\":\"1770379041304\",\"las",
         "status": 200
-      }
-    }
-  },
-  "hibt": {
-    "name": "Hibt.com",
-    "type": "rest",
-    "spot": true,
-    "futures": true,
-    "tests": {
-      "spot_ticker": {
-        "success": false,
-        "error": "HTTP 404",
-        "data": "{\"timestamp\":\"2026-02-06T11:57:22.604+00:00\",\"path\":\"/exchange-open-api/open/api/get_ticker\",\"status\":404,\"error\":\"Not Found\",\"message\":null,\"requestId\":\"0f037ad8-157214873\"}"
-      },
-      "spot_orderbook": {
-        "success": false,
-        "error": "HTTP 404",
-        "data": "{\"timestamp\":\"2026-02-06T11:57:23.000+00:00\",\"path\":\"/exchange-open-api/open/api/market_dept\",\"status\":404,\"error\":\"Not Found\",\"message\":null,\"requestId\":\"f823fd4d-159778598\"}"
-      },
-      "spot_kline": {
-        "success": false,
-        "error": "HTTP 404",
-        "data": "{\"timestamp\":\"2026-02-06T11:57:23.424+00:00\",\"path\":\"/exchange-open-api/open/api/get_records\",\"status\":404,\"error\":\"Not Found\",\"message\":null,\"requestId\":\"574027ea-159778643\"}"
       }
     }
   },
@@ -159,18 +106,6 @@
       }
     }
   },
-  "biking": {
-    "name": "Biking",
-    "skipped": true,
-    "reason": "Claims API support but no public docs found",
-    "tests": {}
-  },
-  "grovex": {
-    "name": "GroveX",
-    "skipped": true,
-    "reason": "Site did not return meaningful content",
-    "tests": {}
-  },
   "uzx": {
     "name": "UZX.com",
     "type": "rest",
@@ -186,100 +121,6 @@
         "success": true,
         "data": "<!doctype html><html lang=\"en\" theme=\"dark\"><head><meta charset=\"UTF-8\"/><link rel=\"icon\" type=\"image/svg+xml\" href=\"/newUzx.svg\"/><meta name=\"viewport\" content=\"width=device-width,initial-scale=1,maximum-scale=1,minimum-scale=1,user-scalable=no\"/><title>UZX™ | Buy Bitcoin (BTC) & Crypto — Global Leading Cryptocurrency Exchange</title><meta name=\"description\" content=\"UZX.com,The Cryptocurrency Exchange with Deeper Derivatives Liquidity.The platform is governed by UZX DAO through a Cayman Founda",
         "status": 200
-      }
-    }
-  },
-  "kcex": {
-    "name": "KCEX",
-    "type": "rest",
-    "spot": true,
-    "futures": true,
-    "tests": {
-      "spot_ticker": {
-        "success": false,
-        "error": "HTTP 403",
-        "data": "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\" \"http://www.w3.org/TR/html4/loose.dtd\">\n<HTML><HEAD><META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=iso-8859-1\">\n<TITLE>ERROR"
-      },
-      "spot_orderbook": {
-        "success": false,
-        "error": "HTTP 403",
-        "data": "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\" \"http://www.w3.org/TR/html4/loose.dtd\">\n<HTML><HEAD><META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=iso-8859-1\">\n<TITLE>ERROR"
-      }
-    }
-  },
-  "astx": {
-    "name": "ASTX.io",
-    "skipped": true,
-    "reason": "Chinese-focused, no public API docs",
-    "tests": {}
-  },
-  "tebbit": {
-    "name": "Tebbit.io",
-    "skipped": true,
-    "reason": "No API documentation found",
-    "tests": {}
-  },
-  "xxkk": {
-    "name": "XXKK.COM",
-    "skipped": true,
-    "reason": "No public API documentation",
-    "tests": {}
-  },
-  "bitxex": {
-    "name": "BitxEX",
-    "skipped": true,
-    "reason": "Site inaccessible/offline",
-    "tests": {}
-  },
-  "digifinex": {
-    "name": "DigiFinex",
-    "type": "rest",
-    "spot": true,
-    "futures": true,
-    "tests": {
-      "spot_ticker": {
-        "success": false,
-        "error": "HTTP 403",
-        "data": "<!DOCTYPE html><html lang=\"en-US\"><head><title>Just a moment...</title><meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"><meta http-equiv=\"X-UA-Compatible\" content=\"IE=Edge\"><meta nam"
-      },
-      "spot_orderbook": {
-        "success": false,
-        "error": "HTTP 403",
-        "data": "<!DOCTYPE html><html lang=\"en-US\"><head><title>Just a moment...</title><meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"><meta http-equiv=\"X-UA-Compatible\" content=\"IE=Edge\"><meta nam"
-      },
-      "spot_trades": {
-        "success": false,
-        "error": "HTTP 403",
-        "data": "<!DOCTYPE html><html lang=\"en-US\"><head><title>Just a moment...</title><meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"><meta http-equiv=\"X-UA-Compatible\" content=\"IE=Edge\"><meta nam"
-      },
-      "spot_kline": {
-        "success": false,
-        "error": "HTTP 403",
-        "data": "<!DOCTYPE html><html lang=\"en-US\"><head><title>Just a moment...</title><meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"><meta http-equiv=\"X-UA-Compatible\" content=\"IE=Edge\"><meta nam"
-      }
-    }
-  },
-  "weex": {
-    "name": "WEEX",
-    "type": "ws",
-    "spot": true,
-    "futures": true,
-    "tests": {
-      "futures_orderbook": {
-        "success": false,
-        "error": "getaddrinfo ENOTFOUND ws.weex.com"
-      },
-      "futures_trades": {
-        "success": false,
-        "error": "getaddrinfo ENOTFOUND ws.weex.com"
-      },
-      "futures_ticker": {
-        "success": false,
-        "error": "getaddrinfo ENOTFOUND ws.weex.com"
-      },
-      "futures_kline": {
-        "success": false,
-        "error": "getaddrinfo ENOTFOUND ws.weex.com"
       }
     }
   },
@@ -385,12 +226,6 @@
       }
     }
   },
-  "crypfine": {
-    "name": "CrypFine",
-    "skipped": true,
-    "reason": "No public API documentation",
-    "tests": {}
-  },
   "darkex": {
     "name": "Darkex.com",
     "type": "rest",
@@ -419,76 +254,6 @@
       }
     }
   },
-  "sunx": {
-    "name": "SunX.vip",
-    "skipped": true,
-    "reason": "Minimal site, no exchange content",
-    "tests": {}
-  },
-  "yubit": {
-    "name": "Yubit",
-    "skipped": true,
-    "reason": "Domain parked/defunct - no longer operational",
-    "tests": {}
-  },
-  "ju": {
-    "name": "Ju.com",
-    "type": "rest",
-    "spot": true,
-    "futures": true,
-    "tests": {
-      "spot_ticker": {
-        "success": false,
-        "error": "HTTP 404",
-        "data": "<html>\r\n<head><title>404 Not Found</title></head>\r\n<body>\r\n<center><h1>404 Not Found</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
-      },
-      "spot_orderbook": {
-        "success": false,
-        "error": "HTTP 404",
-        "data": "<html>\r\n<head><title>404 Not Found</title></head>\r\n<body>\r\n<center><h1>404 Not Found</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
-      },
-      "spot_trades": {
-        "success": false,
-        "error": "HTTP 404",
-        "data": "<html>\r\n<head><title>404 Not Found</title></head>\r\n<body>\r\n<center><h1>404 Not Found</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
-      }
-    }
-  },
-  "trubitpro": {
-    "name": "TruBitPro",
-    "type": "rest",
-    "spot": true,
-    "futures": true,
-    "tests": {
-      "spot_ticker": {
-        "success": false,
-        "error": "HTTP 500",
-        "data": "{\"msg\":\"Internal Server Error\",\"code\":500,\"data\":null}"
-      },
-      "spot_orderbook": {
-        "success": false,
-        "error": "HTTP 500",
-        "data": "{\"msg\":\"Internal Server Error\",\"code\":500,\"data\":null}"
-      },
-      "spot_trades": {
-        "success": false,
-        "error": "HTTP 500",
-        "data": "{\"msg\":\"Internal Server Error\",\"code\":500,\"data\":null}"
-      }
-    }
-  },
-  "topone": {
-    "name": "Top.one",
-    "skipped": true,
-    "reason": "No public API documentation",
-    "tests": {}
-  },
-  "echobit": {
-    "name": "Echobit",
-    "skipped": true,
-    "reason": "GEO-RESTRICTED - inaccessible",
-    "tests": {}
-  },
   "bitrue": {
     "name": "Bitrue.com",
     "type": "rest",
@@ -516,12 +281,6 @@
         "data": "<html>\r\n<head><title>302 Found</title></head>\r\n<body>\r\n<center><h1>302 Found</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
       }
     }
-  },
-  "cofinex": {
-    "name": "Cofinex",
-    "skipped": true,
-    "reason": "Domain parked - not an exchange",
-    "tests": {}
   },
   "zoomex": {
     "name": "Zoomex",

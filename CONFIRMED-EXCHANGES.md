@@ -189,16 +189,16 @@
 ### 11. FameEX.com
 - **Type:** REST API  
 - **Spot:** ✅ | **Futures:** ✅ (USDT Perpetual)  
-- **Base URL:** `https://api.fameex.com/v2/public`  
-- **Confirmed Endpoints (2/3):**
+- **Base URLs:** `https://api.fameex.com/v2/public` (ticker/orderbook), `https://api.fameex.com/sapi/v1` (trades)  
+- **Confirmed Endpoints (3/3):**
 
 | Endpoint | URL | Status |
 |----------|-----|--------|
-| Ticker | `/ticker` | ✅ 200 OK |
-| Orderbook | `/orderbook?symbol=BTC-USDT&limit=5` | ✅ 200 OK |
-| Trades | `/trades?symbol=BTC-USDT&limit=5` | ❌ 404 |
+| Ticker | `/v2/public/ticker` | ✅ 200 OK |
+| Orderbook | `/v2/public/orderbook?symbol=BTCUSDT&limit=5` | ✅ 200 OK |
+| Trades | `/sapi/v1/trades?symbol=BTCUSDT&limit=5` | ✅ 200 OK |
 
-- **Note:** Partially working — ticker and orderbook confirmed, trades endpoint returns 404.
+- **Note:** Fully working — ticker, orderbook, and trades all confirmed. Trades endpoint uses `/sapi/v1/` path instead of `/v2/public/`.
 
 ---
 
@@ -220,43 +220,6 @@
 
 - **Sample Data:** `{"jsonrpc":"2.0","result":{"asks":[["66312.991","2.68865"]],"bids":[["66312.964","0.2338"]],"timestamp":"1770378618693","instrument_name":"BTC-USDT-SPOT"}}`
 - **Note:** Uses Deribit-compatible JSON-RPC 2.0 format. Spot ticker returns "Instrument does not exist" but orderbook and trades work perfectly. 358 coins, 368 trading pairs.
-
----
-
-## ❌ Failed Exchanges (6)
-
-| # | Exchange | Type | Error | Notes |
-|---|----------|------|-------|-------|
-| 1 | Hibt.com | REST | HTTP 404 on all endpoints | API may have changed from `api.hibt0.com` |
-| 2 | DigiFinex | REST | HTTP 403 (Cloudflare) | Geo-restricted / Cloudflare protected |
-| 3 | WEEX | WS | DNS ENOTFOUND | `ws.weex.com` domain not resolving, alt returns 521 |
-| 4 | Ju.com | REST | HTTP 404 | API endpoint not found at `api.ju.com` |
-| 5 | KCEX | REST | HTTP 403 | `api.kcex.com` Cloudflare/WAF protected |
-| 6 | TruBitPro | REST | HTTP 500 | `api.trubit.com` returns Internal Server Error, WS returns 403 |
-
----
-
-## ⏭️ Skipped Exchanges - No Public API (17)
-
-| # | Exchange | Reason |
-|---|----------|--------|
-| 1 | BTDUex | No public API - new exchange (Oct 2025), API undocumented |
-| 2 | KTX Finance | DeFi DEX - no traditional CEX API |
-| 3 | VOOX Exchange | No public API documentation |
-| 4 | CoinUp.io | No public API documentation |
-| 5 | Batonex | SHUT DOWN - No longer provides crypto trading |
-| 6 | Biking | Claims API support but no public docs found |
-| 7 | GroveX | Site did not return meaningful content |
-| 8 | ASTX.io | Chinese-focused, no public API docs |
-| 9 | Tebbit.io | No API documentation found |
-| 10 | XXKK.COM | No public API documentation |
-| 11 | BitxEX | Site inaccessible/offline |
-| 12 | CrypFine | No public API documentation |
-| 13 | SunX.vip | Minimal site, no exchange content |
-| 14 | Yubit | Domain parked/defunct - no longer operational |
-| 15 | Top.one | No public API documentation |
-| 16 | Echobit | GEO-RESTRICTED - inaccessible |
-| 17 | Cofinex | Domain parked - not an exchange |
 
 ---
 
@@ -349,9 +312,10 @@ zoomexFuturesWS.on('open', () => {
 // 9. REMOVED: SuperEx (requires auth tokens since Feb 2026)
 // 10. REMOVED: UZX (returns HTML, API no longer available)
 
-// 11. FameEX (symbol fixed: BTCUSDT not BTC-USDT)
+// 11. FameEX (trades uses sapi/v1 path, ticker/orderbook use v2/public)
 // GET https://api.fameex.com/v2/public/ticker
 // GET https://api.fameex.com/v2/public/orderbook?symbol=BTCUSDT&limit=5
+// GET https://api.fameex.com/sapi/v1/trades?symbol=BTCUSDT&limit=5
 
 // 12. OrangeX (Deribit-style JSON-RPC 2.0)
 // Spot:
@@ -371,9 +335,7 @@ zoomexFuturesWS.on('open', () => {
 |----------|-------|-----------|
 | ✅ WS Fully Working | 5 | Biconomy, NovaEx, XT.com, Hotcoin (trades+REST ticker), Zoomex |
 | ✅ REST Working | 5 | Bullish, Darkex, Bitrue, FameEX, OrangeX |
-| ❌ Removed (API Changed) | 2 | SuperEx (requires auth tokens), UZX (returns HTML) |
-| ❌ Failed | 6 | Hibt, DigiFinex, WEEX, Ju.com, KCEX, TruBitPro |
-| ⏭️ Skipped (No API) | 17 | Various - see list above |
+
 | **Total Confirmed** | **10** | **31 streams across 10 exchanges** |
 
 ### Stream Coverage on Working Exchanges
@@ -381,7 +343,7 @@ zoomexFuturesWS.on('open', () => {
 | Stream Type | Available On |
 |-------------|-------------|
 | **Orderbook** | Biconomy, NovaEx, XT.com (Spot+Futures), Zoomex (Spot+Futures), Bullish, Darkex, Bitrue, FameEX, OrangeX (Futures) |
-| **Trades** | Biconomy, NovaEx, XT.com, Hotcoin, Zoomex (Spot+Futures), Bullish, Darkex, Bitrue, OrangeX (Spot+Futures) |
+| **Trades** | Biconomy, NovaEx, XT.com, Hotcoin, Zoomex (Spot+Futures), Bullish, Darkex, Bitrue, FameEX, OrangeX (Spot+Futures) |
 | **Ticker** | Biconomy, XT.com (Spot+Futures), Hotcoin (REST), Zoomex (Spot+Futures), Bitrue, FameEX, OrangeX (Futures) |
 
 ### Exchanges Removed After Deep Testing
@@ -392,7 +354,7 @@ zoomexFuturesWS.on('open', () => {
 | UZX | Website restructured - all API URLs return HTML instead of JSON |
 | Darkex ticker | Ticker endpoint requires API key (`code:-1002`), orderbook+trades still public |
 | Bullish ticker | `/v1/markets` returns all markets (too large, timeouts) |
-| FameEX symbol | Fixed: `BTC-USDT` → `BTCUSDT` |
+| FameEX trades | Fixed: trades uses `/sapi/v1/trades` path (not `/v2/public/trades`) |
 | Hotcoin depth | Server accepts subscription but never sends depth/detail data; only trades work via WS |
 
 ---

@@ -115,13 +115,6 @@
       }
     }
   },
-  "coinupio": {
-    "name": "Coinup.io",
-    "docs": "N/A - No public API docs",
-    "spot": false,
-    "futures": false,
-    "tests": {}
-  },
   "websea": {
     "name": "Websea",
     "docs": "https://www.websea.com/en/api",
@@ -384,26 +377,6 @@
         "success": true,
         "sample": "{\"id\":\"4\",\"code\":0,\"msg\":\"\",\"dataType\":\"\",\"data\":null}",
         "time": 732
-      }
-    }
-  },
-  "batonex": {
-    "name": "Batonex",
-    "docs": "https://github.com/batonex",
-    "spot": false,
-    "futures": true,
-    "tests": {
-      "futures_orderbook": {
-        "key": "batonex_futures_orderbook",
-        "success": false,
-        "error": "Unexpected server response: 404",
-        "time": 1605
-      },
-      "futures_ticker": {
-        "key": "batonex_futures_ticker",
-        "success": false,
-        "error": "Unexpected server response: 404",
-        "time": 1465
       }
     }
   },

@@ -436,44 +436,6 @@ const exchanges = {
         parseMessage: (m) => m.type === 'trade' ? { type: 'trade', code: m.code, price: m.trade_price, volume: m.trade_volume } : null
       }
     }
-  },
-
-  // 9. WEEX - Try alternative endpoints (similar to Bitget)
-  weex: {
-    name: 'WEEX',
-    tests: {
-      futures_orderbook: {
-        url: 'wss://ws.weex.com/v2/ws/public',
-        subscribeMsg: { op: 'subscribe', args: [{ instType: 'USDT-FUTURES', channel: 'books15', instId: 'BTCUSDT' }] },
-        parseMessage: (m) => m.data ? { type: 'orderbook', data: m.data } : null
-      },
-      futures_ticker: {
-        url: 'wss://ws.weex.com/v2/ws/public',
-        subscribeMsg: { op: 'subscribe', args: [{ instType: 'USDT-FUTURES', channel: 'ticker', instId: 'BTCUSDT' }] },
-        parseMessage: (m) => m.data && m.arg?.channel === 'ticker' ? { type: 'ticker', data: m.data } : null
-      },
-      futures_trades: {
-        url: 'wss://ws.weex.com/v2/ws/public',
-        subscribeMsg: { op: 'subscribe', args: [{ instType: 'USDT-FUTURES', channel: 'trade', instId: 'BTCUSDT' }] },
-        parseMessage: (m) => m.data && m.arg?.channel === 'trade' ? { type: 'trade', data: m.data } : null
-      },
-      futures_kline: {
-        url: 'wss://ws.weex.com/v2/ws/public',
-        subscribeMsg: { op: 'subscribe', args: [{ instType: 'USDT-FUTURES', channel: 'candle1m', instId: 'BTCUSDT' }] },
-        parseMessage: (m) => m.data && m.arg?.channel?.includes('candle') ? { type: 'kline', data: m.data } : null
-      },
-      // Try spot
-      spot_orderbook: {
-        url: 'wss://ws.weex.com/v2/ws/public',
-        subscribeMsg: { op: 'subscribe', args: [{ instType: 'SPOT', channel: 'books15', instId: 'BTCUSDT' }] },
-        parseMessage: (m) => m.data ? { type: 'orderbook', data: m.data } : null
-      },
-      spot_ticker: {
-        url: 'wss://ws.weex.com/v2/ws/public',
-        subscribeMsg: { op: 'subscribe', args: [{ instType: 'SPOT', channel: 'ticker', instId: 'BTCUSDT' }] },
-        parseMessage: (m) => m.data ? { type: 'ticker', data: m.data } : null
-      }
-    }
   }
 };
 

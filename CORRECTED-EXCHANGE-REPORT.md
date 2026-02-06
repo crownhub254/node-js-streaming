@@ -248,13 +248,7 @@
 - **Analysis:** Endpoint may require different protocol or headers
 - **Recommendation:** Review documentation for correct WS framing
 
-### 3. Batonex
-- **Attempted:** `wss://ws-fapi.batonex.com/ws-fapi/v1`
-- **Error:** HTTP 404
-- **Analysis:** No confirmed public WebSocket API
-- **Recommendation:** May not have public API access
-
-### 4. Phemex
+### 3. Phemex
 - **Attempted:** `wss://vapi.phemex.com/ws`
 - **Error:** HTTP 403 Forbidden
 - **Analysis:** Requires authentication or geo-restricted

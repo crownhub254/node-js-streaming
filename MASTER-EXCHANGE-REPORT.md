@@ -12,7 +12,7 @@
 |--------|-------|-----------|
 | ✅ **Fully Working** | 16 | Binance, Bybit, OKX, Kraken, Gate.io, HTX, Bitfinex, Bitget, HitBTC, Pionex, BTSE, Crypto.com, Toobit, AscendEX, Bitunix, BloFin |
 | 🟡 **Partially Working** | 10 | BingX, BitMEX, MEXC, Coinbase, Bitstamp, BitMart, KuCoin, Upbit, AsterDEX, WhiteBIT |
-| ❌ **Failed/Unreachable** | 9 | WEEX, Azbit, BTCC, Tapbit, Websea, Deepcoin, CoinW, Ourbit, Phemex |
+| ❌ **Failed/Unreachable** | 8 | Azbit, BTCC, Tapbit, Websea, Deepcoin, CoinW, Ourbit, Phemex |
 
 ---
 
@@ -67,7 +67,6 @@
 
 | Exchange | Error | Notes |
 |----------|-------|-------|
-| **WEEX** | DNS ENOTFOUND | Domain not resolving |
 | **Azbit** | HTTP 404 | Endpoint not found |
 | **BTCC** | DNS ENOTFOUND | Domain not resolving |
 | **Tapbit** | DNS ENOTFOUND | Domain not resolving |

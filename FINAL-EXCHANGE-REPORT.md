@@ -122,7 +122,6 @@
 
 | Exchange | Reason |
 |----------|--------|
-| **Coinup.io** | No public API documentation |
 | **Ourbit** | No public WebSocket API |
 | **Tapbit** | No accessible public WebSocket API docs found after deep research |
 | **BTCC** | No accessible public WebSocket API docs found after deep research |

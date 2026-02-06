@@ -82,15 +82,6 @@ const EXCHANGES = {
     }
   },
 
-  coinupio: {
-    name: 'Coinup.io',
-    docs: 'N/A - No public API docs',
-    spot: false,
-    futures: false,
-    endpoints: {},
-    subscriptions: {}
-  },
-
   websea: {
     name: 'Websea',
     docs: 'https://www.websea.com/en/api',
@@ -210,20 +201,6 @@ const EXCHANGES = {
       futures_trades: { id: '2', reqType: 'sub', dataType: 'BTC-USDT@trade' },
       futures_ticker: { id: '3', reqType: 'sub', dataType: 'BTC-USDT@ticker' },
       futures_kline: { id: '4', reqType: 'sub', dataType: 'BTC-USDT@kline_1m' }
-    }
-  },
-
-  batonex: {
-    name: 'Batonex',
-    docs: 'https://github.com/batonex',
-    spot: false,
-    futures: true,
-    endpoints: {
-      futures: 'wss://api.batonex.com/ws/futures'
-    },
-    subscriptions: {
-      futures_orderbook: { op: 'subscribe', args: ['depth:BTCUSDT'] },
-      futures_ticker: { op: 'subscribe', args: ['ticker:BTCUSDT'] }
     }
   },
 

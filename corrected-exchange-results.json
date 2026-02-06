@@ -355,32 +355,6 @@
       }
     }
   },
-  "batonex": {
-    "name": "Batonex",
-    "docs": "N/A - Binance-clone attempt",
-    "spot": false,
-    "futures": true,
-    "tests": {
-      "futures_orderbook": {
-        "key": "batonex_futures_orderbook",
-        "success": false,
-        "error": "Unexpected server response: 404",
-        "time": 3938
-      },
-      "futures_trades": {
-        "key": "batonex_futures_trades",
-        "success": false,
-        "error": "Unexpected server response: 404",
-        "time": 5848
-      },
-      "futures_ticker": {
-        "key": "batonex_futures_ticker",
-        "success": false,
-        "error": "Unexpected server response: 404",
-        "time": 7160
-      }
-    }
-  },
   "pionex": {
     "name": "Pionex",
     "docs": "https://docs.pionex.com/",

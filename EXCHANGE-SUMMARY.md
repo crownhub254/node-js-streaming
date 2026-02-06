@@ -269,8 +269,6 @@
 | 4 | NovaEx | ✅ | ✅ | ❓ | ❓ | ❓ | ❓ | ❌ No public docs | ❌ Unknown | Site redirects to WOO X Pro (rebranded/white-label) |
 | 8 | Bullish.com | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ REST API | ❓ Unknown | Institutional exchange; has REST API but docs inaccessible for WS |
 | 10 | XT.com | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ REST + WS | ✅ Yes | Full API: REST + WebSocket for spot & derivatives. Python/Java/JS SDKs |
-| 13 | UZX.com | ✅ | ✅ (USDT-M & Coin-M) | ❓ | ❓ | ❓ | ❓ | ✅ APIs listed | ❓ Unknown | Has APIs page in footer; Spot + USDT-M + Coin-M Futures |
-| 21 | SuperEx.com | ✅ | ✅ | ❓ | ❓ | ❓ | ❓ | ✅ APIs listed | ❓ Unknown | Has spot & futures + copy trading; APIs mentioned but docs link broken |
 | 22 | FameEX.com | ✅ | ✅ (USDT Perpetual) | ✅ | ✅ | ✅ | ✅ | ✅ REST + WS | ✅ Yes | Full API at fameexdocs.github.io; spot + USDT perpetual |
 | 23 | Hotcoin.com | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ REST + WS | ✅ Yes | API docs page available; spot, futures, margin trading |
 | 24 | OrangeX.com | ✅ | ✅ (Perpetual) | ❓ | ❓ | ❓ | ❓ | ❌ No public docs | ❌ Unknown | Spot & Perpetual (200x leverage); no public API documentation |
@@ -340,25 +338,6 @@
   - ✅ Ticker
   - ✅ OHLCV/Kline
 - **Verdict:** ✅ **FULLY USABLE** - Well-documented API with REST + WebSocket + multiple SDK support.
-
----
-
-### 13. UZX.com (uzx.com)
-- **Markets:** Spot ✅ | USDT-M Futures ✅ | Coin-M Futures ✅
-- **Products:** Spot, USDT-M Futures, Coin-M Futures, Earn, Credit Card
-- **Trading Pairs:** 300+ spot pairs, extensive futures
-- **API:** "APIs" listed under Services section in footer
-- **Features:** Proof of Reserves, Global Partner Program
-- **Verdict:** ✅ **Has API** (referenced in site). Spot + both futures types available. Needs further API doc investigation.
-
----
-
-### 21. SuperEx.com (superex.com)
-- **Markets:** Spot ✅ | Futures ✅
-- **Products:** Spot, Futures, Copy Trading, ET Zone, DAO, SCS Chain
-- **API:** "APIs" link exists in footer but documentation page returned 404
-- **Own Blockchain:** SCS Chain
-- **Verdict:** ❓ **API exists but docs broken.** Has spot & futures trading.
 
 ---
 
@@ -461,12 +440,10 @@
 | **Zoomex** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Bullish** | ✅ | ❌ | ❓ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-### ❓ Exchanges with API but Limited/Broken Documentation (3)
+### ❓ Exchanges with API but Limited/Broken Documentation (1)
 
 | Exchange | Spot | Futures | Notes |
 |----------|------|---------|-------|
-| **UZX.com** | ✅ | ✅ | APIs page exists but docs not directly verified |
-| **SuperEx** | ✅ | ✅ | API link in footer but documentation page 404 |
 | **NovaEx** | ✅ | ✅ | WOO X Pro white-label; use WOO API instead |
 
 ### ❌ Exchanges with No Public API (12)
@@ -504,8 +481,6 @@
 9. **Hotcoin** - API docs available
 
 ### Tier 2 - Worth Investigating Further
-12. **UZX.com** - API mentioned but needs doc verification
-13. **SuperEx** - API exists but docs link broken
 
 ### Tier 3 - Skip (No API or Dead)
 - All exchanges in the "No Public API" and "Dead/Inaccessible" categories

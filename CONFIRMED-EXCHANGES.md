@@ -105,7 +105,7 @@
 
 ---
 
-## ✅ REST API Exchanges - Working (7)
+## ✅ REST API Exchanges - Working (5)
 
 ### 6. Bullish.com
 - **Type:** REST API  
@@ -158,35 +158,7 @@
 
 ---
 
-### 9. SuperEx.com
-- **Type:** REST API  
-- **Spot:** ✅ | **Futures:** ✅  
-- **Base URL:** `https://api.superex.com/api/public/v1/market`  
-- **Confirmed Endpoints (2/2):**
-
-| Endpoint | URL | Status |
-|----------|-----|--------|
-| Ticker | `/ticker?symbol=btc_usdt` | ✅ 200 OK |
-| Orderbook | `/depth?symbol=btc_usdt&limit=5` | ✅ 200 OK |
-
-- **Note:** Returns `{"code":403,"msg":"Token invalid or expired"}` but HTTP 200 — endpoints are reachable, may need API key for full data.
-
----
-
-### 10. UZX.com
-- **Type:** REST API  
-- **Spot:** ✅ | **Futures:** ✅ (USDT-M & Coin-M)  
-- **Base URL:** `https://www.uzx.com/api/v1`  
-- **Confirmed Endpoints (2/2):**
-
-| Endpoint | URL | Status |
-|----------|-----|--------|
-| Ticker | `/ticker/24hr?symbol=BTCUSDT` | ✅ 200 OK |
-| Orderbook | `/depth?symbol=BTCUSDT&limit=5` | ✅ 200 OK |
-
----
-
-### 11. FameEX.com
+### 9. FameEX.com
 - **Type:** REST API  
 - **Spot:** ✅ | **Futures:** ✅ (USDT Perpetual)  
 - **Base URLs:** `https://api.fameex.com/v2/public` (ticker/orderbook), `https://api.fameex.com/sapi/v1` (trades)  
@@ -202,7 +174,7 @@
 
 ---
 
-### 12. OrangeX.com
+### 10. OrangeX.com
 - **Type:** REST API (Deribit-style JSON-RPC)  
 - **Spot:** ✅ | **Futures:** ✅ (USDT Perpetual)  
 - **Base URL:** `https://api.orangex.com/api/v1/public`  
@@ -309,15 +281,12 @@ zoomexFuturesWS.on('open', () => {
 // GET https://openapi.bitrue.com/api/v1/depth?symbol=BTCUSDT&limit=5
 // GET https://openapi.bitrue.com/api/v1/trades?symbol=BTCUSDT&limit=5
 
-// 9. REMOVED: SuperEx (requires auth tokens since Feb 2026)
-// 10. REMOVED: UZX (returns HTML, API no longer available)
-
-// 11. FameEX (trades uses sapi/v1 path, ticker/orderbook use v2/public)
+// 9. FameEX (trades uses sapi/v1 path, ticker/orderbook use v2/public)
 // GET https://api.fameex.com/v2/public/ticker
 // GET https://api.fameex.com/v2/public/orderbook?symbol=BTCUSDT&limit=5
 // GET https://api.fameex.com/sapi/v1/trades?symbol=BTCUSDT&limit=5
 
-// 12. OrangeX (Deribit-style JSON-RPC 2.0)
+// 10. OrangeX (Deribit-style JSON-RPC 2.0)
 // Spot:
 // GET https://api.orangex.com/api/v1/public/get_order_book?instrument_name=BTC-USDT-SPOT&depth=5
 // GET https://api.orangex.com/api/v1/public/get_last_trades_by_instrument?instrument_name=BTC-USDT-SPOT&count=5

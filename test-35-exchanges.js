@@ -5,7 +5,7 @@ const zlib = require('zlib');
 const fs = require('fs');
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 12-EXCHANGE COMPREHENSIVE TESTER
+// 10-EXCHANGE COMPREHENSIVE TESTER
 // Tests WebSocket and REST API streams for all 12 remaining exchanges
 // Collects data for 2 minutes, reports results, auto-fixes errors
 // ═══════════════════════════════════════════════════════════════════════════
@@ -225,29 +225,7 @@ const EXCHANGES = {
     }
   },
 
-  // ── 5. UZX.com ──
-  uzx: {
-    name: 'UZX.com',
-    type: 'rest',
-    spot: true, futures: true,
-    endpoints: {
-      spot_ticker: 'https://www.uzx.com/api/v1/ticker/24hr?symbol=BTCUSDT',
-      spot_orderbook: 'https://www.uzx.com/api/v1/depth?symbol=BTCUSDT&limit=5'
-    }
-  },
-
-  // ── 6. SuperEx ──
-  superex: {
-    name: 'SuperEx.com',
-    type: 'rest',
-    spot: true, futures: true,
-    endpoints: {
-      spot_ticker: 'https://api.superex.com/api/public/v1/market/ticker?symbol=btc_usdt',
-      spot_orderbook: 'https://api.superex.com/api/public/v1/market/depth?symbol=btc_usdt&limit=5'
-    }
-  },
-
-  // ── 7. FameEX ──
+  // ── 5. FameEX ──
   fameex: {
     name: 'FameEX.com',
     type: 'rest',
@@ -259,7 +237,7 @@ const EXCHANGES = {
     }
   },
 
-  // ── 8. Hotcoin ──
+  // ── 6. Hotcoin ──
   hotcoin: {
     name: 'Hotcoin.com',
     type: 'ws',
@@ -277,7 +255,7 @@ const EXCHANGES = {
     ping: { ping: Date.now() }
   },
 
-  // ── 9. OrangeX ──
+  // ── 7. OrangeX ──
   orangex: {
     name: 'OrangeX.com',
     type: 'rest',
@@ -291,7 +269,7 @@ const EXCHANGES = {
     }
   },
 
-  // ── 10. Darkex ──
+  // ── 8. Darkex ──
   darkex: {
     name: 'Darkex.com',
     type: 'rest',
@@ -304,7 +282,7 @@ const EXCHANGES = {
     }
   },
 
-  // ── 11. Bitrue ──
+  // ── 9. Bitrue ──
   bitrue: {
     name: 'Bitrue.com',
     type: 'rest',
@@ -317,7 +295,7 @@ const EXCHANGES = {
     }
   },
 
-  // ── 12. Zoomex ──
+  // ── 10. Zoomex ──
   zoomex: {
     name: 'Zoomex',
     type: 'ws',
@@ -551,7 +529,7 @@ async function main() {
   
   console.log(`
 ╔═══════════════════════════════════════════════════════════════════════════╗
-║     12-EXCHANGE COMPREHENSIVE STREAM TEST                                 ║
+║     10-EXCHANGE COMPREHENSIVE STREAM TEST                                 ║
 ║     Testing WebSocket & REST API streams for ALL 12 remaining exchanges   ║
 ║     Duration: 5 minutes max | Auto-retry on failure                       ║
 ╚═══════════════════════════════════════════════════════════════════════════╝

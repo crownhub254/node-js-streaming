@@ -169,7 +169,7 @@ const EXCHANGES = {
   btduex: {
     name: 'BTDUex',
     skip: true,
-    reason: 'No public API documentation found'
+    reason: 'No public API - new exchange (Oct 2025), API undocumented'
   },
 
   // ── 2. Biconomy ──
@@ -276,7 +276,7 @@ const EXCHANGES = {
   biking: {
     name: 'Biking',
     skip: true,
-    reason: 'No public API documentation accessible'
+    reason: 'Claims API support but no public docs found'
   },
 
   // ── 12. GroveX ──
@@ -300,8 +300,12 @@ const EXCHANGES = {
   // ── 14. KCEX ──
   kcex: {
     name: 'KCEX',
-    skip: true,
-    reason: 'No public API documentation found'
+    type: 'rest',
+    spot: true, futures: true,
+    endpoints: {
+      spot_ticker: 'https://api.kcex.com/api/v1/ticker?symbol=BTC_USDT',
+      spot_orderbook: 'https://api.kcex.com/api/v1/depth?symbol=BTC_USDT&limit=5'
+    }
   },
 
   // ── 15. ASTX.io ──
@@ -406,8 +410,15 @@ const EXCHANGES = {
   // ── 24. OrangeX ──
   orangex: {
     name: 'OrangeX.com',
-    skip: true,
-    reason: 'No public API documentation'
+    type: 'rest',
+    spot: true, futures: true,
+    endpoints: {
+      spot_orderbook: 'https://api.orangex.com/api/v1/public/get_order_book?instrument_name=BTC-USDT-SPOT&depth=5',
+      spot_trades: 'https://api.orangex.com/api/v1/public/get_last_trades_by_instrument?instrument_name=BTC-USDT-SPOT&count=5',
+      futures_ticker: 'https://api.orangex.com/api/v1/public/ticker?instrument_name=BTC-USDT-PERPETUAL',
+      futures_orderbook: 'https://api.orangex.com/api/v1/public/get_order_book?instrument_name=BTC-USDT-PERPETUAL&depth=5',
+      futures_trades: 'https://api.orangex.com/api/v1/public/get_last_trades_by_instrument?instrument_name=BTC-USDT-PERPETUAL&count=5'
+    }
   },
 
   // ── 25. CrypFine ──
@@ -441,7 +452,7 @@ const EXCHANGES = {
   yubit: {
     name: 'Yubit',
     skip: true,
-    reason: 'Website returned 404 - offline'
+    reason: 'Domain parked/defunct - no longer operational'
   },
 
   // ── 29. Ju.com ──
@@ -459,8 +470,13 @@ const EXCHANGES = {
   // ── 30. TruBitPro ──
   trubitpro: {
     name: 'TruBitPro',
-    skip: true,
-    reason: 'Site inaccessible'
+    type: 'rest',
+    spot: true, futures: true,
+    endpoints: {
+      spot_ticker: 'https://api.trubit.com/openapi/quote/v1/ticker/24hr?symbol=BTCUSDT',
+      spot_orderbook: 'https://api.trubit.com/openapi/quote/v1/depth?symbol=BTCUSDT&limit=5',
+      spot_trades: 'https://api.trubit.com/openapi/quote/v1/trades?symbol=BTCUSDT&limit=5'
+    }
   },
 
   // ── 31. Top.one ──

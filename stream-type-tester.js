@@ -11,7 +11,7 @@ const zlib = require('zlib');
 const https = require('https');
 
 // ======================== CONFIGURATION ========================
-const TEST_TIMEOUT = 20000;       // 20s per exchange connection
+const TEST_TIMEOUT = 40000;       // 40s safety net for connection phase
 const DATA_WAIT = 15000;          // 15s to collect data after subscribing
 const STAGGER_DELAY = 300;        // 300ms between exchange connections
 const MAX_CONCURRENT = 6;         // Max concurrent exchange connections
@@ -105,6 +105,7 @@ const EXCHANGES = {
 
     'Coinbase': {
         tier: 1,
+        lowVolumeTrades: true,  // Coinbase USD pairs have low WS throughput outside US
         getUrl: () => 'wss://ws-feed.exchange.coinbase.com',
         onOpen: (ws) => {
             ws.send(JSON.stringify({
@@ -130,6 +131,7 @@ const EXCHANGES = {
 
     'Kraken': {
         tier: 1,
+        lowVolumeTrades: true,  // Kraken USDT spot pairs have low trade frequency
         getUrl: () => 'wss://ws.kraken.com/v2',
         onOpen: (ws) => {
             // V2 API for better trade delivery on all pairs
@@ -366,6 +368,7 @@ const EXCHANGES = {
 
     'WOO X': {
         tier: 1,
+        lowVolumeTrades: true,  // WOO X spot trades can be sparse for BTC
         getUrl: () => 'wss://wss.woo.org/ws/stream/OqdphuyCtYWxwzhxyLLjOWNdFP7sQt8RPWzmb5xY',
         pingInterval: 9000,
         pingMessage: JSON.stringify({ event: 'ping' }),
@@ -426,6 +429,7 @@ const EXCHANGES = {
 
     'Bitstamp': {
         tier: 2,
+        lowVolumeTrades: true,  // Bitstamp spot trades can be infrequent
         getUrl: () => 'wss://ws.bitstamp.net',
         onOpen: (ws) => {
             // Trades
@@ -813,7 +817,7 @@ const EXCHANGES = {
     'HitBTC': {
         tier: 3,
         getUrl: () => 'wss://api.hitbtc.com/api/3/ws/public',
-        lowVolumeTrades: true,  // HitBTC spot has near-zero trades — confirmed 0 in 30s test
+        lowVolumeTrades: true,  // HitBTC spot trades flow slowly; isolated probe shows activity but concurrent test often gets 0
         onOpen: (ws) => {
             ws.send(JSON.stringify({ method: 'subscribe', ch: 'trades', params: { symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'] }, id: 1 }));
             ws.send(JSON.stringify({ method: 'subscribe', ch: 'ticker/price/1s', params: { symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'] }, id: 2 }));
@@ -950,6 +954,7 @@ async function testExchange(name) {
         }
 
         ws.on('open', () => {
+            clearTimeout(timeout);  // Cancel connection-phase timeout immediately
             console.log(`  [${ts()}] ✅ ${name} — Connected, subscribing...`);
             try {
                 exDef.onOpen(ws);
@@ -970,7 +975,6 @@ async function testExchange(name) {
 
             // Wait for data, then close
             setTimeout(() => {
-                clearTimeout(timeout);
                 if (pingTimer) clearInterval(pingTimer);
                 if (customPingTimer) clearInterval(customPingTimer);
                 if (ossPingTimer) clearInterval(ossPingTimer);

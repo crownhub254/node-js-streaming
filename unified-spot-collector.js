@@ -150,24 +150,25 @@ const EXCHANGES = {
     'Kraken': {
         tier: 1,
         getConfig: () => ({
-            url: 'wss://ws.kraken.com',
+            url: 'wss://ws.kraken.com/v2',
             onOpen: (ws) => {
+                // V2 API: more reliable trade delivery
                 ws.send(JSON.stringify({
-                    event: 'subscribe',
-                    pair: ['XBT/USDT', 'ETH/USDT', 'SOL/USDT'],
-                    subscription: { name: 'trade' }
+                    method: 'subscribe',
+                    params: { channel: 'trade', symbol: ['BTC/USDT', 'ETH/USDT', 'SOL/USDT'], snapshot: false }
                 }));
             },
             parseMessage: (msg) => {
                 try {
                     const d = JSON.parse(msg);
-                    // Kraken sends arrays: [channelID, [[price,volume,time,side,type,misc]], channelName, pair]
-                    if (Array.isArray(d) && d.length >= 4) {
-                        const pair = d[d.length - 1];
-                        const trades = Array.isArray(d[1]) ? d[1].length : 1;
-                        if (pair === 'XBT/USDT') return { coin: 'BTC', count: trades };
-                        if (pair === 'ETH/USDT') return { coin: 'ETH', count: trades };
-                        if (pair === 'SOL/USDT') return { coin: 'SOL', count: trades };
+                    // V2: skip heartbeat & method responses
+                    if (d.channel === 'heartbeat' || d.method) return null;
+                    if (d.channel === 'trade' && d.data && Array.isArray(d.data)) {
+                        for (const t of d.data) {
+                            if (t.symbol === 'BTC/USDT') return { coin: 'BTC', count: d.data.length };
+                            if (t.symbol === 'ETH/USDT') return { coin: 'ETH', count: d.data.length };
+                            if (t.symbol === 'SOL/USDT') return { coin: 'SOL', count: d.data.length };
+                        }
                     }
                 } catch (e) {}
                 return null;

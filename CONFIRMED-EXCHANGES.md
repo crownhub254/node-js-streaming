@@ -1,9 +1,9 @@
 # CONFIRMED WORKING EXCHANGES - Data Streams Verified
 
-**Test Date:** February 6, 2026  
-**Test Duration:** 126.8 seconds  
+**Test Date:** February 6, 2026 (Updated)  
+**Test Duration:** 79.2 seconds  
 **Symbol Tested:** BTC/USDT  
-**Success Rate:** 73.3% of testable exchanges
+**Success Rate:** 66.7% of testable exchanges (12/18)
 
 ---
 
@@ -105,7 +105,7 @@
 
 ---
 
-## ✅ REST API Exchanges - Working (6)
+## ✅ REST API Exchanges - Working (7)
 
 ### 6. Bullish.com
 - **Type:** REST API  
@@ -190,53 +190,73 @@
 - **Type:** REST API  
 - **Spot:** ✅ | **Futures:** ✅ (USDT Perpetual)  
 - **Base URL:** `https://api.fameex.com/v2/public`  
-- **Confirmed Endpoints (1/3):**
+- **Confirmed Endpoints (2/3):**
 
 | Endpoint | URL | Status |
 |----------|-----|--------|
-| Ticker | `/ticker` | 🟡 Timeout |
+| Ticker | `/ticker` | ✅ 200 OK |
 | Orderbook | `/orderbook?symbol=BTC-USDT&limit=5` | ✅ 200 OK |
 | Trades | `/trades?symbol=BTC-USDT&limit=5` | ❌ 404 |
 
-- **Note:** Partially working — orderbook confirmed, other endpoints may need different symbol format or paths.
+- **Note:** Partially working — ticker and orderbook confirmed, trades endpoint returns 404.
 
 ---
 
-## ❌ Failed Exchanges (4)
+### 12. OrangeX.com
+- **Type:** REST API (Deribit-style JSON-RPC)  
+- **Spot:** ✅ | **Futures:** ✅ (USDT Perpetual)  
+- **Base URL:** `https://api.orangex.com/api/v1/public`  
+- **Auth:** Not required for public endpoints  
+- **Instrument Format:** `BTC-USDT-SPOT` (spot), `BTC-USDT-PERPETUAL` (futures)  
+- **Confirmed Endpoints (5/5):**
+
+| Endpoint | URL | Status |
+|----------|-----|--------|
+| Spot Orderbook | `/get_order_book?instrument_name=BTC-USDT-SPOT&depth=5` | ✅ 200 OK |
+| Spot Trades | `/get_last_trades_by_instrument?instrument_name=BTC-USDT-SPOT&count=5` | ✅ 200 OK |
+| Futures Ticker | `/ticker?instrument_name=BTC-USDT-PERPETUAL` | ✅ 200 OK |
+| Futures Orderbook | `/get_order_book?instrument_name=BTC-USDT-PERPETUAL&depth=5` | ✅ 200 OK |
+| Futures Trades | `/get_last_trades_by_instrument?instrument_name=BTC-USDT-PERPETUAL&count=5` | ✅ 200 OK |
+
+- **Sample Data:** `{"jsonrpc":"2.0","result":{"asks":[["66312.991","2.68865"]],"bids":[["66312.964","0.2338"]],"timestamp":"1770378618693","instrument_name":"BTC-USDT-SPOT"}}`
+- **Note:** Uses Deribit-compatible JSON-RPC 2.0 format. Spot ticker returns "Instrument does not exist" but orderbook and trades work perfectly. 358 coins, 368 trading pairs.
+
+---
+
+## ❌ Failed Exchanges (6)
 
 | # | Exchange | Type | Error | Notes |
 |---|----------|------|-------|-------|
 | 1 | Hibt.com | REST | HTTP 404 on all endpoints | API may have changed from `api.hibt0.com` |
 | 2 | DigiFinex | REST | HTTP 403 (Cloudflare) | Geo-restricted / Cloudflare protected |
-| 3 | WEEX | WS | DNS ENOTFOUND | `ws.weex.com` domain not resolving |
+| 3 | WEEX | WS | DNS ENOTFOUND | `ws.weex.com` domain not resolving, alt returns 521 |
 | 4 | Ju.com | REST | HTTP 404 | API endpoint not found at `api.ju.com` |
+| 5 | KCEX | REST | HTTP 403 | `api.kcex.com` Cloudflare/WAF protected |
+| 6 | TruBitPro | REST | HTTP 500 | `api.trubit.com` returns Internal Server Error, WS returns 403 |
 
 ---
 
-## ⏭️ Skipped Exchanges - No Public API (20)
+## ⏭️ Skipped Exchanges - No Public API (17)
 
 | # | Exchange | Reason |
 |---|----------|--------|
-| 1 | BTDUex | No public API documentation found |
+| 1 | BTDUex | No public API - new exchange (Oct 2025), API undocumented |
 | 2 | KTX Finance | DeFi DEX - no traditional CEX API |
 | 3 | VOOX Exchange | No public API documentation |
 | 4 | CoinUp.io | No public API documentation |
 | 5 | Batonex | SHUT DOWN - No longer provides crypto trading |
-| 6 | Biking | No public API documentation accessible |
+| 6 | Biking | Claims API support but no public docs found |
 | 7 | GroveX | Site did not return meaningful content |
-| 8 | KCEX | No public API documentation found |
-| 9 | ASTX.io | Chinese-focused, no public API docs |
-| 10 | Tebbit.io | No API documentation found |
-| 11 | XXKK.COM | No public API documentation |
-| 12 | BitxEX | Site inaccessible/offline |
-| 13 | OrangeX.com | No public API documentation |
-| 14 | CrypFine | No public API documentation |
-| 15 | SunX.vip | Minimal site, no exchange content |
-| 16 | Yubit | Website returned 404 - offline |
-| 17 | TruBitPro | Site inaccessible |
-| 18 | Top.one | No public API documentation |
-| 19 | Echobit | GEO-RESTRICTED - inaccessible |
-| 20 | Cofinex | Domain parked - not an exchange |
+| 8 | ASTX.io | Chinese-focused, no public API docs |
+| 9 | Tebbit.io | No API documentation found |
+| 10 | XXKK.COM | No public API documentation |
+| 11 | BitxEX | Site inaccessible/offline |
+| 12 | CrypFine | No public API documentation |
+| 13 | SunX.vip | Minimal site, no exchange content |
+| 14 | Yubit | Domain parked/defunct - no longer operational |
+| 15 | Top.one | No public API documentation |
+| 16 | Echobit | GEO-RESTRICTED - inaccessible |
+| 17 | Cofinex | Domain parked - not an exchange |
 
 ---
 
@@ -339,6 +359,15 @@ zoomexFuturesWS.on('open', () => {
 
 // 11. FameEX
 // GET https://api.fameex.com/v2/public/orderbook?symbol=BTC-USDT&limit=5
+
+// 12. OrangeX (Deribit-style JSON-RPC 2.0)
+// Spot:
+// GET https://api.orangex.com/api/v1/public/get_order_book?instrument_name=BTC-USDT-SPOT&depth=5
+// GET https://api.orangex.com/api/v1/public/get_last_trades_by_instrument?instrument_name=BTC-USDT-SPOT&count=5
+// Futures (USDT Perpetual):
+// GET https://api.orangex.com/api/v1/public/ticker?instrument_name=BTC-USDT-PERPETUAL
+// GET https://api.orangex.com/api/v1/public/get_order_book?instrument_name=BTC-USDT-PERPETUAL&depth=5
+// GET https://api.orangex.com/api/v1/public/get_last_trades_by_instrument?instrument_name=BTC-USDT-PERPETUAL&count=5
 ```
 
 ---
@@ -348,20 +377,20 @@ zoomexFuturesWS.on('open', () => {
 | Category | Count | Exchanges |
 |----------|-------|-----------|
 | ✅ WS Fully Working | 5 | Biconomy, NovaEx, XT.com, Hotcoin, Zoomex |
-| ✅ REST Working | 6 | Bullish, Darkex, Bitrue, SuperEx, UZX, FameEX |
-| ❌ Failed | 4 | Hibt, DigiFinex, WEEX, Ju.com |
-| ⏭️ Skipped (No API) | 20 | Various - see list above |
-| **Total Confirmed** | **11** | **31 streams across 11 exchanges** |
+| ✅ REST Working | 7 | Bullish, Darkex, Bitrue, SuperEx, UZX, FameEX, OrangeX |
+| ❌ Failed | 6 | Hibt, DigiFinex, WEEX, Ju.com, KCEX, TruBitPro |
+| ⏭️ Skipped (No API) | 17 | Various - see list above |
+| **Total Confirmed** | **12** | **36 streams across 12 exchanges** |
 
 ### Stream Coverage on Working Exchanges
 
 | Stream Type | Available On |
 |-------------|-------------|
-| **Orderbook** | Biconomy, NovaEx, XT.com (Spot+Futures), Hotcoin, Zoomex (Spot+Futures), Bullish, Darkex, Bitrue, UZX, FameEX |
-| **Trades** | Biconomy, NovaEx, XT.com, Hotcoin, Zoomex (Spot+Futures), Bullish, Darkex, Bitrue |
-| **Ticker** | Biconomy, XT.com (Spot+Futures), Hotcoin, Zoomex (Spot+Futures), Darkex, Bitrue, SuperEx, UZX |
+| **Orderbook** | Biconomy, NovaEx, XT.com (Spot+Futures), Hotcoin, Zoomex (Spot+Futures), Bullish, Darkex, Bitrue, UZX, FameEX, OrangeX (Spot+Futures) |
+| **Trades** | Biconomy, NovaEx, XT.com, Hotcoin, Zoomex (Spot+Futures), Bullish, Darkex, Bitrue, OrangeX (Spot+Futures) |
+| **Ticker** | Biconomy, XT.com (Spot+Futures), Hotcoin, Zoomex (Spot+Futures), Darkex, Bitrue, SuperEx, UZX, OrangeX (Futures) |
 | **Kline/OHLCV** | Biconomy, XT.com, Hotcoin, Zoomex (Spot+Futures), Darkex |
 
 ---
 
-*Generated from test-35-exchanges.js test results on February 6, 2026*
+*Generated from test-35-exchanges.js test results on February 6, 2026 (Updated with deeper research on OrangeX, TruBitPro, KCEX, DigiFinex, BTDUex, BiKing, Yubit)*

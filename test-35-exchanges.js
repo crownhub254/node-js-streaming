@@ -5,7 +5,7 @@ const zlib = require('zlib');
 const fs = require('fs');
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 16-EXCHANGE COMPREHENSIVE TESTER
+// 17-EXCHANGE COMPREHENSIVE TESTER
 // Tests WebSocket and REST API streams for all confirmed exchanges
 // Collects data for 2 minutes, reports results, auto-fixes errors
 // ═══════════════════════════════════════════════════════════════════════════
@@ -397,6 +397,19 @@ const EXCHANGES = {
       spot_trades: 'https://api.bitvenus.me/openapi/quote/v1/trades?symbol=BTCUSDT&limit=5',
       spot_ticker: 'https://api.bitvenus.me/openapi/quote/v1/ticker/24hr?symbol=BTCUSDT'
     }
+  },
+
+  // ── 15. Trubit Pro ──
+  trubit: {
+    name: 'Trubit Pro',
+    type: 'rest',
+    spot: true, futures: false,
+    endpoints: {
+      spot_orderbook: 'https://api-spot.trubit.com/openapi/quote/v1/depth?symbol=BTCUSDT&limit=5',
+      spot_trades: 'https://api-spot.trubit.com/openapi/quote/v1/trades?symbol=BTCUSDT&limit=5',
+      spot_ticker: 'https://api-spot.trubit.com/openapi/quote/v1/ticker/24hr?symbol=BTCUSDT',
+      spot_price: 'https://api-spot.trubit.com/openapi/quote/v1/ticker/price?symbol=BTCUSDT'
+    }
   }
 };
 
@@ -614,8 +627,8 @@ async function main() {
   
   console.log(`
 ╔═══════════════════════════════════════════════════════════════════════════╗
-║     16-EXCHANGE COMPREHENSIVE STREAM TEST                                 ║
-║     Testing WebSocket & REST API streams for ALL 16 confirmed exchanges   ║
+║     17-EXCHANGE COMPREHENSIVE STREAM TEST                                 ║
+║     Testing WebSocket & REST API streams for ALL 17 confirmed exchanges   ║
 ║     Duration: 5 minutes max | Auto-retry on failure                       ║
 ╚═══════════════════════════════════════════════════════════════════════════╝
   `);

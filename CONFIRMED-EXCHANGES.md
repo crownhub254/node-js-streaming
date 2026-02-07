@@ -3,7 +3,7 @@
 **Test Date:** February 6, 2026 (Updated - Deep 5-min Test)  
 **Test Duration:** 189.3s verification + 943.1s deep test  
 **Symbol Tested:** BTC/USDT  
-**Success Rate:** 100% (16/16 exchanges, all streams verified)
+**Success Rate:** 100% (17/17 exchanges, all streams verified)
 
 ---
 
@@ -326,6 +326,29 @@
 
 ---
 
+### 15. Trubit Pro
+- **Type:** REST API  
+- **Spot:** ✅ | **Futures:** ❌  
+- **Base URL:** `https://api-spot.trubit.com/openapi/quote/v1`  
+- **API Style:** Binance-compatible  
+- **Symbol Format:** `BTCUSDT` (concatenated, uppercase)  
+- **Confirmed Endpoints (4/4):**
+
+| Endpoint | URL | Status |
+|----------|-----|--------|
+| Orderbook | `/depth?symbol=BTCUSDT&limit=5` | ✅ 200 OK |
+| Trades | `/trades?symbol=BTCUSDT&limit=5` | ✅ 200 OK |
+| Ticker | `/ticker/24hr?symbol=BTCUSDT` | ✅ 200 OK |
+| Price | `/ticker/price?symbol=BTCUSDT` | ✅ 200 OK |
+
+- **Orderbook Data:** `{"time":1770480148079,"bids":[["69191.91","0.07477"],...],"asks":[["69268.18","0.22074"],...]}`
+- **Trade Data:** `[{"price":"69165.96","time":1770480137051,"qty":"0.10692","isBuyerMaker":false},...]`
+- **Ticker Data:** `{"time":...,"symbol":"BTCUSDT","bestBidPrice":"69156.15","bestAskPrice":"69268.18","volume":"1919.38028","lastPrice":"69191.91","highPrice":"71759.01"}`
+- **Price Data:** `{"symbol":"BTCUSDT","price":"69212.16"}`
+- **Note:** Binance-style REST API. The correct path is `/openapi/quote/v1/` — old paths (`/api/v1/`, `/sapi/v1/`) return `{}`. WebSocket endpoints all return 403 (7+ URLs tested including spot, futures, stream-style). Futures REST domain (`api-futures.trubit.com`) returns `{}` for all known paths.
+
+---
+
 ## Quick Reference - All Working Connections
 
 ```javascript
@@ -476,6 +499,12 @@ webseaFuturesWS.on('open', () => {
 // GET https://api.bitvenus.me/openapi/quote/v1/trades?symbol=BTCUSDT&limit=5
 // GET https://api.bitvenus.me/openapi/quote/v1/ticker/24hr?symbol=BTCUSDT
 
+// 15. Trubit Pro (Binance-style API, /openapi/quote/v1/ path)
+// GET https://api-spot.trubit.com/openapi/quote/v1/depth?symbol=BTCUSDT&limit=5
+// GET https://api-spot.trubit.com/openapi/quote/v1/trades?symbol=BTCUSDT&limit=5
+// GET https://api-spot.trubit.com/openapi/quote/v1/ticker/24hr?symbol=BTCUSDT
+// GET https://api-spot.trubit.com/openapi/quote/v1/ticker/price?symbol=BTCUSDT
+
 // 7b. Darkex WS (gzip, lowercase symbols)
 // WS: wss://ws.darkex.com/kline-api/ws
 // WS Subscribe Depth: {"event":"sub","params":{"channel":"market_btcusdt_depth_step0"}}
@@ -492,18 +521,18 @@ webseaFuturesWS.on('open', () => {
 | Category | Count | Exchanges |
 |----------|-------|-----------|
 | ✅ WS Fully Working | 8 | Biconomy, NovaEx, XT.com, Hotcoin, Zoomex, FameEX, Websea, BloFin |
-| ✅ REST Working | 5 | Bullish, Bitrue, OrangeX, Azbit, BVOX |
+| ✅ REST Working | 6 | Bullish, Bitrue, OrangeX, Azbit, BVOX, Trubit Pro |
 | ✅ WS + REST | 4 | FameEX, Websea, Darkex, BloFin |
 
-| **Total Confirmed** | **16** | **60+ streams across 16 exchanges** |
+| **Total Confirmed** | **17** | **64+ streams across 17 exchanges** |
 
 ### Stream Coverage on Working Exchanges
 
 | Stream Type | Available On |
 |-------------|-------------|
-| **Orderbook** | Biconomy, NovaEx, XT.com (Spot+Futures), Zoomex (Spot+Futures), FameEX (WS), Darkex (WS+REST), BloFin (WS+REST), Bullish, Bitrue, OrangeX (Futures), Websea (REST Spot+Futures), Azbit, BVOX |
-| **Trades** | Biconomy, NovaEx, XT.com, Hotcoin, Zoomex (Spot+Futures), FameEX (WS), Darkex (WS+REST), BloFin (WS+REST), Bullish, Bitrue, OrangeX (Spot+Futures), Websea (WS+REST Spot+Futures), Azbit, BVOX |
-| **Ticker** | Biconomy, XT.com (Spot+Futures), Hotcoin (REST), Zoomex (Spot+Futures), Bitrue, FameEX (REST), OrangeX (Futures), Websea (REST Spot+Futures), Azbit, BVOX |
+| **Orderbook** | Biconomy, NovaEx, XT.com (Spot+Futures), Zoomex (Spot+Futures), FameEX (WS), Darkex (WS+REST), BloFin (WS+REST), Bullish, Bitrue, OrangeX (Futures), Websea (REST Spot+Futures), Azbit, BVOX, Trubit Pro |
+| **Trades** | Biconomy, NovaEx, XT.com, Hotcoin, Zoomex (Spot+Futures), FameEX (WS), Darkex (WS+REST), BloFin (WS+REST), Bullish, Bitrue, OrangeX (Spot+Futures), Websea (WS+REST Spot+Futures), Azbit, BVOX, Trubit Pro |
+| **Ticker** | Biconomy, XT.com (Spot+Futures), Hotcoin (REST), Zoomex (Spot+Futures), Bitrue, FameEX (REST), OrangeX (Futures), Websea (REST Spot+Futures), Azbit, BVOX, Trubit Pro |
 | **Kline** | Websea (WS Spot+Futures), Darkex (REST) |
 
 ### Exchanges Tested But Not Added
@@ -512,9 +541,9 @@ webseaFuturesWS.on('open', () => {
 |----------|--------|
 | SuperEx | API now requires auth tokens (`code:403` on all public endpoints) |
 | UZX | Website restructured - all API URLs return HTML instead of JSON |
-| Trubit Pro | API server at `api-spot.trubit.com` returns `{}` for ALL endpoints; WS returns 403 |
-| DigiFinex | Cloudflare 403 on all REST endpoints; WS connected but silent or 403 |
-| Ju.com | No API found — all domains return 404/ENOTFOUND/HTML |
+| Trubit Pro WS | REST works at `/openapi/quote/v1/` (now added as #15); WS returns 403 on all 7+ URLs tested |
+| DigiFinex | Cloudflare 403 on all REST endpoints regardless of User-Agent/headers; WS 403 |
+| Ju.com / JuCoin | `api.jucoin.com` resolves (openresty) but ALL 15+ path patterns return 404; WS rejected |
 | Darkex ticker | Ticker endpoint requires API key (`code:-1002`), orderbook+trades still public |
 | Bullish ticker | `/v1/markets` returns all markets (too large, timeouts) |
 | FameEX futures | All futures/perpetual/fapi/swap/contract path patterns return 404. Spot-only API. |
@@ -523,8 +552,8 @@ webseaFuturesWS.on('open', () => {
 ---
 
 *Generated from test-confirmed-exchanges.js deep test results on February 7, 2026*
-*Verification test: 16/16 exchanges confirmed, 0 errors, 100% health rate*
-*Added: BloFin (WS+REST OKX-style), BVOX/BitVenus (REST Binance-style), Azbit (REST).*
+*Verification test: 17/17 exchanges confirmed, 0 errors, 100% health rate*
+*Added: BloFin (WS+REST OKX-style), BVOX/BitVenus (REST Binance-style), Azbit (REST), Trubit Pro (REST Binance-style).*
 *Upgraded: Darkex (REST → WS+REST, lowercase gzip WS), FameEX (WS+REST), Websea (WS+REST).*
 *BloFin WS: wss://openapi.blofin.com/ws/public — OKX-style channels, books5+trades*
 *Darkex WS: wss://ws.darkex.com/kline-api/ws — gzip compressed, lowercase symbols*

@@ -269,12 +269,13 @@
 | 4 | NovaEx | ✅ | ✅ | ❓ | ❓ | ❓ | ❓ | ❌ No public docs | ❌ Unknown | Site redirects to WOO X Pro (rebranded/white-label) |
 | 8 | Bullish.com | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ REST API | ❓ Unknown | Institutional exchange; has REST API but docs inaccessible for WS |
 | 10 | XT.com | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ REST + WS | ✅ Yes | Full API: REST + WebSocket for spot & derivatives. Python/Java/JS SDKs |
-| 22 | FameEX.com | ✅ | ✅ (USDT Perpetual) | ✅ | ✅ | ✅ | ✅ | ✅ REST + WS | ✅ Yes | Full API at fameexdocs.github.io; spot + USDT perpetual |
+| 22 | FameEX.com | ✅ | ❌ (no public futures API) | ✅ | ✅ | ✅ | ✅ | ✅ REST | ✅ Yes | Spot API only; all futures path patterns return 404 |
 | 23 | Hotcoin.com | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ REST + WS | ✅ Yes | API docs page available; spot, futures, margin trading |
 | 24 | OrangeX.com | ✅ | ✅ (Perpetual) | ❓ | ❓ | ❓ | ❓ | ❌ No public docs | ❌ Unknown | Spot & Perpetual (200x leverage); no public API documentation |
 | 26 | Darkex.com | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ REST API | ✅ Yes | Full REST API at `openapi.darkex.com`; Spot + Futures |
 | 33 | Bitrue.com | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ REST + WS | ✅ Yes | Well-established; full API (REST+WS) for spot & futures |
 | 35 | Zoomex | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ REST + WS | ✅ Yes | Bybit-forked; V5 API with full WS support for spot & derivatives |
+| - | Websea | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ REST + WS | ✅ `wss://oapi.websea.com` | Full API: spot + futures. Docs at webseaex.github.io. Symbol format: BTC-USDT |
 
 ---
 
@@ -342,17 +343,17 @@
 ---
 
 ### 22. FameEX.com (fameex.com)
-- **Markets:** Spot ✅ | Futures (USDT Perpetual) ✅
+- **Markets:** Spot ✅ | Futures ❌ (no public futures API)
 - **Products:** Spot, USDT Perpetual, Copy Trading, Research, News
 - **API Documentation:** `fameexdocs.github.io/docs-v1/en/index.html`
 - **API Management:** Available at `/en-US/` routes
-- **Streams (expected based on docs link):**
-  - ✅ Orderbook
-  - ✅ Trades
-  - ✅ Ticker
-  - ✅ OHLCV/Kline
+- **Spot Streams (confirmed working):**
+  - ✅ Orderbook (`/v2/public/orderbook`)
+  - ✅ Trades (`/sapi/v1/trades`)
+  - ✅ Ticker (`/v2/public/ticker`)
+- **Futures:** ❌ All path patterns tested (futures/, perpetual/, fapi/, swap/, contract/) return 404
 - **Stats:** 154+ countries, 7.9M+ users, $1.75B+ 24h volume
-- **Verdict:** ✅ **FULLY USABLE** - Has documented API (GitHub-hosted docs) for spot + futures.
+- **Verdict:** ✅ **SPOT ONLY** - Has working spot API. No public futures API endpoints.
 
 ---
 
@@ -425,19 +426,41 @@
 
 ---
 
+### Websea (websea.com)
+- **Markets:** Spot ✅ | Futures ✅
+- **API Base URL:** `https://oapi.websea.com`
+- **API Documentation:** `https://webseaex.github.io/en/`
+- **WebSocket:** `wss://oapi.websea.com`
+- **Symbol Format:** `BTC-USDT` (hyphenated, BTCUSDT returns error)
+- **Spot Streams (confirmed working):**
+  - ✅ Orderbook (`/v1/spot/depth`)
+  - ✅ Trades (`/v1/spot/trade`)
+  - ✅ 24h Ticker (`/v1/spot/24kline`)
+- **Futures Streams (confirmed working):**
+  - ✅ Orderbook (`/v1/futures/depth`)
+  - ✅ Trades (`/v1/futures/trade`)
+  - ✅ 24h Ticker (`/v1/futures/24kline`)
+  - ✅ 24h Product Ticker (`/v1/futures/24hr`)
+- **Response Format:** `{"errno":0,"errmsg":"success","result":{...}}`
+- **CoinGecko Rating:** Grade A for API coverage
+- **Verdict:** ✅ **FULLY USABLE** - Complete spot + futures REST API with WebSocket support. Well-documented.
+
+---
+
 ## Classification Summary
 
-### ✅ Exchanges with Confirmed/Likely Full API Support (12)
+### ✅ Exchanges with Confirmed/Likely Full API Support (13)
 
 | Exchange | Spot | Futures | WebSocket | REST | Orderbook | Trades | Ticker | OHLCV |
 |----------|------|---------|-----------|------|-----------|--------|--------|-------|
 | **Biconomy.com** | ✅ | ✅ | ✅ `wss://bei.biconomy.com/ws` | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **XT.com** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **FameEX** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **FameEX** | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
 | **Hotcoin** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Darkex** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Bitrue** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Zoomex** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Websea** | ✅ | ✅ | ✅ `wss://oapi.websea.com` | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Bullish** | ✅ | ❌ | ❓ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ### ❓ Exchanges with API but Limited/Broken Documentation (1)
@@ -476,8 +499,9 @@
 2. **Biconomy.com** - Full WS streams documented with examples
 3. **Bitrue.com** - Well-established, full API
 4. **Zoomex** - Bybit V5 API fork (familiar structure)
+5. **Websea** - Full spot + futures REST API, well-documented at webseaex.github.io
 6. **Darkex.com** - Well-documented REST API
-8. **FameEX** - GitHub-hosted API docs
+8. **FameEX** - Spot API only (no public futures API)
 9. **Hotcoin** - API docs available
 
 ### Tier 2 - Worth Investigating Further

@@ -5,7 +5,7 @@ const zlib = require('zlib');
 const fs = require('fs');
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 10-EXCHANGE COMPREHENSIVE TESTER
+// 11-EXCHANGE COMPREHENSIVE TESTER
 // Tests WebSocket and REST API streams for all 12 remaining exchanges
 // Collects data for 2 minutes, reports results, auto-fixes errors
 // ═══════════════════════════════════════════════════════════════════════════
@@ -229,7 +229,7 @@ const EXCHANGES = {
   fameex: {
     name: 'FameEX.com',
     type: 'rest',
-    spot: true, futures: true,
+    spot: true, futures: false,
     endpoints: {
       spot_ticker: 'https://api.fameex.com/v2/public/ticker',
       spot_orderbook: 'https://api.fameex.com/v2/public/orderbook?symbol=BTCUSDT&limit=5',
@@ -316,6 +316,21 @@ const EXCHANGES = {
     },
     pingInterval: 20000,
     ping: { op: 'ping' }
+  },
+
+  // ── 11. Websea ──
+  websea: {
+    name: 'Websea',
+    type: 'rest',
+    spot: true, futures: true,
+    endpoints: {
+      spot_orderbook: 'https://oapi.websea.com/v1/spot/depth?symbol=BTC-USDT&size=5',
+      spot_trades: 'https://oapi.websea.com/v1/spot/trade?symbol=BTC-USDT&size=5',
+      spot_ticker: 'https://oapi.websea.com/v1/spot/24kline?symbol=BTC-USDT',
+      futures_orderbook: 'https://oapi.websea.com/v1/futures/depth?symbol=BTC-USDT&limit=5',
+      futures_trades: 'https://oapi.websea.com/v1/futures/trade?symbol=BTC-USDT&size=5',
+      futures_ticker: 'https://oapi.websea.com/v1/futures/24kline?symbol=BTC-USDT'
+    }
   }
 };
 
@@ -529,7 +544,7 @@ async function main() {
   
   console.log(`
 ╔═══════════════════════════════════════════════════════════════════════════╗
-║     10-EXCHANGE COMPREHENSIVE STREAM TEST                                 ║
+║     11-EXCHANGE COMPREHENSIVE STREAM TEST                                 ║
 ║     Testing WebSocket & REST API streams for ALL 12 remaining exchanges   ║
 ║     Duration: 5 minutes max | Auto-retry on failure                       ║
 ╚═══════════════════════════════════════════════════════════════════════════╝

@@ -105,7 +105,7 @@
 
 ---
 
-## ✅ REST API Exchanges - Working (5)
+## ✅ REST API Exchanges - Working (6)
 
 ### 6. Bullish.com
 - **Type:** REST API  
@@ -160,7 +160,7 @@
 
 ### 9. FameEX.com
 - **Type:** REST API  
-- **Spot:** ✅ | **Futures:** ✅ (USDT Perpetual)  
+- **Spot:** ✅ | **Futures:** ❌ (no public futures API)  
 - **Base URLs:** `https://api.fameex.com/v2/public` (ticker/orderbook), `https://api.fameex.com/sapi/v1` (trades)  
 - **Confirmed Endpoints (3/3):**
 
@@ -170,7 +170,7 @@
 | Orderbook | `/v2/public/orderbook?symbol=BTCUSDT&limit=5` | ✅ 200 OK |
 | Trades | `/sapi/v1/trades?symbol=BTCUSDT&limit=5` | ✅ 200 OK |
 
-- **Note:** Fully working — ticker, orderbook, and trades all confirmed. Trades endpoint uses `/sapi/v1/` path instead of `/v2/public/`.
+- **Note:** Fully working — ticker, orderbook, and trades all confirmed (spot only). Trades endpoint uses `/sapi/v1/` path instead of `/v2/public/`. All futures/perpetual/fapi/swap/contract path patterns return 404.
 
 ---
 
@@ -192,6 +192,28 @@
 
 - **Sample Data:** `{"jsonrpc":"2.0","result":{"asks":[["66312.991","2.68865"]],"bids":[["66312.964","0.2338"]],"timestamp":"1770378618693","instrument_name":"BTC-USDT-SPOT"}}`
 - **Note:** Uses Deribit-compatible JSON-RPC 2.0 format. Spot ticker returns "Instrument does not exist" but orderbook and trades work perfectly. 358 coins, 368 trading pairs.
+
+---
+
+### 11. Websea
+- **Type:** REST API  
+- **Spot:** ✅ | **Futures:** ✅  
+- **Base URL:** `https://oapi.websea.com`  
+- **Docs:** `https://webseaex.github.io/en/`  
+- **Symbol Format:** `BTC-USDT` (hyphenated)  
+- **Confirmed Endpoints (6/6):**
+
+| Endpoint | URL | Status |
+|----------|-----|--------|
+| Spot Orderbook | `/v1/spot/depth?symbol=BTC-USDT&size=5` | ✅ 200 OK |
+| Spot Trades | `/v1/spot/trade?symbol=BTC-USDT&size=5` | ✅ 200 OK |
+| Spot 24h Ticker | `/v1/spot/24kline?symbol=BTC-USDT` | ✅ 200 OK |
+| Futures Orderbook | `/v1/futures/depth?symbol=BTC-USDT&limit=5` | ✅ 200 OK |
+| Futures Trades | `/v1/futures/trade?symbol=BTC-USDT&size=5` | ✅ 200 OK |
+| Futures 24h Ticker | `/v1/futures/24kline?symbol=BTC-USDT` | ✅ 200 OK |
+
+- **Sample Data (Spot Trades):** `{"errno":0,"errmsg":"success","result":{"symbol":"BTC-USDT","data":[{"id":...,"amount":"0.0001","price":"67971.9","vol":"6.79719","direction":"buy","ts":...}]}}`
+- **Note:** Full spot + futures API. Uses `errno:0` for success. Symbol must be hyphenated (BTC-USDT), BTCUSDT returns `base symbol error`. Also has WebSocket at `wss://oapi.websea.com` and 24h product ticker at `/v1/futures/24hr`.
 
 ---
 
@@ -294,6 +316,16 @@ zoomexFuturesWS.on('open', () => {
 // GET https://api.orangex.com/api/v1/public/ticker?instrument_name=BTC-USDT-PERPETUALmi
 // GET https://api.orangex.com/api/v1/public/get_order_book?instrument_name=BTC-USDT-PERPETUAL&depth=5
 // GET https://api.orangex.com/api/v1/public/get_last_trades_by_instrument?instrument_name=BTC-USDT-PERPETUAL&count=5
+
+// 11. Websea (symbol format: BTC-USDT)
+// Spot:
+// GET https://oapi.websea.com/v1/spot/depth?symbol=BTC-USDT&size=5
+// GET https://oapi.websea.com/v1/spot/trade?symbol=BTC-USDT&size=5
+// GET https://oapi.websea.com/v1/spot/24kline?symbol=BTC-USDT
+// Futures:
+// GET https://oapi.websea.com/v1/futures/depth?symbol=BTC-USDT&limit=5
+// GET https://oapi.websea.com/v1/futures/trade?symbol=BTC-USDT&size=5
+// GET https://oapi.websea.com/v1/futures/24kline?symbol=BTC-USDT
 ```
 
 ---
@@ -303,17 +335,17 @@ zoomexFuturesWS.on('open', () => {
 | Category | Count | Exchanges |
 |----------|-------|-----------|
 | ✅ WS Fully Working | 5 | Biconomy, NovaEx, XT.com, Hotcoin (trades+REST ticker), Zoomex |
-| ✅ REST Working | 5 | Bullish, Darkex, Bitrue, FameEX, OrangeX |
+| ✅ REST Working | 6 | Bullish, Darkex, Bitrue, FameEX (spot), OrangeX, Websea (spot+futures) |
 
-| **Total Confirmed** | **10** | **31 streams across 10 exchanges** |
+| **Total Confirmed** | **11** | **37 streams across 11 exchanges** |
 
 ### Stream Coverage on Working Exchanges
 
 | Stream Type | Available On |
 |-------------|-------------|
-| **Orderbook** | Biconomy, NovaEx, XT.com (Spot+Futures), Zoomex (Spot+Futures), Bullish, Darkex, Bitrue, FameEX, OrangeX (Futures) |
-| **Trades** | Biconomy, NovaEx, XT.com, Hotcoin, Zoomex (Spot+Futures), Bullish, Darkex, Bitrue, FameEX, OrangeX (Spot+Futures) |
-| **Ticker** | Biconomy, XT.com (Spot+Futures), Hotcoin (REST), Zoomex (Spot+Futures), Bitrue, FameEX, OrangeX (Futures) |
+| **Orderbook** | Biconomy, NovaEx, XT.com (Spot+Futures), Zoomex (Spot+Futures), Bullish, Darkex, Bitrue, FameEX, OrangeX (Futures), Websea (Spot+Futures) |
+| **Trades** | Biconomy, NovaEx, XT.com, Hotcoin, Zoomex (Spot+Futures), Bullish, Darkex, Bitrue, FameEX, OrangeX (Spot+Futures), Websea (Spot+Futures) |
+| **Ticker** | Biconomy, XT.com (Spot+Futures), Hotcoin (REST), Zoomex (Spot+Futures), Bitrue, FameEX, OrangeX (Futures), Websea (Spot+Futures) |
 
 ### Exchanges Removed After Deep Testing
 
@@ -323,10 +355,11 @@ zoomexFuturesWS.on('open', () => {
 | UZX | Website restructured - all API URLs return HTML instead of JSON |
 | Darkex ticker | Ticker endpoint requires API key (`code:-1002`), orderbook+trades still public |
 | Bullish ticker | `/v1/markets` returns all markets (too large, timeouts) |
-| FameEX trades | Fixed: trades uses `/sapi/v1/trades` path (not `/v2/public/trades`) |
+| FameEX futures | All futures/perpetual/fapi/swap/contract path patterns return 404. Spot-only API. |
 | Hotcoin depth | Server accepts subscription but never sends depth/detail data; only trades work via WS |
 
 ---
 
-*Generated from test-confirmed-exchanges.js deep test results on February 6, 2026*
-*Verification test: 10/10 exchanges perfect, 0 errors, 100% health rate*
+*Generated from test-confirmed-exchanges.js deep test results on February 7, 2026*
+*Verification test: 11/11 exchanges confirmed, 0 errors, 100% health rate*
+*Added: Websea (spot+futures). Updated: FameEX (spot-only, no futures API)*

@@ -343,6 +343,19 @@ const EXCHANGES = {
       futures_orderbook: 'https://api.orangex.com/api/v1/public/get_order_book?instrument_name=BTC-USDT-PERPETUAL&depth=10',
       futures_trades:    'https://api.orangex.com/api/v1/public/get_last_trades_by_instrument?instrument_name=BTC-USDT-PERPETUAL&count=10'
     }
+  },
+
+  websea: {
+    name: 'Websea',
+    type: 'rest',
+    endpoints: {
+      spot_orderbook:    'https://oapi.websea.com/v1/spot/depth?symbol=BTC-USDT&size=10',
+      spot_trades:       'https://oapi.websea.com/v1/spot/trade?symbol=BTC-USDT&size=10',
+      spot_ticker:       'https://oapi.websea.com/v1/spot/24kline?symbol=BTC-USDT',
+      futures_orderbook: 'https://oapi.websea.com/v1/futures/depth?symbol=BTC-USDT&limit=10',
+      futures_trades:    'https://oapi.websea.com/v1/futures/trade?symbol=BTC-USDT&size=10',
+      futures_ticker:    'https://oapi.websea.com/v1/futures/24kline?symbol=BTC-USDT'
+    }
   }
 };
 

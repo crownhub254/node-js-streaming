@@ -1,0 +1,546 @@
+{
+  "fameex": {
+    "spot": {
+      "FameEX Spot Ticker (v2)": {
+        "url": "https://api.fameex.com/v2/public/ticker",
+        "status": 200,
+        "elapsed": "3834ms",
+        "isJson": true,
+        "dataPreview": "{\"code\":\"0\",\"msg\":\"null\",\"data\":{\"MNT_USDT\":{\"base_id\":\"MNT\",\"quote_volume\":\"16704269.5084\",\"quote_id\":\"USDT\",\"base_volume\":\"26166910.93\",\"isFrozen\":0,\"last_price\":\"0.6266\"},\"KERNEL_USDT\":{\"base_id\":\"KERNEL\",\"quote_volume\":\"344709.07288\",\"quote_id\":\"USDT\",\"base_volume\":\"5959293.74\",\"isFrozen\":0,\"last_price\":\"0.05579\"},\"PEPE_USDT\":{\"base_id\":\"PEPE\",\"quote_volume\":\"64821841.353874070\",\"quote_id\":\"USDT\",\"base_volume\":\"16914667382119\",\"isFrozen\":0,\"last_price\":\"0.000003760\"},\"WCT_USDT\":{\"base_id\":\"W",
+        "hasData": false,
+        "dataType": null,
+        "errorCode": "0",
+        "errorMsg": "null"
+      },
+      "FameEX Spot Orderbook (v2)": {
+        "url": "https://api.fameex.com/v2/public/orderbook?symbol=BTCUSDT&limit=10",
+        "status": 200,
+        "elapsed": "485ms",
+        "isJson": true,
+        "dataPreview": "{\"asks\":[[67938.3,1210],[67938.5,4818.0],[67938.6,1545],[67938.7,1010],[67938.9,1299],[67939.1,1424],[67939.3,1319],[67939.5,918],[67939.6,5501.0],[67939.9,784]],\"bids\":[[67935.0,2405.0],[67934.8,2868.0],[67934.7,1981.0],[67934.6,2509.0],[67934.4,3604],[67934.3,1558.0],[67934.0,3172],[67933.9,2218.0],[67933.6,2588.0],[67933.3,2509.0]],\"timestamp\":1770457941948}",
+        "hasData": true,
+        "dataType": "orderbook",
+        "asks": 10,
+        "bids": 10
+      },
+      "FameEX Spot Trades (sapi/v1)": {
+        "url": "https://api.fameex.com/sapi/v1/trades?symbol=BTCUSDT&limit=10",
+        "status": 200,
+        "elapsed": "496ms",
+        "isJson": true,
+        "dataPreview": "[{\"side\":\"buy\",\"price\":67984.5000000000000000,\"qty\":0.0115000000000000,\"time\":1770457905391},{\"side\":\"sell\",\"price\":67991.1000000000000000,\"qty\":0.0179980000000000,\"time\":1770457892662},{\"side\":\"sell\",\"price\":68003.4000000000000000,\"qty\":0.0218370000000000,\"time\":1770457880860},{\"side\":\"sell\",\"price\":67991.0000000000000000,\"qty\":0.0693130000000000,\"time\":1770457766766},{\"side\":\"buy\",\"price\":68042.5000000000000000,\"qty\":0.0228200000000000,\"time\":1770457718911},{\"side\":\"buy\",\"price\":68039.30000000",
+        "hasData": true,
+        "dataType": "array",
+        "count": 10,
+        "sample": {
+          "side": "buy",
+          "price": 67984.5,
+          "qty": 0.0115,
+          "time": 1770457905391
+        }
+      },
+      "FameEX Spot Trades (v2 alt)": {
+        "url": "https://api.fameex.com/v2/public/trades?symbol=BTCUSDT&limit=10",
+        "status": 404,
+        "elapsed": "504ms",
+        "isJson": true,
+        "dataPreview": "{\"timestamp\":1770457942922,\"status\":404,\"error\":\"Not Found\",\"message\":\"Not Found\",\"path\":\"/v2/public/trades\"}",
+        "hasData": false,
+        "dataType": null
+      },
+      "FameEX Spot Orderbook (sapi)": {
+        "url": "https://api.fameex.com/sapi/v1/depth?symbol=BTCUSDT&limit=10",
+        "status": 200,
+        "elapsed": "468ms",
+        "isJson": true,
+        "dataPreview": "{\"asks\":[[67927.5,3838.0],[67927.8,2700.0],[67927.9,1421.0],[67928.1,2985.0],[67928.2,2203.0],[67928.5,2771.0],[67928.8,3198.0],[67928.9,2771.0],[67929.2,3695.0],[67929.3,1563.0]],\"bids\":[[67920.6,6818.0],[67920.4,5368.0],[67920.3,4075.0],[67920.1,2947],[67919.9,4389.0],[67919.6,2645.0],[67919.4,1413],[67919.1,1262],[67918.9,2890],[67918.8,2060]],\"time\":1770457943382}",
+        "hasData": true,
+        "dataType": "orderbook",
+        "asks": 10,
+        "bids": 10
+      },
+      "FameEX Spot Trades (BTC-USDT)": {
+        "url": "https://api.fameex.com/v2/public/trades?symbol=BTC-USDT&limit=10",
+        "status": 404,
+        "elapsed": "472ms",
+        "isJson": true,
+        "dataPreview": "{\"timestamp\":1770457943906,\"status\":404,\"error\":\"Not Found\",\"message\":\"Not Found\",\"path\":\"/v2/public/trades\"}",
+        "hasData": false,
+        "dataType": null
+      },
+      "FameEX Spot Orderbook (BTC-USDT)": {
+        "url": "https://api.fameex.com/v2/public/orderbook?symbol=BTC-USDT&limit=10",
+        "status": 200,
+        "elapsed": "460ms",
+        "isJson": true,
+        "dataPreview": "{\"code\":\"-1121\",\"msg\":\"Invalid contract\",\"data\":null}",
+        "hasData": false,
+        "dataType": null,
+        "errorCode": "-1121",
+        "errorMsg": "Invalid contract"
+      },
+      "FameEX openapi Ticker": {
+        "url": "https://openapi.fameex.com/v2/public/ticker",
+        "status": 200,
+        "elapsed": "2834ms",
+        "isJson": true,
+        "dataPreview": "{\"code\":\"0\",\"msg\":\"null\",\"data\":{\"MNT_USDT\":{\"base_id\":\"MNT\",\"quote_volume\":\"16704269.5084\",\"quote_id\":\"USDT\",\"base_volume\":\"26166910.93\",\"isFrozen\":0,\"last_price\":\"0.6266\"},\"KERNEL_USDT\":{\"base_id\":\"KERNEL\",\"quote_volume\":\"344709.07288\",\"quote_id\":\"USDT\",\"base_volume\":\"5959293.74\",\"isFrozen\":0,\"last_price\":\"0.05579\"},\"PEPE_USDT\":{\"base_id\":\"PEPE\",\"quote_volume\":\"64821841.353874070\",\"quote_id\":\"USDT\",\"base_volume\":\"16914667382119\",\"isFrozen\":0,\"last_price\":\"0.000003760\"},\"WCT_USDT\":{\"base_id\":\"W",
+        "hasData": false,
+        "dataType": null,
+        "errorCode": "0",
+        "errorMsg": "null"
+      },
+      "FameEX openapi Orderbook": {
+        "url": "https://openapi.fameex.com/v2/public/orderbook?symbol=BTCUSDT&limit=10",
+        "status": 200,
+        "elapsed": "384ms",
+        "isJson": true,
+        "dataPreview": "{\"asks\":[[67966.5,772],[67966.8,1879],[67967.0,1547],[67967.3,983],[67967.4,1694],[67967.7,1579],[67967.9,1397],[67968.0,1737],[67968.1,1632],[67968.2,852]],\"bids\":[[67964.4,1310],[67964.1,785],[67963.8,1500],[67963.5,1294],[67963.2,1491],[67962.9,1018],[67962.7,1373],[67962.4,1618],[67962.2,729],[67962.0,1533]],\"timestamp\":1770457947581}",
+        "hasData": true,
+        "dataType": "orderbook",
+        "asks": 10,
+        "bids": 10
+      },
+      "FameEX openapi Trades": {
+        "url": "https://openapi.fameex.com/sapi/v1/trades?symbol=BTCUSDT&limit=10",
+        "status": 200,
+        "elapsed": "473ms",
+        "isJson": true,
+        "dataPreview": "{\"code\":0,\"msg\":\"Success\",\"data\":[{\"side\":\"BUY\",\"price\":68000,\"qty\":1.456526,\"time\":1770457947188},{\"side\":\"BUY\",\"price\":67990.2,\"qty\":1.283152,\"time\":1770457945901},{\"side\":\"BUY\",\"price\":67968,\"qty\":0.001188,\"time\":1770457944901},{\"side\":\"SELL\",\"price\":67968,\"qty\":0.029334,\"time\":1770457943950},{\"side\":\"SELL\",\"price\":67972.5,\"qty\":0.05723,\"time\":1770457942978},{\"side\":\"SELL\",\"price\":67972.6,\"qty\":0.414691,\"time\":1770457941985},{\"side\":\"BUY\",\"price\":67977.9,\"qty\":2.425733,\"time\":1770457940954},{",
+        "hasData": true,
+        "dataType": "trades/list",
+        "count": 10,
+        "sample": {
+          "side": "BUY",
+          "price": 68000,
+          "qty": 1.456526,
+          "time": 1770457947188
+        }
+      },
+      "FameEX openapi Depth": {
+        "url": "https://openapi.fameex.com/sapi/v1/depth?symbol=BTCUSDT&limit=10",
+        "status": 200,
+        "elapsed": "369ms",
+        "isJson": true,
+        "dataPreview": "{\"code\":0,\"msg\":\"Success\",\"data\":{\"time\":1770457948452,\"bids\":[[68000,10.371063],[67999.7,8.444838],[67999.4,7.941885],[67999.3,7.346909],[67999,10.350817],[67998.8,9.826179],[67998.7,7.827801],[67998.5,9.233931],[67998.4,9.604894],[67998.2,7.777603]],\"asks\":[[68001.4,11.824302],[68001.7,8.849651],[68001.8,7.77869],[68002.1,11.722652],[68002.2,6.139993],[68002.4,8.472937],[68002.6,7.402541],[68002.8,6.003222],[68003,11.210535],[68003.3,11.454806]]},\"succ\":true,\"message\":null}",
+        "hasData": false,
+        "dataType": null
+      }
+    },
+    "futures": {
+      "FameEX Futures Ticker (v2)": {
+        "url": "https://api.fameex.com/v2/public/futures/ticker",
+        "status": 404,
+        "elapsed": "479ms",
+        "isJson": true,
+        "dataPreview": "{\"timestamp\":1770457948930,\"status\":404,\"error\":\"Not Found\",\"message\":\"Not Found\",\"path\":\"/v2/public/futures/ticker\"}",
+        "hasData": false,
+        "dataType": null
+      },
+      "FameEX Futures Orderbook (v2)": {
+        "url": "https://api.fameex.com/v2/public/futures/orderbook?symbol=BTCUSDT&limit=10",
+        "status": 404,
+        "elapsed": "447ms",
+        "isJson": true,
+        "dataPreview": "{\"timestamp\":1770457949384,\"status\":404,\"error\":\"Not Found\",\"message\":\"Not Found\",\"path\":\"/v2/public/futures/orderbook\"}",
+        "hasData": false,
+        "dataType": null
+      },
+      "FameEX Futures Trades (v2)": {
+        "url": "https://api.fameex.com/v2/public/futures/trades?symbol=BTCUSDT&limit=10",
+        "status": 404,
+        "elapsed": "474ms",
+        "isJson": true,
+        "dataPreview": "{\"timestamp\":1770457949857,\"status\":404,\"error\":\"Not Found\",\"message\":\"Not Found\",\"path\":\"/v2/public/futures/trades\"}",
+        "hasData": false,
+        "dataType": null
+      },
+      "FameEX Futures Depth (v2)": {
+        "url": "https://api.fameex.com/v2/public/futures/depth?symbol=BTCUSDT&limit=10",
+        "status": 404,
+        "elapsed": "512ms",
+        "isJson": true,
+        "dataPreview": "{\"timestamp\":1770457950365,\"status\":404,\"error\":\"Not Found\",\"message\":\"Not Found\",\"path\":\"/v2/public/futures/depth\"}",
+        "hasData": false,
+        "dataType": null
+      },
+      "FameEX Futures Ticker (sapi)": {
+        "url": "https://api.fameex.com/sapi/v1/futures/ticker?symbol=BTCUSDT",
+        "status": 404,
+        "elapsed": "445ms",
+        "isJson": true,
+        "dataPreview": "{\"timestamp\":1770457950822,\"status\":404,\"error\":\"Not Found\",\"message\":\"Not Found\",\"path\":\"/sapi/v1/futures/ticker\"}",
+        "hasData": false,
+        "dataType": null
+      },
+      "FameEX Futures Orderbook (sapi)": {
+        "url": "https://api.fameex.com/sapi/v1/futures/depth?symbol=BTCUSDT&limit=10",
+        "status": 404,
+        "elapsed": "477ms",
+        "isJson": true,
+        "dataPreview": "{\"timestamp\":1770457951286,\"status\":404,\"error\":\"Not Found\",\"message\":\"Not Found\",\"path\":\"/sapi/v1/futures/depth\"}",
+        "hasData": false,
+        "dataType": null
+      },
+      "FameEX Futures Trades (sapi)": {
+        "url": "https://api.fameex.com/sapi/v1/futures/trades?symbol=BTCUSDT&limit=10",
+        "status": 404,
+        "elapsed": "454ms",
+        "isJson": true,
+        "dataPreview": "{\"timestamp\":1770457951745,\"status\":404,\"error\":\"Not Found\",\"message\":\"Not Found\",\"path\":\"/sapi/v1/futures/trades\"}",
+        "hasData": false,
+        "dataType": null
+      },
+      "FameEX Perp Ticker": {
+        "url": "https://api.fameex.com/v2/public/perpetual/ticker?symbol=BTCUSDT",
+        "status": 404,
+        "elapsed": "465ms",
+        "isJson": true,
+        "dataPreview": "{\"timestamp\":1770457952209,\"status\":404,\"error\":\"Not Found\",\"message\":\"Not Found\",\"path\":\"/v2/public/perpetual/ticker\"}",
+        "hasData": false,
+        "dataType": null
+      },
+      "FameEX Perp Orderbook": {
+        "url": "https://api.fameex.com/v2/public/perpetual/orderbook?symbol=BTCUSDT&limit=10",
+        "status": 404,
+        "elapsed": "477ms",
+        "isJson": true,
+        "dataPreview": "{\"timestamp\":1770457952685,\"status\":404,\"error\":\"Not Found\",\"message\":\"Not Found\",\"path\":\"/v2/public/perpetual/orderbook\"}",
+        "hasData": false,
+        "dataType": null
+      },
+      "FameEX Perp Trades": {
+        "url": "https://api.fameex.com/v2/public/perpetual/trades?symbol=BTCUSDT&limit=10",
+        "status": 404,
+        "elapsed": "474ms",
+        "isJson": true,
+        "dataPreview": "{\"timestamp\":1770457953172,\"status\":404,\"error\":\"Not Found\",\"message\":\"Not Found\",\"path\":\"/v2/public/perpetual/trades\"}",
+        "hasData": false,
+        "dataType": null
+      },
+      "FameEX fapi Ticker": {
+        "url": "https://api.fameex.com/fapi/v1/ticker?symbol=BTCUSDT",
+        "status": 404,
+        "elapsed": "461ms",
+        "isJson": true,
+        "dataPreview": "{\"timestamp\":1770457953637,\"status\":404,\"error\":\"Not Found\",\"message\":\"Not Found\",\"path\":\"/fapi/v1/ticker\"}",
+        "hasData": false,
+        "dataType": null
+      },
+      "FameEX fapi Orderbook": {
+        "url": "https://api.fameex.com/fapi/v1/depth?symbol=BTCUSDT&limit=10",
+        "status": 404,
+        "elapsed": "455ms",
+        "isJson": true,
+        "dataPreview": "{\"timestamp\":1770457954092,\"status\":404,\"error\":\"Not Found\",\"message\":\"Not Found\",\"path\":\"/fapi/v1/depth\"}",
+        "hasData": false,
+        "dataType": null
+      },
+      "FameEX fapi Trades": {
+        "url": "https://api.fameex.com/fapi/v1/trades?symbol=BTCUSDT&limit=10",
+        "status": 404,
+        "elapsed": "459ms",
+        "isJson": true,
+        "dataPreview": "{\"timestamp\":1770457954542,\"status\":404,\"error\":\"Not Found\",\"message\":\"Not Found\",\"path\":\"/fapi/v1/trades\"}",
+        "hasData": false,
+        "dataType": null
+      },
+      "FameEX Swap Ticker": {
+        "url": "https://api.fameex.com/swap/v1/ticker?symbol=BTCUSDT",
+        "status": 404,
+        "elapsed": "461ms",
+        "isJson": true,
+        "dataPreview": "{\"timestamp\":1770457955016,\"status\":404,\"error\":\"Not Found\",\"message\":\"Not Found\",\"path\":\"/swap/v1/ticker\"}",
+        "hasData": false,
+        "dataType": null
+      },
+      "FameEX Swap Orderbook": {
+        "url": "https://api.fameex.com/swap/v1/depth?symbol=BTCUSDT&limit=10",
+        "status": 404,
+        "elapsed": "461ms",
+        "isJson": true,
+        "dataPreview": "{\"timestamp\":1770457955480,\"status\":404,\"error\":\"Not Found\",\"message\":\"Not Found\",\"path\":\"/swap/v1/depth\"}",
+        "hasData": false,
+        "dataType": null
+      },
+      "FameEX Swap Trades": {
+        "url": "https://api.fameex.com/swap/v1/trades?symbol=BTCUSDT&limit=10",
+        "status": 404,
+        "elapsed": "742ms",
+        "isJson": true,
+        "dataPreview": "{\"timestamp\":1770457955951,\"status\":404,\"error\":\"Not Found\",\"message\":\"Not Found\",\"path\":\"/swap/v1/trades\"}",
+        "hasData": false,
+        "dataType": null
+      },
+      "FameEX Contract Ticker": {
+        "url": "https://api.fameex.com/v2/public/contract/ticker",
+        "status": 404,
+        "elapsed": "718ms",
+        "isJson": true,
+        "dataPreview": "{\"timestamp\":1770457956671,\"status\":404,\"error\":\"Not Found\",\"message\":\"Not Found\",\"path\":\"/v2/public/contract/ticker\"}",
+        "hasData": false,
+        "dataType": null
+      },
+      "FameEX Contract Orderbook": {
+        "url": "https://api.fameex.com/v2/public/contract/orderbook?symbol=BTCUSDT&limit=10",
+        "status": 404,
+        "elapsed": "748ms",
+        "isJson": true,
+        "dataPreview": "{\"timestamp\":1770457957409,\"status\":404,\"error\":\"Not Found\",\"message\":\"Not Found\",\"path\":\"/v2/public/contract/orderbook\"}",
+        "hasData": false,
+        "dataType": null
+      },
+      "FameEX Futures Trades (BTCUSDT_PERP)": {
+        "url": "https://api.fameex.com/sapi/v1/futures/trades?symbol=BTCUSDT_PERP&limit=10",
+        "status": 404,
+        "elapsed": "1376ms",
+        "isJson": true,
+        "dataPreview": "{\"timestamp\":1770457958155,\"status\":404,\"error\":\"Not Found\",\"message\":\"Not Found\",\"path\":\"/sapi/v1/futures/trades\"}",
+        "hasData": false,
+        "dataType": null
+      },
+      "FameEX Futures Orderbook (BTCUSDT_PERP)": {
+        "url": "https://api.fameex.com/sapi/v1/futures/depth?symbol=BTCUSDT_PERP&limit=10",
+        "status": 404,
+        "elapsed": "464ms",
+        "isJson": true,
+        "dataPreview": "{\"timestamp\":1770457959531,\"status\":404,\"error\":\"Not Found\",\"message\":\"Not Found\",\"path\":\"/sapi/v1/futures/depth\"}",
+        "hasData": false,
+        "dataType": null
+      }
+    }
+  },
+  "websea": {
+    "spot": {
+      "Websea Spot Orderbook": {
+        "url": "https://oapi.websea.com/v1/spot/depth?symbol=BTC-USDT&size=10",
+        "status": 200,
+        "elapsed": "1123ms",
+        "isJson": true,
+        "dataPreview": "{\"errno\":0,\"errmsg\":\"success\",\"result\":{\"buyType\":1,\"sellType\":1,\"ts\":1770457960688,\"symbol\":\"BTC-USDT\",\"asks\":[[\"67972\",\"1.8665\"],[\"67972\",\"1.0731\"],[\"67972.1\",\"0.0002\"],[\"67973\",\"0.0004\"],[\"67973\",\"1.0053\"],[\"67973.1\",\"0.0008\"],[\"67973.2\",\"0.0013\"],[\"67973.3\",\"1.078\"],[\"67973.4\",\"0.0015\"],[\"67973.5\",\"0.0009\"]],\"bids\":[[\"67971.9\",\"2.1559\"],[\"67971.8\",\"0.0001\"],[\"67971.5\",\"0.0002\"],[\"67971.5\",\"0.047\"],[\"67971.5\",\"1.0339\"],[\"67971.4\",\"1.0379\"],[\"67970.6\",\"0.0002\"],[\"67970.4\",\"0.0047\"],[\"67970.4\",",
+        "hasData": true,
+        "dataType": "orderbook",
+        "asks": 10,
+        "bids": 10
+      },
+      "Websea Spot Trades": {
+        "url": "https://oapi.websea.com/v1/spot/trade?symbol=BTC-USDT&size=10",
+        "status": 200,
+        "elapsed": "333ms",
+        "isJson": true,
+        "dataPreview": "{\"errno\":0,\"errmsg\":\"success\",\"result\":{\"symbol\":\"BTC-USDT\",\"ts\":1770457961030,\"data\":[{\"id\":1770457959279836,\"amount\":\"0.0001\",\"price\":\"67971.9\",\"vol\":\"6.79719\",\"direction\":\"buy\",\"ts\":1770457959},{\"id\":1770457958456854,\"amount\":\"1.8856\",\"price\":\"67980.5\",\"vol\":\"128184.03080\",\"direction\":\"sell\",\"ts\":1770457958},{\"id\":1770457957126044,\"amount\":\"0.016\",\"price\":\"67982.8\",\"vol\":\"1087.7248\",\"direction\":\"buy\",\"ts\":1770457957},{\"id\":1770457955074540,\"amount\":\"0.0277\",\"price\":\"67982.7\",\"vol\":\"1883.12079",
+        "hasData": true,
+        "dataType": "trades/list",
+        "count": 10,
+        "sample": {
+          "id": 1770457959279836,
+          "amount": "0.0001",
+          "price": "67971.9",
+          "vol": "6.79719",
+          "direction": "buy",
+          "ts": 1770457959
+        }
+      },
+      "Websea Spot 24h Ticker": {
+        "url": "https://oapi.websea.com/v1/spot/24kline?symbol=BTC-USDT",
+        "status": 200,
+        "elapsed": "599ms",
+        "isJson": true,
+        "dataPreview": "{\"errno\":0,\"errmsg\":\"success\",\"result\":{\"id\":1770457959,\"amount\":\"66773.607948642140868088\",\"count\":55206,\"open\":\"65799.5\",\"close\":\"67971.9\",\"low\":\"65567.4\",\"high\":\"71743.9\",\"vol\":\"4604741674.4584199999992273078\"}}",
+        "hasData": false,
+        "dataType": null
+      },
+      "Websea Spot Ticker List": {
+        "url": "https://oapi.websea.com/v1/spot/24kline-list",
+        "status": 200,
+        "elapsed": "630ms",
+        "isJson": true,
+        "dataPreview": "{\"errno\":404,\"errmsg\":\"The request address does not exist. Please check the API documentation and try again. Document address: https://webseaex.github.io\"}",
+        "hasData": false,
+        "dataType": null,
+        "errorCode": 404,
+        "errorMsg": "The request address does not exist. Please check the API documentation and try again. Document address: https://webseaex.github.io"
+      },
+      "Websea Spot Symbol List": {
+        "url": "https://oapi.websea.com/v1/spot/symbol-list",
+        "status": 200,
+        "elapsed": "491ms",
+        "isJson": true,
+        "dataPreview": "{\"errno\":404,\"errmsg\":\"The request address does not exist. Please check the API documentation and try again. Document address: https://webseaex.github.io\"}",
+        "hasData": false,
+        "dataType": null,
+        "errorCode": 404,
+        "errorMsg": "The request address does not exist. Please check the API documentation and try again. Document address: https://webseaex.github.io"
+      },
+      "Websea Spot Precision": {
+        "url": "https://oapi.websea.com/v1/spot/precision?symbol=BTC-USDT",
+        "status": 200,
+        "elapsed": "1139ms",
+        "isJson": true,
+        "dataPreview": "{\"errno\":404,\"errmsg\":\"The request address does not exist. Please check the API documentation and try again. Document address: https://webseaex.github.io\"}",
+        "hasData": false,
+        "dataType": null,
+        "errorCode": 404,
+        "errorMsg": "The request address does not exist. Please check the API documentation and try again. Document address: https://webseaex.github.io"
+      },
+      "Websea Spot Orderbook (BTCUSDT)": {
+        "url": "https://oapi.websea.com/v1/spot/depth?symbol=BTCUSDT&size=10",
+        "status": 200,
+        "elapsed": "1337ms",
+        "isJson": true,
+        "dataPreview": "{\"errno\":20501,\"errmsg\":\"base symbol error\"}",
+        "hasData": false,
+        "dataType": null,
+        "errorCode": 20501,
+        "errorMsg": "base symbol error"
+      },
+      "Websea Spot Trades (BTCUSDT)": {
+        "url": "https://oapi.websea.com/v1/spot/trade?symbol=BTCUSDT&size=10",
+        "status": 200,
+        "elapsed": "788ms",
+        "isJson": true,
+        "dataPreview": "{\"errno\":20501,\"errmsg\":\"base symbol error\"}",
+        "hasData": false,
+        "dataType": null,
+        "errorCode": 20501,
+        "errorMsg": "base symbol error"
+      }
+    },
+    "futures": {
+      "Websea Futures Orderbook": {
+        "url": "https://oapi.websea.com/v1/futures/depth?symbol=BTC-USDT&limit=10",
+        "status": 200,
+        "elapsed": "1363ms",
+        "isJson": true,
+        "dataPreview": "{\"errno\":0,\"errmsg\":\"success\",\"result\":{\"buyType\":1,\"sellType\":1,\"ts\":1770457966376,\"symbol\":\"BTC-USDT\",\"asks\":[[\"67926.5\",\"1456\"],[\"67926.6\",\"8352\"],[\"67926.7\",\"5144\"],[\"67926.8\",\"1711\"],[\"67926.9\",\"698\"],[\"67927\",\"1286\"],[\"67927.1\",\"713\"],[\"67927.2\",\"853\"],[\"67927.3\",\"4249\"],[\"67927.4\",\"5218\"]],\"bids\":[[\"67926.2\",\"347\"],[\"67926.1\",\"834\"],[\"67926\",\"5280\"],[\"67925.9\",\"6976\"],[\"67925.8\",\"1314\"],[\"67925.7\",\"705\"],[\"67925.6\",\"1716\"],[\"67925.5\",\"1657\"],[\"67925.4\",\"9640\"],[\"67925.3\",\"3457\"]]}}",
+        "hasData": true,
+        "dataType": "orderbook",
+        "asks": 10,
+        "bids": 10
+      },
+      "Websea Futures Trades": {
+        "url": "https://oapi.websea.com/v1/futures/trade?symbol=BTC-USDT&size=10",
+        "status": 200,
+        "elapsed": "4544ms",
+        "isJson": true,
+        "dataPreview": "{\"errno\":0,\"errmsg\":\"success\",\"result\":{\"symbol\":\"BTC-USDT\",\"ts\":1770457967762,\"data\":[{\"id\":1770457967212240,\"amount\":\"744\",\"price\":\"67919.3\",\"direction\":\"sell\",\"ts\":1770457967},{\"id\":1770457966219752,\"amount\":\"25\",\"price\":\"67926.4\",\"direction\":\"buy\",\"ts\":1770457966},{\"id\":1770457965225254,\"amount\":\"30\",\"price\":\"67941.6\",\"direction\":\"buy\",\"ts\":1770457965},{\"id\":1770457964212162,\"amount\":\"28\",\"price\":\"67941.6\",\"direction\":\"buy\",\"ts\":1770457964},{\"id\":1770457963220711,\"amount\":\"35\",\"price\":\"67941",
+        "hasData": true,
+        "dataType": "trades/list",
+        "count": 10,
+        "sample": {
+          "id": 1770457967212240,
+          "amount": "744",
+          "price": "67919.3",
+          "direction": "sell",
+          "ts": 1770457967
+        }
+      },
+      "Websea Futures 24h Ticker": {
+        "url": "https://oapi.websea.com/v1/futures/24kline?symbol=BTC-USDT",
+        "status": 200,
+        "elapsed": "503ms",
+        "isJson": true,
+        "dataPreview": "{\"errno\":0,\"errmsg\":\"success\",\"result\":{\"id\":1770457972,\"amount\":\"67092837\",\"count\":140246,\"open\":\"65758.2\",\"close\":\"67928.9\",\"low\":\"65520.7\",\"high\":\"71712.5\",\"vol\":\"4631531772.062\",\"trade_vol\":\"67092.837\"}}",
+        "hasData": false,
+        "dataType": null
+      },
+      "Websea Futures Ticker List": {
+        "url": "https://oapi.websea.com/v1/futures/24kline-list",
+        "status": 200,
+        "elapsed": "635ms",
+        "isJson": true,
+        "dataPreview": "{\"errno\":404,\"errmsg\":\"The request address does not exist. Please check the API documentation and try again. Document address: https://webseaex.github.io\"}",
+        "hasData": false,
+        "dataType": null,
+        "errorCode": 404,
+        "errorMsg": "The request address does not exist. Please check the API documentation and try again. Document address: https://webseaex.github.io"
+      },
+      "Websea Futures Contract Info": {
+        "url": "https://oapi.websea.com/v1/futures/futures?symbol=BTC-USDT",
+        "status": 200,
+        "elapsed": "1154ms",
+        "isJson": true,
+        "dataPreview": "{\"errno\":404,\"errmsg\":\"The request address does not exist. Please check the API documentation and try again. Document address: https://webseaex.github.io\"}",
+        "hasData": false,
+        "dataType": null,
+        "errorCode": 404,
+        "errorMsg": "The request address does not exist. Please check the API documentation and try again. Document address: https://webseaex.github.io"
+      },
+      "Websea Futures Symbol": {
+        "url": "https://oapi.websea.com/v1/futures/symbol?symbol=BTC-USDT",
+        "status": 200,
+        "elapsed": "374ms",
+        "isJson": true,
+        "dataPreview": "{\"errno\":404,\"errmsg\":\"The request address does not exist. Please check the API documentation and try again. Document address: https://webseaex.github.io\"}",
+        "hasData": false,
+        "dataType": null,
+        "errorCode": 404,
+        "errorMsg": "The request address does not exist. Please check the API documentation and try again. Document address: https://webseaex.github.io"
+      },
+      "Websea Futures 24h Product": {
+        "url": "https://oapi.websea.com/v1/futures/24hr?symbol=BTC-USDT",
+        "status": 200,
+        "elapsed": "623ms",
+        "isJson": true,
+        "dataPreview": "{\"errno\":0,\"errmsg\":\"success\",\"result\":[{\"open_interest_usd\":54005250.1299,\"symbol\":\"BTC-USDT\",\"base_ccy\":\"BTC\",\"index_price\":67943.78854137548,\"open_interest\":\"66311\",\"base_vol\":\"67087.777\",\"quote_vol\":\"4631188061.891\",\"funding_rate\":-0.00056112,\"high\":\"71712.5\",\"next_funding_rate_times\":1770479999,\"product_type\":\"future\",\"low\":\"65520.7\",\"quote_ccy\":\"USDT\",\"ask\":\"67945.5\",\"bid\":\"67945.3\",\"last_price\":\"67945.4\"}]}",
+        "hasData": false,
+        "dataType": null
+      },
+      "Websea Futures Mark Price": {
+        "url": "https://oapi.websea.com/v1/futures/index-price?symbol=BTC-USDT",
+        "status": 200,
+        "elapsed": "473ms",
+        "isJson": true,
+        "dataPreview": "{\"errno\":404,\"errmsg\":\"The request address does not exist. Please check the API documentation and try again. Document address: https://webseaex.github.io\"}",
+        "hasData": false,
+        "dataType": null,
+        "errorCode": 404,
+        "errorMsg": "The request address does not exist. Please check the API documentation and try again. Document address: https://webseaex.github.io"
+      },
+      "Websea Futures Open Interest": {
+        "url": "https://oapi.websea.com/v1/futures/hold?symbol=BTC-USDT",
+        "status": 200,
+        "elapsed": "371ms",
+        "isJson": true,
+        "dataPreview": "{\"errno\":404,\"errmsg\":\"The request address does not exist. Please check the API documentation and try again. Document address: https://webseaex.github.io\"}",
+        "hasData": false,
+        "dataType": null,
+        "errorCode": 404,
+        "errorMsg": "The request address does not exist. Please check the API documentation and try again. Document address: https://webseaex.github.io"
+      },
+      "Websea Futures Funding Rate": {
+        "url": "https://oapi.websea.com/v1/futures/rate?symbol=BTC-USDT",
+        "status": 200,
+        "elapsed": "367ms",
+        "isJson": true,
+        "dataPreview": "{\"errno\":404,\"errmsg\":\"The request address does not exist. Please check the API documentation and try again. Document address: https://webseaex.github.io\"}",
+        "hasData": false,
+        "dataType": null,
+        "errorCode": 404,
+        "errorMsg": "The request address does not exist. Please check the API documentation and try again. Document address: https://webseaex.github.io"
+      },
+      "Websea Futures Orderbook (BTCUSDT)": {
+        "url": "https://oapi.websea.com/v1/futures/depth?symbol=BTCUSDT&limit=10",
+        "status": 200,
+        "elapsed": "508ms",
+        "isJson": true,
+        "dataPreview": "{\"errno\":20501,\"errmsg\":\"base symbol error\"}",
+        "hasData": false,
+        "dataType": null,
+        "errorCode": 20501,
+        "errorMsg": "base symbol error"
+      },
+      "Websea Futures Trades (BTCUSDT)": {
+        "url": "https://oapi.websea.com/v1/futures/trade?symbol=BTCUSDT&size=10",
+        "status": 200,
+        "elapsed": "760ms",
+        "isJson": true,
+        "dataPreview": "{\"errno\":20501,\"errmsg\":\"base symbol error\"}",
+        "hasData": false,
+        "dataType": null,
+        "errorCode": 20501,
+        "errorMsg": "base symbol error"
+      }
+    }
+  }
+}

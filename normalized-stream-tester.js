@@ -108,9 +108,9 @@ function buildSymbolMap() {
         'Hotcoin': { 'btc_usdt':'BTC_USDT','eth_usdt':'ETH_USDT','sol_usdt':'SOL_USDT' },
         // ─── NovaEx ───
         'NovaEx': { 'SPOT_BTC_USDT':'BTC_USDT','SPOT_ETH_USDT':'ETH_USDT','SPOT_SOL_USDT':'SOL_USDT' },
-        // ─── FameEX (REST) ───
+        // ─── FameEX (WS) ───
         'FameEX': { 'BTCUSDT':'BTC_USDT','ETHUSDT':'ETH_USDT','SOLUSDT':'SOL_USDT','BTC_USDT':'BTC_USDT','ETH_USDT':'ETH_USDT','SOL_USDT':'SOL_USDT' },
-        // ─── Websea (REST) ───
+        // ─── Websea (WS) ───
         'Websea': { 'BTC-USDT':'BTC_USDT','ETH-USDT':'ETH_USDT','SOL-USDT':'SOL_USDT' },
     };
     for (const [exchange, symbols] of Object.entries(map)) {
@@ -969,46 +969,79 @@ const EXCHANGES = {
         }
     },
 
-    // ═══════════════════════ REST API EXCHANGES ═══════════════════════
+    // ═══════════════════════ FameEX (Huobi-style WS) ═══════════════════════
 
     'FameEX': {
-        tier: 3, type: 'rest',
-        symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'],
-        endpoints: {
-            trades: (sym) => `https://api.fameex.com/sapi/v1/trades?symbol=${sym}&limit=10`,
-            orderbook: (sym) => `https://api.fameex.com/v2/public/orderbook?symbol=${sym}&limit=5`,
-        },
-        parseTrades: (resp, sym) => {
-            // Response: [{side, price, qty, time}]
-            if (Array.isArray(resp)) {
-                for (const t of resp) recordTrade('FameEX', sym, t.price, t.qty, t.side);
+        tier: 3,
+        getUrl: () => 'wss://wsapi.fameex.com/v1/ws/stream/public',
+        onOpen: (ws) => {
+            for (const s of ['btcusdt','ethusdt','solusdt']) {
+                ws.send(JSON.stringify({ event: 'sub', params: { channel: `market_${s}_trade_detail` } }));
+                ws.send(JSON.stringify({ event: 'sub', params: { channel: `market_${s}_depth_step0` } }));
             }
         },
-        parseOrderbook: (resp, sym) => {
-            // Response: {asks: [[price,qty]], bids: [[price,qty]], timestamp}
-            if (resp && resp.asks && resp.bids) {
-                recordOrderbook('FameEX', sym, resp.bids, resp.asks);
-            }
-        },
+        parseMessage: (msg) => {
+            try {
+                const d = JSON.parse(msg);
+                if (d.ping) return [];
+                const ch = d.channel || '';
+                if (!ch || ch === 'system') return [];
+                // Trade: {"channel":"market_btcusdt_trade","data":[{amount,price,side,ts,vol}]}
+                if (ch.includes('_trade') && Array.isArray(d.data)) {
+                    const sym = ch.replace('market_','').replace(/_trade.*$/,'').toUpperCase();
+                    for (const t of d.data) recordTrade('FameEX', sym, t.price, t.amount || t.vol, t.side);
+                }
+                // Depth: {"channel":"market_btcusdt_depth_step","tick":{pair,bids,asks}}
+                if (ch.includes('_depth') && d.tick) {
+                    const sym = (d.tick.pair || ch.replace('market_','').replace(/_depth.*$/,'')).toUpperCase();
+                    recordOrderbook('FameEX', sym, d.tick.bids, d.tick.asks);
+                }
+                return [];
+            } catch (e) { return []; }
+        }
     },
 
+    // ═══════════════════════ Websea (Binary UTF-8 WS) ═══════════════════════
+
     'Websea': {
-        tier: 3, type: 'rest',
-        symbols: ['BTC-USDT', 'ETH-USDT', 'SOL-USDT'],
-        endpoints: {
-            trades: (sym) => `https://oapi.websea.com/v1/spot/trade?symbol=${sym}&size=10`,
-            orderbook: (sym) => `https://oapi.websea.com/v1/spot/depth?symbol=${sym}&size=5`,
+        tier: 3,
+        getUrl: () => 'wss://oapi.websea.com/ws/v1/spot/market',
+        handlePing: (parsed, ws) => {
+            if (parsed.op === 'ping' || parsed.ping) { ws.send(JSON.stringify({ op: 'pong' })); return true; }
+            return false;
         },
-        parseTrades: (resp, sym) => {
-            // Response: {errno:0, result: {data: [{price, amount, direction, ts}]}}
-            if (resp?.errno !== 0 || !resp.result?.data) return;
-            for (const t of resp.result.data) recordTrade('Websea', sym, t.price, t.amount, t.direction);
+        onOpen: (ws) => {
+            for (const s of ['BTC-USDT','ETH-USDT','SOL-USDT']) {
+                ws.send(JSON.stringify({ op: 'sub', channel: 'trade', symbol: s }));
+            }
         },
-        parseOrderbook: (resp, sym) => {
-            // Response: {errno:0, result: {asks: [["price","qty"]], bids: [["price","qty"]]}}
-            if (resp?.errno !== 0 || !resp.result) return;
-            recordOrderbook('Websea', sym, resp.result.bids, resp.result.asks);
+        // REST polling fallback for orderbook (no WS depth channel available)
+        customPingSetup: (ws) => {
+            const pollOrderbook = async () => {
+                for (const sym of ['BTC-USDT','ETH-USDT','SOL-USDT']) {
+                    try {
+                        const resp = await httpsRequest(`https://oapi.websea.com/v1/spot/depth?symbol=${sym}&size=5`);
+                        if (resp?.errno === 0 && resp.result) {
+                            recordOrderbook('Websea', sym, resp.result.bids, resp.result.asks);
+                        }
+                    } catch(e) {}
+                }
+            };
+            pollOrderbook();
+            return setInterval(pollOrderbook, 10000);
         },
+        parseMessage: (msg) => {
+            try {
+                const d = JSON.parse(msg);
+                if (d.op === 'sub' || d.event === 'sub' || d.status) return [];
+                const ch = d.channel || '';
+                // Trade: {amount,channel:"trade",direction,id,price,symbol:"BTC-USDT",time,ts}
+                if (ch === 'trade' && d.symbol) {
+                    recordTrade('Websea', d.symbol, d.price, d.amount, d.direction);
+                }
+                return [];
+            } catch (e) { return []; }
+        }
     },
 };
 

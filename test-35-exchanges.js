@@ -5,7 +5,7 @@ const zlib = require('zlib');
 const fs = require('fs');
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 13-EXCHANGE COMPREHENSIVE TESTER
+// 16-EXCHANGE COMPREHENSIVE TESTER
 // Tests WebSocket and REST API streams for all confirmed exchanges
 // Collects data for 2 minutes, reports results, auto-fixes errors
 // ═══════════════════════════════════════════════════════════════════════════
@@ -275,12 +275,19 @@ const EXCHANGES = {
     }
   },
 
-  // ── 8. Darkex ──
+  // ── 8. Darkex (WS + REST) ──
   darkex: {
     name: 'Darkex.com',
-    type: 'rest',
+    type: 'ws',
     spot: true, futures: true,
-    endpoints: {
+    ws: 'wss://ws.darkex.com/kline-api/ws',
+    decompress: true, // gzip compressed messages
+    streams: {
+      spot_orderbook: { event: 'sub', params: { channel: 'market_btcusdt_depth_step0' } },
+      spot_trades: { event: 'sub', params: { channel: 'market_btcusdt_trade_ticker' } }
+    },
+    // REST endpoints still available
+    restEndpoints: {
       spot_ticker: 'https://openapi.darkex.com/sapi/v1/ticker/24hr?symbol=BTCUSDT',
       spot_orderbook: 'https://openapi.darkex.com/sapi/v1/depth?symbol=BTCUSDT&limit=5',
       spot_trades: 'https://openapi.darkex.com/sapi/v1/trades?symbol=BTCUSDT&limit=5',
@@ -361,6 +368,35 @@ const EXCHANGES = {
       spot_trades: 'https://data.azbit.com/api/deals?currencyPairCode=BTC_USDT',
       spot_ticker: 'https://data.azbit.com/api/tickers'
     }
+  },
+
+  // ── 13. BloFin (WS + REST) ──
+  blofin: {
+    name: 'BloFin',
+    type: 'ws',
+    spot: true, futures: false,
+    ws: 'wss://openapi.blofin.com/ws/public',
+    streams: {
+      spot_orderbook: { op: 'subscribe', args: [{ channel: 'books5', instId: 'BTC-USDT' }] },
+      spot_trades: { op: 'subscribe', args: [{ channel: 'trades', instId: 'BTC-USDT' }] }
+    },
+    // REST endpoints also available
+    restEndpoints: {
+      spot_orderbook: 'https://openapi.blofin.com/api/v1/market/books?instId=BTC-USDT&sz=5',
+      spot_trades: 'https://openapi.blofin.com/api/v1/market/trades?instId=BTC-USDT&limit=5'
+    }
+  },
+
+  // ── 14. BVOX / BitVenus ──
+  bvox: {
+    name: 'BVOX (BitVenus)',
+    type: 'rest',
+    spot: true, futures: false,
+    endpoints: {
+      spot_orderbook: 'https://api.bitvenus.me/openapi/quote/v1/depth?symbol=BTCUSDT&limit=5',
+      spot_trades: 'https://api.bitvenus.me/openapi/quote/v1/trades?symbol=BTCUSDT&limit=5',
+      spot_ticker: 'https://api.bitvenus.me/openapi/quote/v1/ticker/24hr?symbol=BTCUSDT'
+    }
   }
 };
 
@@ -416,6 +452,7 @@ async function testWSExchange(key, config) {
             if (parsed.event_rep) return 'skip'; // Bitrue subscription confirmation
             if (parsed.status === 'ok' && !parsed.data && !parsed.tick && !parsed.ch) return 'skip'; // Hotcoin/Bitrue confirm
             if (parsed.event === 'subscribe' && parsed.success === true) return 'skip'; // WOO X confirm
+            if (parsed.event === 'subscribe' && parsed.arg) return 'skip'; // BloFin/OKX-style confirm
             // Error messages
             if (parsed.status === 'error') return null; // Let default handler report error
             // Data messages
@@ -423,6 +460,7 @@ async function testWSExchange(key, config) {
             if (parsed.data || parsed.tick || parsed.ch) return 'done'; // Huobi-style
             if (parsed.topic) return 'done'; // Bybit-style
             if (parsed.type && (parsed.asks || parsed.bids)) return 'done';
+            if (parsed.arg && parsed.action) return 'done'; // BloFin/OKX books snapshot
           } catch (e) {}
           return null;
         }
@@ -458,9 +496,11 @@ async function testWSExchange(key, config) {
             if (parsed.event_rep) return 'skip'; // Bitrue sub confirm
             if (parsed.status === 'ok' && !parsed.data && !parsed.tick && !parsed.ch) return 'skip'; // Hotcoin confirm
             if (parsed.event === 'subscribe' && parsed.success === true) return 'skip'; // WOO X confirm
+            if (parsed.event === 'subscribe' && parsed.arg) return 'skip'; // BloFin/OKX-style confirm
             if (parsed.status === 'error') return null; // error
             if (parsed.method && parsed.params) return 'done';
             if (parsed.data || parsed.tick || parsed.ch || parsed.topic) return 'done';
+            if (parsed.arg && parsed.action) return 'done'; // BloFin/OKX books
           } catch (e) {}
           return null;
         }
@@ -574,8 +614,8 @@ async function main() {
   
   console.log(`
 ╔═══════════════════════════════════════════════════════════════════════════╗
-║     11-EXCHANGE COMPREHENSIVE STREAM TEST                                 ║
-║     Testing WebSocket & REST API streams for ALL 12 remaining exchanges   ║
+║     16-EXCHANGE COMPREHENSIVE STREAM TEST                                 ║
+║     Testing WebSocket & REST API streams for ALL 16 confirmed exchanges   ║
 ║     Duration: 5 minutes max | Auto-retry on failure                       ║
 ╚═══════════════════════════════════════════════════════════════════════════╝
   `);

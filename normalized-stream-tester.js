@@ -21,7 +21,9 @@ const MAX_CONCURRENT = 6;
 // ======================== UTILITIES ========================
 function httpsRequest(url, options = {}) {
     return new Promise((resolve, reject) => {
-        const opts = { ...require('url').parse(url), method: options.method || 'GET',
+        const u = new URL(url);
+        const opts = { hostname: u.hostname, port: u.port || 443, path: u.pathname + u.search,
+            method: options.method || 'GET',
             headers: { 'User-Agent': 'Mozilla/5.0', 'Content-Type': 'application/json', ...(options.headers || {}) } };
         const req = https.request(opts, (res) => {
             let data = ''; res.on('data', c => data += c);
@@ -85,7 +87,7 @@ function buildSymbolMap() {
         // ─── Toobit ───
         'Toobit': { 'BTCUSDT':'BTC_USDT','ETHUSDT':'ETH_USDT','SOLUSDT':'SOL_USDT' },
         // ─── Deepcoin ───
-        'Deepcoin': { 'BTCUSDT':'BTC_USDT','ETHUSDT':'ETH_USDT','SOLUSDT':'SOL_USDT','DeepCoin_BTCUSDT':'BTC_USDT','DeepCoin_ETHUSDT':'ETH_USDT','DeepCoin_SOLUSDT':'SOL_USDT' },
+        'Deepcoin': { 'BTCUSDT':'BTC_USDT','ETHUSDT':'ETH_USDT','SOLUSDT':'SOL_USDT','DeepCoin_BTCUSDT':'BTC_USDT','DeepCoin_ETHUSDT':'ETH_USDT','DeepCoin_SOLUSDT':'SOL_USDT','BTC-USDT':'BTC_USDT','ETH-USDT':'ETH_USDT','SOL-USDT':'SOL_USDT' },
         // ─── XT.com ───
         'XT.com': { 'btc_usdt':'BTC_USDT','eth_usdt':'ETH_USDT','sol_usdt':'SOL_USDT' },
         // ─── Zoomex ───
@@ -204,8 +206,13 @@ const EXCHANGES = {
                 if (d.type === 'match' || d.type === 'last_match') {
                     recordTrade('Coinbase', p, d.price, d.size, d.side);
                 }
-                if (d.type === 'snapshot' || d.type === 'l2update') {
+                if (d.type === 'snapshot') {
                     recordOrderbook('Coinbase', p, d.bids, d.asks);
+                }
+                if (d.type === 'l2update' && d.changes) {
+                    const bids = d.changes.filter(c => c[0] === 'buy').map(c => [c[1], c[2]]);
+                    const asks = d.changes.filter(c => c[0] === 'sell').map(c => [c[1], c[2]]);
+                    if (bids.length || asks.length) recordOrderbook('Coinbase', p, bids, asks);
                 }
                 return [];
             } catch (e) { return []; }
@@ -375,7 +382,9 @@ const EXCHANGES = {
             const t = Math.floor(Date.now()/1000);
             const pairs = ['BTC_USDT','ETH_USDT','SOL_USDT'];
             ws.send(JSON.stringify({ time:t, channel:'spot.trades', event:'subscribe', payload:pairs }));
-            ws.send(JSON.stringify({ time:t, channel:'spot.order_book', event:'subscribe', payload:[...pairs.map(p => [p,5,'1000ms'])].flat() }));
+            for (const p of pairs) {
+                ws.send(JSON.stringify({ time:t, channel:'spot.order_book', event:'subscribe', payload:[p,'5','1000ms'] }));
+            }
         },
         parseMessage: (msg) => {
             try {
@@ -622,7 +631,7 @@ const EXCHANGES = {
     },
 
     'Deepcoin': {
-        tier: 2, noOrderbook: true,
+        tier: 2,
         getUrl: () => 'wss://stream.deepcoin.com/streamlet/trade/public/spot?platform=api',
         pingInterval: 15000, pingMessage: 'ping',
         onOpen: (ws) => {
@@ -630,6 +639,21 @@ const EXCHANGES = {
             ['BTCUSDT','ETHUSDT','SOLUSDT'].forEach((s, i) => {
                 ws.send(JSON.stringify({ SendTopicAction: { Action: '1', FilterValue: `DeepCoin_${s}`, LocalNo: reqId + i, ResumeNo: -2, TopicID: '2' } }));
             });
+        },
+        // REST polling for orderbook (WS TopicID 25 does not deliver depth data)
+        customPingSetup: (ws) => {
+            const pollOrderbook = async () => {
+                for (const sym of ['BTC-USDT','ETH-USDT','SOL-USDT']) {
+                    try {
+                        const resp = await httpsRequest(`https://api.deepcoin.com/deepcoin/market/books?instId=${sym}&sz=5`);
+                        if (resp?.code === '0' && resp.data) {
+                            recordOrderbook('Deepcoin', sym, resp.data.bids, resp.data.asks);
+                        }
+                    } catch(e) {}
+                }
+            };
+            pollOrderbook();
+            return setInterval(pollOrderbook, 10000);
         },
         parseMessage: (msg) => {
             try {
@@ -1111,6 +1135,8 @@ async function testExchange(name, retries = 2) {
     return new Promise((resolve) => {
         const ctx = {};
         let resolved = false;
+        let connected = false;
+        let retrying = false;
         const done = () => { if (!resolved) { resolved = true; resolve(); } };
 
         const timeout = setTimeout(() => {
@@ -1126,7 +1152,7 @@ async function testExchange(name, retries = 2) {
         try {
             ws = new WebSocket(wsUrl, {
                 headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
-                handshakeTimeout: 10000,
+                handshakeTimeout: 15000,
                 perMessageDeflate: exDef.compression ? false : undefined
             });
             registerWs(ws);
@@ -1183,6 +1209,7 @@ async function testExchange(name, retries = 2) {
         }
 
         ws.on('open', () => {
+            connected = true;
             clearTimeout(timeout);
             console.log(`  [${ts()}] ✅ ${name} — Connected`);
             try { exDef.onOpen(ws); } catch(e) { stats[name].errors.push(e.message); }
@@ -1226,11 +1253,26 @@ async function testExchange(name, retries = 2) {
             console.log(`  [${ts()}] ❌ ${name} — ${err.message}`);
             stats[name].errors.push(err.message);
             unregisterWs(ws);
+            if (!connected && !retrying && retries > 0) {
+                retrying = true;
+                console.log(`  [${ts()}] 🔄 ${name} — Retrying (${retries} left)...`);
+                clearTimeout(timeout);
+                try { ws.terminate(); } catch(e){}
+                if (ossWs) try { ossWs.terminate(); } catch(e){}
+                for (const ecWs of extraWsList) { try { ecWs.terminate(); } catch(e){} }
+                setTimeout(() => { resolve(testExchange(name, retries - 1)); }, 2000);
+            }
         });
         ws.on('close', () => {
             if (pingTimer) clearInterval(pingTimer);
             if (customPingTimer) clearInterval(customPingTimer);
             unregisterWs(ws);
+            if (!connected && !retrying && retries > 0) {
+                retrying = true;
+                console.log(`  [${ts()}] 🔄 ${name} — Closed before open, retrying (${retries} left)...`);
+                clearTimeout(timeout);
+                setTimeout(() => { resolve(testExchange(name, retries - 1)); }, 2000);
+            }
         });
     });
 }

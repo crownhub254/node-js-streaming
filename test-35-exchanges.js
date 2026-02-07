@@ -5,8 +5,8 @@ const zlib = require('zlib');
 const fs = require('fs');
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 11-EXCHANGE COMPREHENSIVE TESTER
-// Tests WebSocket and REST API streams for all 12 remaining exchanges
+// 13-EXCHANGE COMPREHENSIVE TESTER
+// Tests WebSocket and REST API streams for all confirmed exchanges
 // Collects data for 2 minutes, reports results, auto-fixes errors
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -225,12 +225,18 @@ const EXCHANGES = {
     }
   },
 
-  // ── 5. FameEX ──
+  // ── 5. FameEX (WS + REST) ──
   fameex: {
     name: 'FameEX.com',
-    type: 'rest',
+    type: 'ws',
     spot: true, futures: false,
-    endpoints: {
+    ws: 'wss://wsapi.fameex.com/v1/ws/stream/public',
+    streams: {
+      spot_orderbook: { event: 'sub', params: { channel: 'market_btcusdt_depth_step0' } },
+      spot_trades: { sub: 'market.btcusdt.trade.detail' }
+    },
+    // REST endpoints still available
+    restEndpoints: {
       spot_ticker: 'https://api.fameex.com/v2/public/ticker',
       spot_orderbook: 'https://api.fameex.com/v2/public/orderbook?symbol=BTCUSDT&limit=5',
       spot_trades: 'https://api.fameex.com/sapi/v1/trades?symbol=BTCUSDT&limit=5'
@@ -318,18 +324,42 @@ const EXCHANGES = {
     ping: { op: 'ping' }
   },
 
-  // ── 11. Websea ──
+  // ── 11. Websea (WS + REST) ──
   websea: {
     name: 'Websea',
-    type: 'rest',
+    type: 'ws',
     spot: true, futures: true,
-    endpoints: {
+    ws: 'wss://oapi.websea.com/ws/v1/spot/market',
+    wsFutures: 'wss://oapi.websea.com/ws/v1/futures/market',
+    binaryUtf8: true, // Messages arrive as binary buffers, decode as utf8
+    streams: {
+      spot_trades: { op: 'sub', channel: 'trade', symbol: 'BTC-USDT' },
+      spot_kline: { op: 'sub', channel: 'kline1min', symbol: 'BTC-USDT' }
+    },
+    futuresStreams: {
+      futures_trades: { op: 'sub', channel: 'trade', symbol: 'BTC-USDT' },
+      futures_kline: { op: 'sub', channel: 'kline1min', symbol: 'BTC-USDT' }
+    },
+    // REST endpoints still available
+    restEndpoints: {
       spot_orderbook: 'https://oapi.websea.com/v1/spot/depth?symbol=BTC-USDT&size=5',
       spot_trades: 'https://oapi.websea.com/v1/spot/trade?symbol=BTC-USDT&size=5',
       spot_ticker: 'https://oapi.websea.com/v1/spot/24kline?symbol=BTC-USDT',
       futures_orderbook: 'https://oapi.websea.com/v1/futures/depth?symbol=BTC-USDT&limit=5',
       futures_trades: 'https://oapi.websea.com/v1/futures/trade?symbol=BTC-USDT&size=5',
       futures_ticker: 'https://oapi.websea.com/v1/futures/24kline?symbol=BTC-USDT'
+    }
+  },
+
+  // ── 12. Azbit ──
+  azbit: {
+    name: 'Azbit.com',
+    type: 'rest',
+    spot: true, futures: false,
+    endpoints: {
+      spot_orderbook: 'https://data.azbit.com/api/orderbook?currencyPairCode=BTC_USDT',
+      spot_trades: 'https://data.azbit.com/api/deals?currencyPairCode=BTC_USDT',
+      spot_ticker: 'https://data.azbit.com/api/tickers'
     }
   }
 };

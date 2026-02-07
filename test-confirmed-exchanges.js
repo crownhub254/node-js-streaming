@@ -326,8 +326,14 @@ const EXCHANGES = {
 
   fameex: {
     name: 'FameEX.com',
-    type: 'rest',
-    endpoints: {
+    type: 'ws',
+    ws: 'wss://wsapi.fameex.com/v1/ws/stream/public',
+    streams: {
+      orderbook: { event: 'sub', params: { channel: 'market_btcusdt_depth_step0' } },
+      trades: { sub: 'market.btcusdt.trade.detail' }
+    },
+    // REST endpoints also available
+    restEndpoints: {
       ticker:    'https://api.fameex.com/v2/public/ticker',
       orderbook: 'https://api.fameex.com/v2/public/orderbook?symbol=BTCUSDT&limit=10',
       trades:    'https://api.fameex.com/sapi/v1/trades?symbol=BTCUSDT&limit=10'
@@ -347,14 +353,36 @@ const EXCHANGES = {
 
   websea: {
     name: 'Websea',
-    type: 'rest',
-    endpoints: {
+    type: 'ws',
+    ws: 'wss://oapi.websea.com/ws/v1/spot/market',
+    wsFutures: 'wss://oapi.websea.com/ws/v1/futures/market',
+    binaryUtf8: true,
+    streams: {
+      spot_trades: { op: 'sub', channel: 'trade', symbol: 'BTC-USDT' },
+      spot_kline: { op: 'sub', channel: 'kline1min', symbol: 'BTC-USDT' }
+    },
+    futuresStreams: {
+      futures_trades: { op: 'sub', channel: 'trade', symbol: 'BTC-USDT' },
+      futures_kline: { op: 'sub', channel: 'kline1min', symbol: 'BTC-USDT' }
+    },
+    // REST endpoints also available
+    restEndpoints: {
       spot_orderbook:    'https://oapi.websea.com/v1/spot/depth?symbol=BTC-USDT&size=10',
       spot_trades:       'https://oapi.websea.com/v1/spot/trade?symbol=BTC-USDT&size=10',
       spot_ticker:       'https://oapi.websea.com/v1/spot/24kline?symbol=BTC-USDT',
       futures_orderbook: 'https://oapi.websea.com/v1/futures/depth?symbol=BTC-USDT&limit=10',
       futures_trades:    'https://oapi.websea.com/v1/futures/trade?symbol=BTC-USDT&size=10',
       futures_ticker:    'https://oapi.websea.com/v1/futures/24kline?symbol=BTC-USDT'
+    }
+  },
+
+  azbit: {
+    name: 'Azbit.com',
+    type: 'rest',
+    endpoints: {
+      orderbook: 'https://data.azbit.com/api/orderbook?currencyPairCode=BTC_USDT',
+      trades:    'https://data.azbit.com/api/deals?currencyPairCode=BTC_USDT',
+      ticker:    'https://data.azbit.com/api/tickers'
     }
   }
 };
@@ -380,6 +408,9 @@ function wsMessageHandler(msg, ws) {
     if (parsed.event === 'subscribe' && parsed.success === true) return 'skip';
     if (parsed.code === 0 && parsed.msg === 'SUCCESS' && parsed.method === 'subscribe') return 'skip';
     if (parsed.code === 200 && parsed.msg === 'SUCCESS' && parsed.status === 'ok' && !parsed.data && !parsed.tick) return 'skip'; // Hotcoin sub confirmation
+    if (parsed.errno === 0 && parsed.errmsg === 'success' && !parsed.amount && !parsed.id) return 'skip'; // Websea sub confirmation
+    if (parsed.channel === 'system' && parsed.data && parsed.data.status === 'ready') return 'skip'; // FameEX system ready
+    if (parsed.event_rep === '' && parsed.status === 'ok' && !parsed.data && !parsed.tick) return 'skip'; // FameEX sub confirmation
     // Errors
     if (parsed.status === 'error') return 'error';
     if (parsed.error && parsed.error !== null && !parsed.result) return 'error';
@@ -389,6 +420,10 @@ function wsMessageHandler(msg, ws) {
     if (parsed.topic) return 'data';
     if (parsed.type && (parsed.asks || parsed.bids)) return 'data';
     if (parsed.result && (parsed.result.asks || parsed.result.bids || parsed.result.trades)) return 'data';
+    if (parsed.channel && (parsed.amount || parsed.price || parsed.direction)) return 'data'; // Websea trade data
+    if (parsed.channel && parsed.symbol && parsed.open && parsed.close) return 'data'; // Websea kline data
+    if (parsed.tick && (parsed.tick.bids || parsed.tick.asks || parsed.tick.pair)) return 'data'; // FameEX depth data
+    if (parsed.channel && parsed.channel.startsWith('market_') && (parsed.data || parsed.tick)) return 'data'; // FameEX trade/depth
   } catch (e) {}
   return null;
 }

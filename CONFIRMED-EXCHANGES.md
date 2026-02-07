@@ -547,7 +547,7 @@ webseaFuturesWS.on('open', () => {
 | Darkex ticker | Ticker endpoint requires API key (`code:-1002`), orderbook+trades still public |
 | Bullish ticker | `/v1/markets` returns all markets (too large, timeouts) |
 | FameEX futures | All futures/perpetual/fapi/swap/contract path patterns return 404. Spot-only API. |
-| Hotcoin depth | Server accepts subscription but never sends depth/detail data; only trades work via WS |
+| Hotcoin depth | WS depth subscription works but data arrives slowly (~20s+). Server confirms `status:ok` immediately; depth updates follow after initial delay |
 
 ---
 

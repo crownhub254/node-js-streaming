@@ -1,13 +1,13 @@
 # CONFIRMED WORKING EXCHANGES - Data Streams Verified
 
-**Test Date:** February 6, 2026 (Updated - Deep 5-min Test)  
-**Test Duration:** 189.3s verification + 943.1s deep test  
+**Test Date:** February 8, 2026 (Updated - WS+REST Upgrade Test)  
+**Test Duration:** 141.6s  
 **Symbol Tested:** BTC/USDT  
-**Success Rate:** 100% (17/17 exchanges, all streams verified)
+**Success Rate:** 93.75% (45/48 streams across 17 exchanges)
 
 ---
 
-## ✅ WebSocket Exchanges - Fully Working (8)
+## ✅ WebSocket Exchanges - Fully Working (5)
 
 ### 1. Biconomy.com
 - **Type:** WebSocket  
@@ -105,13 +105,27 @@
 
 ---
 
-## ✅ REST API Exchanges - Working (5)
+## ✅ REST API Exchanges - Working (3)
 
 ### 6. Bullish.com
-- **Type:** REST API  
+- **Type:** WebSocket + REST API  
 - **Spot:** ✅ | **Futures:** ❌ (spot-only institutional exchange)  
-- **Base URL:** `https://api.exchange.bullish.com/trading-api/v1`  
-- **Confirmed Endpoints (3/3):**
+- **WebSocket URL (Orderbook):** `wss://api.exchange.bullish.com/trading-api/v1/market-data/orderbook`  
+- **WebSocket URL (Trades):** `wss://api.exchange.bullish.com/trading-api/v1/market-data/trades`  
+- **REST Base URL:** `https://api.exchange.bullish.com/trading-api/v1`  
+- **API Style:** JSON-RPC 2.0  
+- **Symbol Format:** `BTCUSDC` (WS), `BTCUSDT` (REST)  
+- **Confirmed WebSocket Streams (2/2):**
+
+| Stream | Subscription Message | Status |
+|--------|---------------------|--------|
+| Orderbook (L2) | `{"jsonrpc":"2.0","type":"command","method":"subscribe","params":{"topic":"l2Orderbook","symbol":"BTCUSDC"},"id":"1611082473000"}` | ✅ Working |
+| Trades | `{"jsonrpc":"2.0","type":"command","method":"subscribe","params":{"topic":"anonymousTrades","symbol":"BTCUSDC"},"id":"1611082473000"}` | ✅ Working |
+
+- **WS Orderbook Data:** `{"type":"snapshot","dataType":"V1TALevel2","data":{"timestamp":"...","bids":["69595.6000","0.00025698",...],"asks":[...]}}`
+- **WS Trade Data:** `{"type":"snapshot","dataType":"V1TAAnonymousTradeUpdate","data":{"symbol":"BTCUSDC","trades":[{"symbol":"BTCUSDC","price":"69150","quantity":"0.01","side":"BUY"},...]}}`
+- **Note:** Separate WS endpoints for orderbook vs trades. Unauthenticated. L2 provides full depth with snapshots+updates. Heartbeat every 30s.
+- **Confirmed REST Endpoints (3/3):**
 
 | Endpoint | URL | Status |
 |----------|-----|--------|
@@ -119,7 +133,7 @@
 | Orderbook | `/markets/BTCUSDT/orderbook/hybrid` | ✅ 200 OK |
 | Trades | `/markets/BTCUSDT/trades` | ✅ 200 OK |
 
-- **Sample Data:** `{"symbol":"BTCUSDT","bids":[{"price":"64820.300","priceLevelQuantity":"0.00188773","type":"bid"}...]}`
+- **Sample REST Data:** `{"symbol":"BTCUSDT","bids":[{"price":"64820.300","priceLevelQuantity":"0.00188773","type":"bid"}...]}`
 
 ---
 
@@ -155,9 +169,21 @@
 ---
 
 ### 8. Bitrue.com
-- **Type:** REST API  
+- **Type:** WebSocket + REST API  
 - **Spot:** ✅ | **Futures:** ✅  
-- **Base URL:** `https://openapi.bitrue.com/api/v1`  
+- **WebSocket URL (Spot):** `wss://ws.bitrue.com/market/ws`  
+- **REST Base URL:** `https://openapi.bitrue.com/api/v1`  
+- **Compression:** gzip (WS messages must be decompressed)  
+- **Ping:** `{"event":"ping"}` every 30s  
+- **Symbol Format:** `BTCUSDT` (concatenated, uppercase)  
+- **Confirmed WebSocket Streams (Spot - 1/1):**
+
+| Stream | Subscription Message | Status |
+|--------|---------------------|--------|
+| Orderbook | `{"event":"sub","params":{"cb_id":"BTCUSDT","channel":"market_BTCUSDT_simple_depth_step0"}}` | ✅ Working |
+
+- **WS Orderbook Data:** `{"channel":"market_BTCUSDT_simple_depth_step0","tick":{"buys":[["69628.38","3.4585"],...],"asks":[["69628.39","0.0009"],...]}}`
+- **WS Notes:** Spot trades channel not available via WS (use REST). Futures WS (`wss://wsapi.bitrue.com`) returns 502.
 - **Confirmed Endpoints (3/4):**
 
 | Endpoint | URL | Status |
@@ -418,6 +444,24 @@ zoomexFuturesWS.on('open', () => {
   zoomexFuturesWS.send(JSON.stringify({"op":"subscribe","args":["kline.1.BTCUSDT"]}));
 });
 
+// 6. Bullish (Spot) - JSON-RPC 2.0 style, separate WS for orderbook vs trades
+const bullishOBWS = new WebSocket('wss://api.exchange.bullish.com/trading-api/v1/market-data/orderbook');
+bullishOBWS.on('open', () => {
+  bullishOBWS.send(JSON.stringify({"jsonrpc":"2.0","type":"command","method":"subscribe","params":{"topic":"l2Orderbook","symbol":"BTCUSDC"},"id":"1611082473000"}));
+});
+const bullishTradesWS = new WebSocket('wss://api.exchange.bullish.com/trading-api/v1/market-data/trades');
+bullishTradesWS.on('open', () => {
+  bullishTradesWS.send(JSON.stringify({"jsonrpc":"2.0","type":"command","method":"subscribe","params":{"topic":"anonymousTrades","symbol":"BTCUSDC"},"id":"1611082473000"}));
+});
+
+// 8. Bitrue (Spot) - gzip compressed orderbook
+const bitrueWS = new WebSocket('wss://ws.bitrue.com/market/ws');
+bitrueWS.on('open', () => {
+  bitrueWS.send(JSON.stringify({"event":"sub","params":{"cb_id":"BTCUSDT","channel":"market_BTCUSDT_simple_depth_step0"}}));
+});
+// Ping every 30s: {"event":"ping"}
+// Messages are gzip compressed — must decompress
+
 // 9. FameEX (Spot) - Huobi-style channels
 const fameexWS = new WebSocket('wss://wsapi.fameex.com/v1/ws/stream/public');
 fameexWS.on('open', () => {
@@ -446,7 +490,7 @@ webseaFuturesWS.on('open', () => {
 // REST API ENDPOINTS (copy-paste ready)
 // ═══════════════════════════════════════════════
 
-// 6. Bullish
+// 6. Bullish (REST also available)
 // GET https://api.exchange.bullish.com/trading-api/v1/markets/BTCUSDT/orderbook/hybrid
 // GET https://api.exchange.bullish.com/trading-api/v1/markets/BTCUSDT/trades
 
@@ -454,7 +498,10 @@ webseaFuturesWS.on('open', () => {
 // GET https://openapi.darkex.com/sapi/v1/depth?symbol=BTCUSDT&limit=5
 // GET https://openapi.darkex.com/sapi/v1/trades?symbol=BTCUSDT&limit=5
 
-// 8. Bitrue
+// 8. Bitrue (WS + REST, spot orderbook WS, gzip)
+// WS: wss://ws.bitrue.com/market/ws
+// WS Subscribe Orderbook: {"event":"sub","params":{"cb_id":"BTCUSDT","channel":"market_BTCUSDT_simple_depth_step0"}}
+// REST:
 // GET https://openapi.bitrue.com/api/v1/ticker/24hr?symbol=BTCUSDT
 // GET https://openapi.bitrue.com/api/v1/depth?symbol=BTCUSDT&limit=5
 // GET https://openapi.bitrue.com/api/v1/trades?symbol=BTCUSDT&limit=5
@@ -520,18 +567,16 @@ webseaFuturesWS.on('open', () => {
 
 | Category | Count | Exchanges |
 |----------|-------|-----------|
-| ✅ WS Fully Working | 8 | Biconomy, NovaEx, XT.com, Hotcoin, Zoomex, FameEX, Websea, BloFin |
-| ✅ REST Working | 6 | Bullish, Bitrue, OrangeX, Azbit, BVOX, Trubit Pro |
-| ✅ WS + REST | 4 | FameEX, Websea, Darkex, BloFin |
+| ✅ WS Fully Working | 5 | Biconomy, NovaEx, XT.com, Hotcoin, Zoomex |
+| ✅ REST Only | 3 | OrangeX, BVOX, Trubit Pro |
+| ✅ WS + REST | 7 | Bullish, Darkex, Bitrue, FameEX, Websea, BloFin, Azbit (REST only, WS 404) |
 
-| **Total Confirmed** | **17** | **64+ streams across 17 exchanges** |
-
-### Stream Coverage on Working Exchanges
+| **Total Confirmed** | **17** | **48 orderbook+trades streams tested, 45 passed** |
 
 | Stream Type | Available On |
 |-------------|-------------|
-| **Orderbook** | Biconomy, NovaEx, XT.com (Spot+Futures), Zoomex (Spot+Futures), FameEX (WS), Darkex (WS+REST), BloFin (WS+REST), Bullish, Bitrue, OrangeX (Futures), Websea (REST Spot+Futures), Azbit, BVOX, Trubit Pro |
-| **Trades** | Biconomy, NovaEx, XT.com, Hotcoin, Zoomex (Spot+Futures), FameEX (WS), Darkex (WS+REST), BloFin (WS+REST), Bullish, Bitrue, OrangeX (Spot+Futures), Websea (WS+REST Spot+Futures), Azbit, BVOX, Trubit Pro |
+| **Orderbook** | Biconomy, NovaEx, XT.com (Spot+Futures), Zoomex (Spot+Futures), FameEX (WS), Darkex (WS+REST), BloFin (WS+REST), Bullish (WS+REST), Bitrue (WS+REST), OrangeX (Futures), Websea (REST Spot+Futures), Azbit, BVOX, Trubit Pro |
+| **Trades** | Biconomy, NovaEx, XT.com, Hotcoin, Zoomex (Spot+Futures), FameEX (WS), Darkex (WS+REST), BloFin (WS+REST), Bullish (WS+REST), Bitrue (REST), OrangeX (Spot+Futures), Websea (WS+REST Spot+Futures), Azbit, BVOX, Trubit Pro |
 | **Ticker** | Biconomy, XT.com (Spot+Futures), Hotcoin (REST), Zoomex (Spot+Futures), Bitrue, FameEX (REST), OrangeX (Futures), Websea (REST Spot+Futures), Azbit, BVOX, Trubit Pro |
 | **Kline** | Websea (WS Spot+Futures), Darkex (REST) |
 
@@ -546,6 +591,11 @@ webseaFuturesWS.on('open', () => {
 | Ju.com / JuCoin | `api.jucoin.com` resolves (openresty) but ALL 15+ path patterns return 404; WS rejected |
 | Darkex ticker | Ticker endpoint requires API key (`code:-1002`), orderbook+trades still public |
 | Bullish ticker | `/v1/markets` returns all markets (too large, timeouts) |
+| Bitrue futures WS | `wss://wsapi.bitrue.com` returns 502; `wss://fapi.bitrue.com/*` returns HTTP 200 (no WS upgrade). Spot trades WS channel returns `status:error`. |
+| Azbit WS | `wss://ws.azbit.com` returns 404 on all paths (/ws, /hub, /signalr, /socket.io). REST only. |
+| BloFin futures WS | `BTC-USDT-SWAP` instId returns error 60012 \"Invalid request\". WS is spot-only. |
+| Trubit Pro spot WS | `wss://ws.trubit.com` returns 403 (geo-blocked). |
+| Trubit Pro futures WS | `wss://api-futures.trubit.com/ws/market` connects but all JSON formats return \"failed to deSerialize\". |
 | FameEX futures | All futures/perpetual/fapi/swap/contract path patterns return 404. Spot-only API. |
 | Hotcoin depth | WS depth subscription works but data arrives slowly (~20s+). Server confirms `status:ok` immediately; depth updates follow after initial delay |
 

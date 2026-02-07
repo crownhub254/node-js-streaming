@@ -4,8 +4,9 @@ const http = require('http');
 const zlib = require('zlib');
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 17-EXCHANGE ORDERBOOK + TRADES DEPTH TEST
-// Tests ONLY orderbook and trades streams for all confirmed exchanges
+// 17-EXCHANGE ORDERBOOK + TRADES DEPTH TEST (WS+REST UPGRADE)
+// Tests orderbook and trades streams — now with new WS endpoints for
+// Bitrue, Bullish, Azbit, Trubit Pro + BloFin futures
 // ═══════════════════════════════════════════════════════════════════════════
 
 const TIMEOUT = 20000; // 20s per stream
@@ -243,12 +244,30 @@ const TESTS = [
     }
   },
 
-  // ── 6. Bullish (REST) ──
+  // ── 6. Bullish (WS + REST) ──
   {
-    name: 'Bullish', type: 'rest',
+    name: 'Bullish', type: 'ws+rest',
     streams: {
-      orderbook: 'https://api.exchange.bullish.com/trading-api/v1/markets/BTCUSDT/orderbook/hybrid',
-      trades: 'https://api.exchange.bullish.com/trading-api/v1/markets/BTCUSDT/trades'
+      ws_orderbook: {
+        url: 'wss://api.exchange.bullish.com/trading-api/v1/market-data/orderbook',
+        sub: { jsonrpc: '2.0', type: 'command', method: 'subscribe', params: { topic: 'l2Orderbook', symbol: 'BTCUSDC' }, id: '1611082473000' },
+        onMsg: (p) => {
+          if (p.type === 'snapshot' || p.type === 'update') return 'data';
+          if (p.dataType && p.data) return 'data';
+          return 'skip';
+        }
+      },
+      ws_trades: {
+        url: 'wss://api.exchange.bullish.com/trading-api/v1/market-data/trades',
+        sub: { jsonrpc: '2.0', type: 'command', method: 'subscribe', params: { topic: 'anonymousTrades', symbol: 'BTCUSDC' }, id: '1611082473000' },
+        onMsg: (p) => {
+          if (p.type === 'update' || p.type === 'snapshot') return 'data';
+          if (p.dataType && p.data) return 'data';
+          return 'skip';
+        }
+      },
+      rest_orderbook: 'https://api.exchange.bullish.com/trading-api/v1/markets/BTCUSDT/orderbook/hybrid',
+      rest_trades: 'https://api.exchange.bullish.com/trading-api/v1/markets/BTCUSDT/trades'
     }
   },
 
@@ -271,12 +290,23 @@ const TESTS = [
     }
   },
 
-  // ── 8. Bitrue (REST) ──
+  // ── 8. Bitrue (WS spot orderbook + REST) ──
+  // WS spot trades: channel not available. Futures WS (wsapi.bitrue.com) returns 502.
   {
-    name: 'Bitrue', type: 'rest',
+    name: 'Bitrue', type: 'ws+rest', decompress: true,
     streams: {
-      orderbook: 'https://openapi.bitrue.com/api/v1/depth?symbol=BTCUSDT&limit=5',
-      trades: 'https://openapi.bitrue.com/api/v1/trades?symbol=BTCUSDT&limit=5'
+      ws_spot_orderbook: {
+        url: 'wss://ws.bitrue.com/market/ws',
+        sub: { event: 'sub', params: { cb_id: 'BTCUSDT', channel: 'market_BTCUSDT_simple_depth_step0' } },
+        ping: { event: 'ping' },
+        onMsg: (p) => {
+          if (p.channel && p.tick) return 'data';
+          if (p.ts && (p.tick || p.channel)) return 'data';
+          return 'skip';
+        }
+      },
+      rest_orderbook: 'https://openapi.bitrue.com/api/v1/depth?symbol=BTCUSDT&limit=5',
+      rest_trades: 'https://openapi.bitrue.com/api/v1/trades?symbol=BTCUSDT&limit=5'
     }
   },
 
@@ -348,12 +378,13 @@ const TESTS = [
     }
   },
 
-  // ── 12. Azbit (REST) ──
+  // ── 12. Azbit (REST only) ──
+  // WS: wss://ws.azbit.com returns 404 on all paths. No public WS available.
   {
     name: 'Azbit', type: 'rest',
     streams: {
-      orderbook: 'https://data.azbit.com/api/orderbook?currencyPairCode=BTC_USDT',
-      trades: 'https://data.azbit.com/api/deals?currencyPairCode=BTC_USDT'
+      rest_orderbook: 'https://data.azbit.com/api/orderbook?currencyPairCode=BTC_USDT',
+      rest_trades: 'https://data.azbit.com/api/deals?currencyPairCode=BTC_USDT'
     }
   },
 
@@ -371,6 +402,7 @@ const TESTS = [
         sub: { op: 'subscribe', args: [{ channel: 'trades', instId: 'BTC-USDT' }] },
         onMsg: (p) => (p.arg && p.data) ? 'data' : 'skip'
       },
+      // WS futures: BTC-USDT-SWAP returns error 60012 "Invalid request". WS is spot-only.
       rest_orderbook: 'https://openapi.blofin.com/api/v1/market/books?instId=BTC-USDT&sz=5',
       rest_trades: 'https://openapi.blofin.com/api/v1/market/trades?instId=BTC-USDT&limit=5'
     }
@@ -385,12 +417,14 @@ const TESTS = [
     }
   },
 
-  // ── 15. Trubit Pro (REST) ──
+  // ── 15. Trubit Pro (REST only) ──
+  // WS spot: wss://ws.trubit.com returns 403 (geo-blocked).
+  // WS futures: wss://api-futures.trubit.com/ws/market connects but "failed to deSerialize" on all JSON formats.
   {
     name: 'Trubit Pro', type: 'rest',
     streams: {
-      orderbook: 'https://api-spot.trubit.com/openapi/quote/v1/depth?symbol=BTCUSDT&limit=5',
-      trades: 'https://api-spot.trubit.com/openapi/quote/v1/trades?symbol=BTCUSDT&limit=5'
+      rest_orderbook: 'https://api-spot.trubit.com/openapi/quote/v1/depth?symbol=BTCUSDT&limit=5',
+      rest_trades: 'https://api-spot.trubit.com/openapi/quote/v1/trades?symbol=BTCUSDT&limit=5'
     }
   }
 ];
@@ -455,8 +489,8 @@ async function main() {
 
   console.log(`
 ╔═══════════════════════════════════════════════════════════════════╗
-║  17-EXCHANGE ORDERBOOK + TRADES DEPTH TEST                       ║
-║  Testing orderbook and trades streams ONLY                       ║
+║  17-EXCHANGE ORDERBOOK+TRADES WS+REST UPGRADE TEST              ║
+║  New WS: Bitrue, Bullish, Azbit, Trubit Pro + BloFin futures     ║
 ║  Started: ${new Date().toISOString()}                ║
 ╚═══════════════════════════════════════════════════════════════════╝
 `);

@@ -8,14 +8,14 @@
         "ok": true,
         "error": null,
         "msgs": 1,
-        "sample": "{\"method\":\"depth.update\",\"params\":[true,{\"asks\":[[\"69404.32\",\"0.08351\"],[\"69404.33\",\"0.06948\"],[\"69404.34\",\"0.03484\"],[\"69404.35\",\"0.11708\"],[\"69404.36\",\"0.12916\"],[\"69404.37\",\"0.03791\"],[\"69404.38\",\""
+        "sample": "{\"method\":\"depth.update\",\"params\":[true,{\"asks\":[[\"69642.03\",\"0.10794\"],[\"69642.04\",\"0.14286\"],[\"69642.05\",\"0.09164\"],[\"69642.06\",\"0.06648\"],[\"69642.07\",\"0.04122\"],[\"69642.08\",\"0.08322\"],[\"69642.09\",\""
       },
       "trades": {
         "method": "WS",
         "ok": true,
         "error": null,
         "msgs": 1,
-        "sample": "{\"method\":\"deals.update\",\"params\":[\"BTC_USDT\",[{\"market\":\"BTC_USDT\",\"id\":5519336660,\"price\":\"69397.99\",\"amount\":\"0.05608\",\"time\":1770481906.784579,\"type\":\"buy\"},{\"market\":\"BTC_USDT\",\"id\":5519336535,\"p"
+        "sample": "{\"method\":\"deals.update\",\"params\":[\"BTC_USDT\",[{\"market\":\"BTC_USDT\",\"id\":5520976951,\"price\":\"69443.22\",\"amount\":\"0.04067\",\"time\":1770501494.890468,\"type\":\"buy\"},{\"market\":\"BTC_USDT\",\"id\":5520976899,\"p"
       }
     }
   },
@@ -28,7 +28,7 @@
         "ok": true,
         "error": null,
         "msgs": 1,
-        "sample": "{\"topic\":\"SPOT_BTC_USDT@orderbook\",\"ts\":1770481910042,\"data\":{\"symbol\":\"SPOT_BTC_USDT\",\"asks\":[[69390.81,0.288222],[69390.85,0.102180],[69390.86,0.247500],[69391.08,0.017260],[69391.56,0.039680],[6939"
+        "sample": "{\"topic\":\"SPOT_BTC_USDT@orderbook\",\"ts\":1770501499035,\"data\":{\"symbol\":\"SPOT_BTC_USDT\",\"asks\":[[69443.88,0.288002],[69444.23,0.000080],[69444.90,0.000080],[69445.49,0.000160],[69445.50,0.475760],[6944"
       },
       "trades": {
         "method": "WS",
@@ -48,21 +48,21 @@
         "ok": true,
         "error": null,
         "msgs": 1,
-        "sample": "{\"topic\":\"depth_update\",\"event\":\"depth_update@btc_usdt\",\"data\":{\"s\":\"btc_usdt\",\"fi\":1769664915571,\"i\":1769664915577,\"t\":1770481931230,\"a\":[[\"69337.31\",\"0.00000\"],[\"69337.33\",\"0.25367\"],[\"69337.40\",\"0."
+        "sample": "{\"topic\":\"depth_update\",\"event\":\"depth_update@btc_usdt\",\"data\":{\"s\":\"btc_usdt\",\"fi\":1769667765565,\"i\":1769667765572,\"t\":1770501520429,\"a\":[[\"69435.55\",\"11.28759\"],[\"69435.64\",\"1.38594\"],[\"69435.72\",\"0"
       },
       "spot_trades": {
         "method": "WS",
         "ok": true,
         "error": null,
         "msgs": 1,
-        "sample": "{\"topic\":\"trade\",\"event\":\"trade@btc_usdt\",\"data\":{\"s\":\"btc_usdt\",\"i\":\"590473836542073216\",\"t\":1770481933105,\"p\":\"69329.46\",\"q\":\"0.00799\",\"b\":false}}"
+        "sample": "{\"topic\":\"trade\",\"event\":\"trade@btc_usdt\",\"data\":{\"s\":\"btc_usdt\",\"i\":\"590555996024248704\",\"t\":1770501521452,\"p\":\"69435.55\",\"q\":\"0.00031\",\"b\":false}}"
       },
       "futures_orderbook": {
         "method": "WS",
         "ok": true,
         "error": null,
         "msgs": 1,
-        "sample": "{\"topic\":\"depth_update\",\"event\":\"depth_update@btc_usdt,100ms\",\"data\":{\"s\":\"btc_usdt\",\"pu\":\"1347924066810\",\"fu\":\"1347924066811\",\"u\":\"1347924066812\",\"a\":[[\"69320.4\",\"5342\"]],\"b\":[[\"33333.3\",\"4\"]],\"t\":17"
+        "sample": "{\"topic\":\"depth_update\",\"event\":\"depth_update@btc_usdt,100ms\",\"data\":{\"s\":\"btc_usdt\",\"pu\":\"1347927188334\",\"fu\":\"1347927188335\",\"u\":\"1347927188352\",\"a\":[[\"69403.6\",\"218769\"],[\"69403.7\",\"2494\"],[\"69403."
       }
     }
   },
@@ -75,14 +75,14 @@
         "ok": true,
         "error": null,
         "msgs": 1,
-        "sample": "{\"ch\":\"market.btc_usdt.depth.step0\",\"code\":200,\"msg\":\"SUCCESS\",\"status\":\"ok\",\"ts\":1770481937917}"
+        "sample": "{\"ch\":\"market.btc_usdt.depth.step0\",\"code\":200,\"msg\":\"SUCCESS\",\"status\":\"ok\",\"ts\":1770501524880}"
       },
       "trades": {
         "method": "WS",
         "ok": true,
         "error": null,
         "msgs": 1,
-        "sample": "{\"ch\":\"market.btc_usdt.trade.detail\",\"code\":200,\"msg\":\"SUCCESS\",\"status\":\"ok\",\"ts\":1770481939585}"
+        "sample": "{\"ch\":\"market.btc_usdt.trade.detail\",\"code\":200,\"msg\":\"SUCCESS\",\"status\":\"ok\",\"ts\":1770501526256}"
       }
     }
   },
@@ -95,46 +95,61 @@
         "ok": true,
         "error": null,
         "msgs": 1,
-        "sample": "{\"topic\":\"orderbook.50.BTCUSDT\",\"ts\":1770481940869,\"type\":\"snapshot\",\"data\":{\"s\":\"BTCUSDT\",\"b\":[[\"69379.2\",\"0.051771\"],[\"69374.9\",\"0.03308\"],[\"69371.4\",\"0.000109\"],[\"69368.5\",\"0.022144\"],[\"69368.4\",\"0"
+        "sample": "{\"topic\":\"orderbook.50.BTCUSDT\",\"ts\":1770501527370,\"type\":\"snapshot\",\"data\":{\"s\":\"BTCUSDT\",\"b\":[[\"69429.5\",\"0.120246\"],[\"69427.9\",\"0.032625\"],[\"69427.3\",\"0.000429\"],[\"69426.6\",\"0.002071\"],[\"69426\",\"0."
       },
       "spot_trades": {
         "method": "WS",
         "ok": true,
         "error": null,
         "msgs": 1,
-        "sample": "{\"topic\":\"publicTrade.BTCUSDT\",\"ts\":1770481943012,\"type\":\"snapshot\",\"data\":[{\"i\":\"2290000001021943585\",\"T\":1770481943011,\"p\":\"69361.9\",\"v\":\"0.00261\",\"S\":\"Sell\",\"seq\":98548553384,\"s\":\"BTCUSDT\",\"BT\":fal"
+        "sample": "{\"topic\":\"publicTrade.BTCUSDT\",\"ts\":1770501528535,\"type\":\"snapshot\",\"data\":[{\"i\":\"2290000001022142203\",\"T\":1770501528534,\"p\":\"69437.8\",\"v\":\"0.002549\",\"S\":\"Sell\",\"seq\":98567726086,\"s\":\"BTCUSDT\",\"BT\":fa"
       },
       "futures_orderbook": {
         "method": "WS",
         "ok": true,
         "error": null,
         "msgs": 1,
-        "sample": "{\"topic\":\"orderbook.50.BTCUSDT\",\"type\":\"snapshot\",\"ts\":1770481943358,\"data\":{\"s\":\"BTCUSDT\",\"b\":[[\"69327.30\",\"19.718\"],[\"69327.20\",\"7.780\"],[\"69327.10\",\"19.093\"],[\"69321.60\",\"18.697\"],[\"69321.50\",\"7.44"
+        "sample": "{\"topic\":\"orderbook.50.BTCUSDT\",\"type\":\"snapshot\",\"ts\":1770501528858,\"data\":{\"s\":\"BTCUSDT\",\"b\":[[\"69403.40\",\"6.438\"],[\"69402.70\",\"30.942\"],[\"69402.30\",\"27.378\"],[\"69401.90\",\"29.952\"],[\"69400.70\",\"35.4"
       },
       "futures_trades": {
         "method": "WS",
         "ok": true,
         "error": null,
         "msgs": 1,
-        "sample": "{\"topic\":\"publicTrade.BTCUSDT\",\"type\":\"snapshot\",\"ts\":1770481945359,\"data\":[{\"T\":1770481945358,\"s\":\"BTCUSDT\",\"S\":\"Sell\",\"v\":\"0.006\",\"p\":\"69323.10\",\"L\":\"MinusTick\",\"i\":\"51e250a6-c204-5058-90b2-2a76efb8"
+        "sample": "{\"topic\":\"publicTrade.BTCUSDT\",\"type\":\"snapshot\",\"ts\":1770501530289,\"data\":[{\"T\":1770501530288,\"s\":\"BTCUSDT\",\"S\":\"Sell\",\"v\":\"0.032\",\"p\":\"69403.40\",\"L\":\"ZeroMinusTick\",\"i\":\"03e95a3f-66be-5958-be72-a6e2"
       }
     }
   },
   "Bullish": {
     "name": "Bullish",
-    "type": "rest",
+    "type": "ws+rest",
     "streams": {
-      "orderbook": {
-        "method": "REST",
-        "ok": false,
-        "error": "Timeout",
-        "sample": "Timeout"
+      "ws_orderbook": {
+        "method": "WS",
+        "ok": true,
+        "error": null,
+        "msgs": 1,
+        "sample": "{\"type\":\"snapshot\",\"dataType\":\"V1TALevel2\",\"data\":{\"timestamp\":\"1770501533486\",\"bids\":[\"69415.5000\",\"0.00127323\",\"69415.4000\",\"0.00217754\",\"69415.3000\",\"0.00217755\",\"69415.2000\",\"0.00217755\",\"69415.10"
       },
-      "trades": {
+      "ws_trades": {
+        "method": "WS",
+        "ok": true,
+        "error": null,
+        "msgs": 1,
+        "sample": "{\"type\":\"snapshot\",\"dataType\":\"V1TAAnonymousTradeUpdate\",\"data\":{\"symbol\":\"BTCUSDC\",\"createdAtTimestamp\":\"1770501528142\",\"publishedAtTimestamp\":\"1770501540013\",\"trades\":[{\"symbol\":\"BTCUSDC\",\"tradeId\":"
+      },
+      "rest_orderbook": {
         "method": "REST",
         "ok": true,
         "error": null,
-        "sample": "[{\"symbol\":\"BTCUSDT\",\"tradeId\":\"100111000029148439\",\"price\":\"69422.8499998\",\"quantity\":\"0.01983481\",\"side\":\"BUY\",\"isTaker\":true,\"createdAtTimestamp\":\"1770481980113\",\"publishedAtTimestamp\":\"17704819801",
+        "sample": "{\"symbol\":\"BTCUSDT\",\"bids\":[{\"price\":\"69441.3000000\",\"priceLevelQuantity\":\"0.00152853\",\"type\":\"bid\"},{\"price\":\"69441.2000000\",\"priceLevelQuantity\":\"0.00208213\",\"type\":\"bid\"},{\"price\":\"69441.1000000\",\"",
+        "status": 200
+      },
+      "rest_trades": {
+        "method": "REST",
+        "ok": true,
+        "error": null,
+        "sample": "[{\"symbol\":\"BTCUSDT\",\"tradeId\":\"100111000029888850\",\"price\":\"69443.5025508\",\"quantity\":\"0.04379317\",\"side\":\"BUY\",\"isTaker\":true,\"createdAtTimestamp\":\"1770501511434\",\"publishedAtTimestamp\":\"17705015114",
         "status": 200
       }
     }
@@ -148,47 +163,54 @@
         "ok": true,
         "error": null,
         "msgs": 1,
-        "sample": "{\"event_rep\":\"\",\"channel\":\"market_btcusdt_depth_step0\",\"data\":null,\"tick\":{\"asks\":[[69427.4,0.18507],[69427.78,0.00542],[69428.34,0.00814],[69428.98,0.00547],[69429.66,0.00821],[69430.37,0.01439],[694"
+        "sample": "{\"event_rep\":\"\",\"channel\":\"market_btcusdt_depth_step0\",\"data\":null,\"tick\":{\"asks\":[[69443.53,0.37734],[69443.91,0.03154],[69444.47,0.00606],[69445.11,0.36483],[69445.79,0.01059],[69446.5,0.01169],[694"
       },
       "ws_trades": {
         "method": "WS",
         "ok": true,
         "error": null,
         "msgs": 1,
-        "sample": "{\"event_rep\":\"\",\"channel\":\"market_btcusdt_trade_ticker\",\"data\":null,\"tick\":{\"data\":[{\"amount\":\"7040.305428\",\"ds\":\"2026-02-08 00:33:09\",\"price\":\"69431.02\",\"side\":\"BUY\",\"ts\":1770481989203,\"vol\":\"0.1014\""
+        "sample": "{\"event_rep\":\"\",\"channel\":\"market_btcusdt_trade_ticker\",\"data\":null,\"tick\":{\"data\":[{\"amount\":\"658.3211568\",\"ds\":\"2026-02-08 05:59:10\",\"price\":\"69443.16\",\"side\":\"SELL\",\"ts\":1770501550098,\"vol\":\"0.0094"
       },
       "rest_orderbook": {
         "method": "REST",
         "ok": true,
         "error": null,
-        "sample": "{\"asks\":[[69431.37,0.24625],[69431.42,0.04305],[69431.75,0.00693],[69431.8,0.00374],[69432.31,0.0104]],\"bids\":[[69430.63,0.59401],[69430.25,0.03118],[69429.69,0.02397],[69429.05,0.02897],[69428.37,0.1",
+        "sample": "{\"asks\":[[69443.52,0.36407],[69443.9,0.03167],[69444.46,0.00754],[69445.1,0.32718],[69445.78,0.00967]],\"bids\":[[69442.81,0.04475],[69442.43,0.07064],[69441.87,0.35828],[69441.23,0.09832],[69440.55,0.0",
         "status": 200
       },
       "rest_trades": {
         "method": "REST",
         "ok": true,
         "error": null,
-        "sample": "{\"list\":[{\"symbol\":\"BTCUSDT\",\"side\":\"BUY\",\"price\":\"69431.01\",\"qty\":\"0.07418\",\"id\":217744145,\"time\":1770481990296},{\"symbol\":\"BTCUSDT\",\"side\":\"BUY\",\"price\":\"69431.02\",\"qty\":\"0.1014\",\"id\":217744144,\"tim",
+        "sample": "{\"list\":[{\"symbol\":\"BTCUSDT\",\"side\":\"BUY\",\"price\":\"69443.16\",\"qty\":\"0.00512\",\"id\":217761146,\"time\":1770501551204},{\"symbol\":\"BTCUSDT\",\"side\":\"SELL\",\"price\":\"69443.16\",\"qty\":\"0.00948\",\"id\":217761145,\"t",
         "status": 200
       }
     }
   },
   "Bitrue": {
     "name": "Bitrue",
-    "type": "rest",
+    "type": "ws+rest",
     "streams": {
-      "orderbook": {
+      "ws_spot_orderbook": {
+        "method": "WS",
+        "ok": true,
+        "error": null,
+        "msgs": 1,
+        "sample": "{\"channel\":\"market_BTCUSDT_simple_depth_step0\",\"tick\":{\"buys\":[[\"69443.16\",\"1.987\"],[\"69443.15\",\"0.0003\"],[\"69443.10\",\"0.1661\"],[\"69442.30\",\"0.001\"],[\"69442.27\",\"9.1273\"],[\"69442.26\",\"2.1794\"],[\"69442"
+      },
+      "rest_orderbook": {
         "method": "REST",
         "ok": true,
         "error": null,
-        "sample": "{\"lastUpdateId\":1770481993024,\"currentSeqId\":2808283892,\"bids\":[[\"69430.98\",\"2.5387\",[]],[\"69430.97\",\"0.0003\",[]],[\"69430.48\",\"0.0005\",[]],[\"69430.47\",\"0.9919\",[]],[\"69430.46\",\"0.1372\",[]]],\"asks\":[[\"",
+        "sample": "{\"lastUpdateId\":1770501554365,\"currentSeqId\":2809172222,\"bids\":[[\"69443.16\",\"1.987\",[]],[\"69443.15\",\"0.0003\",[]],[\"69443.1\",\"0.1661\",[]],[\"69442.3\",\"0.001\",[]],[\"69442.27\",\"9.1273\",[]]],\"asks\":[[\"6944",
         "status": 200
       },
-      "trades": {
+      "rest_trades": {
         "method": "REST",
         "ok": true,
         "error": null,
-        "sample": "[{\"id\":1124118364,\"price\":\"69430.99\",\"qty\":\"1.2442\",\"time\":1770481991782,\"isBuyerMaker\":false,\"isBestMatch\":true},{\"id\":1124118365,\"price\":\"69430.98\",\"qty\":\"0.0734\",\"time\":1770481991782,\"isBuyerMaker\"",
+        "sample": "[{\"id\":1124178238,\"price\":\"69443.17\",\"qty\":\"0.0003\",\"time\":1770501546932,\"isBuyerMaker\":false,\"isBestMatch\":true},{\"id\":1124178239,\"price\":\"69443.17\",\"qty\":\"0.0025\",\"time\":1770501550446,\"isBuyerMaker\"",
         "status": 200
       }
     }
@@ -202,7 +224,7 @@
         "ok": true,
         "error": null,
         "msgs": 1,
-        "sample": "{\"event_rep\":\"\",\"channel\":\"market_btcusdt_depth_step\",\"data\":null,\"tick\":{\"pair\":\"BTCUSDT\",\"bids\":[[\"69481.4\",\"0\"],[\"69481.3\",\"0\"],[\"69481.2\",\"0\"],[\"69481.1\",\"0\"],[\"69481\",\"0\"],[\"69480.8\",\"0\"],[\"69480"
+        "sample": "{\"event_rep\":\"\",\"channel\":\"market_btcusdt_depth_step\",\"data\":null,\"tick\":{\"pair\":\"BTCUSDT\",\"bids\":[[\"70155.4\",\"0\"],[\"70083.9\",\"0\"],[\"69460.8\",\"0\"],[\"69460.6\",\"0\"],[\"69460.4\",\"0\"],[\"69460.1\",\"0\"],[\"694"
       },
       "ws_trades": {
         "method": "WS",
@@ -215,14 +237,14 @@
         "method": "REST",
         "ok": true,
         "error": null,
-        "sample": "{\"asks\":[[69399.4,1149],[69399.7,1515],[69399.9,1455],[69400.0,1242],[69400.2,2155]],\"bids\":[[69397.6,1771.0],[69397.4,2803.0],[69397.2,2651.0],[69397.1,1559.0],[69396.9,2662.0]],\"timestamp\":177048201",
+        "sample": "{\"asks\":[[69433.7,1825.0],[69433.8,1284.0],[69434.1,1729.0],[69434.3,984.0],[69434.5,1624.0]],\"bids\":[[69433.6,1557],[69433.5,1392],[69433.4,1571],[69433.3,825],[69433.1,1328]],\"timestamp\":17705015767",
         "status": 200
       },
       "rest_trades": {
         "method": "REST",
         "ok": true,
         "error": null,
-        "sample": "[{\"side\":\"sell\",\"price\":69426.6000000000000000,\"qty\":0.0051520000000000,\"time\":1770482002644},{\"side\":\"buy\",\"price\":69437.5000000000000000,\"qty\":0.0010830000000000,\"time\":1770481977369},{\"side\":\"buy\",",
+        "sample": "[{\"side\":\"buy\",\"price\":69431.7000000000000000,\"qty\":0.0506850000000000,\"time\":1770501477469},{\"side\":\"sell\",\"price\":69475.0000000000000000,\"qty\":0.4148360000000000,\"time\":1770501463398},{\"side\":\"buy\",",
         "status": 200
       }
     }
@@ -235,28 +257,28 @@
         "method": "REST",
         "ok": true,
         "error": null,
-        "sample": "{\"jsonrpc\":\"2.0\",\"usIn\":1770482018512,\"usOut\":1770482018518,\"usDiff\":6,\"result\":{\"asks\":[[\"69430.375\",\"0.55773\"],[\"69430.48\",\"0.2498\"],[\"69430.496\",\"0.67782\"],[\"69430.519\",\"0.4516\"],[\"69430.558\",\"0.66",
+        "sample": "{\"jsonrpc\":\"2.0\",\"usIn\":1770501578498,\"usOut\":1770501578505,\"usDiff\":7,\"result\":{\"asks\":[[\"69466.803\",\"0.52665\"],[\"69466.805\",\"2.13099\"],[\"69467.238\",\"1.65475\"],[\"69468.28\",\"1.70189\"],[\"69468.348\",\"1.",
         "status": 200
       },
       "spot_trades": {
         "method": "REST",
         "ok": true,
         "error": null,
-        "sample": "{\"jsonrpc\":\"2.0\",\"usIn\":1770482018918,\"usOut\":1770482018923,\"usDiff\":5,\"result\":{\"trades\":[{\"amount\":\"0.0016\",\"price\":\"69430.332\",\"timestamp\":\"1770482018879\",\"instrument_name\":\"BTC-USDT\",\"tick_directi",
+        "sample": "{\"jsonrpc\":\"2.0\",\"usIn\":1770501578892,\"usOut\":1770501578898,\"usDiff\":6,\"result\":{\"trades\":[{\"amount\":\"0.002\",\"price\":\"69466.665\",\"timestamp\":\"1770501578706\",\"instrument_name\":\"BTC-USDT\",\"tick_directio",
         "status": 200
       },
       "futures_orderbook": {
         "method": "REST",
         "ok": true,
         "error": null,
-        "sample": "{\"jsonrpc\":\"2.0\",\"usIn\":1770482019389,\"usOut\":1770482019401,\"usDiff\":12,\"result\":{\"asks\":[[\"69387.2\",\"3.633\"],[\"69387.3\",\"3.136\"],[\"69387.4\",\"0.957\"],[\"69387.5\",\"2.698\"],[\"69387.6\",\"0.892\"]],\"bids\":[[",
+        "sample": "{\"jsonrpc\":\"2.0\",\"usIn\":1770501579357,\"usOut\":1770501579363,\"usDiff\":6,\"result\":{\"asks\":[[\"69430.9\",\"5.477\"],[\"69431\",\"0.818\"],[\"69431.1\",\"2.479\"],[\"69431.2\",\"2.973\"],[\"69431.3\",\"0.515\"]],\"bids\":[[\"69",
         "status": 200
       },
       "futures_trades": {
         "method": "REST",
         "ok": true,
         "error": null,
-        "sample": "{\"jsonrpc\":\"2.0\",\"usIn\":1770482019943,\"usOut\":1770482019952,\"usDiff\":9,\"result\":{\"trades\":[{\"amount\":\"0.002\",\"price\":\"69387.1\",\"timestamp\":\"1770482019911\",\"instrument_name\":\"BTC-USDT-PERPETUAL\",\"tick_",
+        "sample": "{\"jsonrpc\":\"2.0\",\"usIn\":1770501579827,\"usOut\":1770501579835,\"usDiff\":8,\"result\":{\"trades\":[{\"amount\":\"0.006\",\"price\":\"69430.8\",\"timestamp\":\"1770501579795\",\"instrument_name\":\"BTC-USDT-PERPETUAL\",\"tick_",
         "status": 200
       }
     }
@@ -270,41 +292,41 @@
         "ok": true,
         "error": null,
         "msgs": 1,
-        "sample": "{\"amount\":\"0.097\",\"channel\":\"trade\",\"direction\":\"sell\",\"id\":1770482024415767,\"price\":\"69416.7\",\"symbol\":\"BTC-USDT\",\"time\":1770482024415,\"ts\":1770482024417}"
+        "sample": "{\"amount\":\"0.0064\",\"channel\":\"trade\",\"direction\":\"buy\",\"id\":1770501584570817,\"price\":\"69455.5\",\"symbol\":\"BTC-USDT\",\"time\":1770501584570,\"ts\":1770501584572}"
       },
       "ws_futures_trades": {
         "method": "WS",
-        "ok": true,
-        "error": null,
-        "msgs": 1,
-        "sample": "{\"symbol\":\"BTC-USDT\",\"amount\":\"5\",\"price\":\"69379.4\",\"channel\":\"trade\",\"id\":1770482030214214,\"deal_amount\":\"0.005\",\"direction\":\"sell\",\"ts\":1770482030214}"
+        "ok": false,
+        "error": "Timeout (no data in 12s)",
+        "msgs": 0,
+        "sample": ""
       },
       "rest_spot_orderbook": {
         "method": "REST",
         "ok": true,
         "error": null,
-        "sample": "{\"errno\":0,\"errmsg\":\"success\",\"result\":{\"buyType\":1,\"sellType\":1,\"ts\":1770482038014,\"symbol\":\"BTC-USDT\",\"asks\":[[\"69409.1\",\"2.5815\"],[\"69409.2\",\"0.0002\"],[\"69409.2\",\"1.0335\"],[\"69409.8\",\"0.0209\"],[\"69",
+        "sample": "{\"errno\":0,\"errmsg\":\"success\",\"result\":{\"buyType\":1,\"sellType\":1,\"ts\":1770501606502,\"symbol\":\"BTC-USDT\",\"asks\":[[\"69477.9\",\"2.65\"],[\"69477.9\",\"1.0255\"],[\"69478\",\"0.1148\"],[\"69478.1\",\"0.0207\"],[\"69478.",
         "status": 200
       },
       "rest_spot_trades": {
         "method": "REST",
         "ok": true,
         "error": null,
-        "sample": "{\"errno\":0,\"errmsg\":\"success\",\"result\":{\"symbol\":\"BTC-USDT\",\"ts\":1770482039667,\"data\":[{\"id\":1770482039286850,\"amount\":\"0.0001\",\"price\":\"69409.1\",\"vol\":\"6.94091\",\"direction\":\"buy\",\"ts\":1770482039},{\"i",
+        "sample": "{\"errno\":0,\"errmsg\":\"success\",\"result\":{\"symbol\":\"BTC-USDT\",\"ts\":1770501606849,\"data\":[{\"id\":1770501606578508,\"amount\":\"0.0081\",\"price\":\"69477.8\",\"vol\":\"562.77018\",\"direction\":\"buy\",\"ts\":1770501606},{",
         "status": 200
       },
       "rest_futures_orderbook": {
         "method": "REST",
         "ok": true,
         "error": null,
-        "sample": "{\"errno\":0,\"errmsg\":\"success\",\"result\":{\"buyType\":1,\"sellType\":1,\"ts\":1770482040093,\"symbol\":\"BTC-USDT\",\"asks\":[[\"69377.8\",\"558\"],[\"69377.9\",\"4816\"],[\"69378\",\"4584\"],[\"69378.1\",\"728\"],[\"69378.2\",\"1652",
+        "sample": "{\"errno\":0,\"errmsg\":\"success\",\"result\":{\"buyType\":1,\"sellType\":1,\"ts\":1770501608592,\"symbol\":\"BTC-USDT\",\"asks\":[[\"69434\",\"379\"],[\"69440.8\",\"1237\"],[\"69440.9\",\"4048\"],[\"69441\",\"11616\"],[\"69441.1\",\"660\"",
         "status": 200
       },
       "rest_futures_trades": {
         "method": "REST",
         "ok": true,
         "error": null,
-        "sample": "{\"errno\":0,\"errmsg\":\"success\",\"result\":{\"symbol\":\"BTC-USDT\",\"ts\":1770482040575,\"data\":[{\"id\":1770482040227541,\"amount\":\"48\",\"price\":\"69374.8\",\"direction\":\"sell\",\"ts\":1770482040},{\"id\":1770482040227364",
+        "sample": "{\"errno\":0,\"errmsg\":\"success\",\"result\":{\"symbol\":\"BTC-USDT\",\"ts\":1770501608946,\"data\":[{\"id\":1770501608220654,\"amount\":\"89\",\"price\":\"69440.7\",\"direction\":\"sell\",\"ts\":1770501608},{\"id\":1770501607222392",
         "status": 200
       }
     }
@@ -313,18 +335,18 @@
     "name": "Azbit",
     "type": "rest",
     "streams": {
-      "orderbook": {
+      "rest_orderbook": {
         "method": "REST",
         "ok": true,
         "error": null,
-        "sample": "[{\"isBid\":true,\"price\":69358.6,\"amount\":8.0413038,\"currencyTo\":8.0413038,\"quoteAmount\":557733.57374268,\"currencyFrom\":557733.57374268},{\"isBid\":true,\"price\":69358.58,\"amount\":4.4021736,\"currencyTo\":4.",
+        "sample": "[{\"isBid\":true,\"price\":69476.46,\"amount\":7.3249992,\"currencyTo\":7.3249992,\"quoteAmount\":508915.01391883,\"currencyFrom\":508915.01391883},{\"isBid\":true,\"price\":69476.44,\"amount\":3.2499999,\"currencyTo\":3",
         "status": 200
       },
-      "trades": {
+      "rest_trades": {
         "method": "REST",
         "ok": true,
         "error": null,
-        "sample": "[{\"id\":\"e46068b0-6ec5-44e4-863e-437239faba44\",\"dealDateUtc\":\"2026-02-07T16:34:13.0863776\",\"currencyPairCode\":\"BTC_USDT\",\"volume\":2.426008000,\"price\":69388.44000000,\"isBuy\":true,\"isUserBuyer\":null,\"ord",
+        "sample": "[{\"id\":\"53b3bbfb-3d3f-4bca-88f3-982b767d2e70\",\"dealDateUtc\":\"2026-02-07T22:00:04.8281079\",\"currencyPairCode\":\"BTC_USDT\",\"volume\":0.111995000,\"price\":69454.18000000,\"isBuy\":true,\"isUserBuyer\":null,\"ord",
         "status": 200
       }
     }
@@ -338,27 +360,27 @@
         "ok": true,
         "error": null,
         "msgs": 1,
-        "sample": "{\"arg\":{\"channel\":\"books5\",\"instId\":\"BTC-USDT\"},\"action\":\"snapshot\",\"data\":{\"asks\":[[\"69288.5\",\"613\"],[\"69288.6\",\"49\"],[\"69288.7\",\"55\"],[\"69288.8\",\"46\"],[\"69288.9\",\"44\"]],\"bids\":[[\"69288.4\",\"3204\"],[\""
+        "sample": "{\"arg\":{\"channel\":\"books5\",\"instId\":\"BTC-USDT\"},\"action\":\"snapshot\",\"data\":{\"asks\":[[\"69445\",\"926\"],[\"69445.1\",\"60\"],[\"69445.2\",\"82\"],[\"69445.3\",\"74\"],[\"69445.4\",\"81\"]],\"bids\":[[\"69444.9\",\"2214\"],[\"69"
       },
       "ws_trades": {
         "method": "WS",
         "ok": true,
         "error": null,
         "msgs": 1,
-        "sample": "{\"arg\":{\"channel\":\"trades\",\"instId\":\"BTC-USDT\"},\"data\":[{\"instId\":\"BTC-USDT\",\"tradeId\":\"40250313069\",\"price\":\"69292.4\",\"size\":\"11\",\"side\":\"buy\",\"ts\":\"1770482071220\"}]}"
+        "sample": "{\"arg\":{\"channel\":\"trades\",\"instId\":\"BTC-USDT\"},\"data\":[{\"instId\":\"BTC-USDT\",\"tradeId\":\"40266281258\",\"price\":\"69450.5\",\"size\":\"2331.7\",\"side\":\"sell\",\"ts\":\"1770501619230\"}]}"
       },
       "rest_orderbook": {
         "method": "REST",
         "ok": true,
         "error": null,
-        "sample": "{\"code\":\"0\",\"msg\":\"success\",\"data\":[{\"asks\":[[\"69303.7\",\"5002\"]],\"bids\":[[\"69303.6\",\"631\"]],\"ts\":\"1770482088582\"}]}",
+        "sample": "{\"code\":\"0\",\"msg\":\"success\",\"data\":[{\"asks\":[[\"69452.6\",\"11\"]],\"bids\":[[\"69450.5\",\"4215.3\"]],\"ts\":\"1770501619432\"}]}",
         "status": 200
       },
       "rest_trades": {
         "method": "REST",
         "ok": true,
         "error": null,
-        "sample": "{\"code\":\"0\",\"msg\":\"success\",\"data\":[{\"tradeId\":\"40250337951\",\"instId\":\"BTC-USDT\",\"price\":\"69303.7\",\"size\":\"8\",\"side\":\"buy\",\"ts\":\"1770482088207\"},{\"tradeId\":\"40250335419\",\"instId\":\"BTC-USDT\",\"price\":\"6",
+        "sample": "{\"code\":\"0\",\"msg\":\"success\",\"data\":[{\"tradeId\":\"40266281258\",\"instId\":\"BTC-USDT\",\"price\":\"69450.5\",\"size\":\"2331.7\",\"side\":\"sell\",\"ts\":\"1770501619230\"},{\"tradeId\":\"40266276252\",\"instId\":\"BTC-USDT\",\"pri",
         "status": 200
       }
     }
@@ -371,14 +393,14 @@
         "method": "REST",
         "ok": true,
         "error": null,
-        "sample": "{\"time\":1770482092583,\"bids\":[[\"69352\",\"20.432\"],[\"69351.99\",\"19.8264\"],[\"69351.98\",\"23.47446\"],[\"69351.97\",\"17.60584\"],[\"69351.96\",\"16.81279\"]],\"asks\":[[\"69352.01\",\"18.9324\"],[\"69352.02\",\"15.86111\"],",
+        "sample": "{\"time\":1770501623106,\"bids\":[[\"69482.69\",\"19.27099\"],[\"69482.68\",\"20.58067\"],[\"69482.67\",\"11.55684\"],[\"69482.66\",\"20.26405\"],[\"69482.65\",\"22.32212\"]],\"asks\":[[\"69482.7\",\"17.96131\"],[\"69482.71\",\"20.73",
         "status": 200
       },
       "trades": {
         "method": "REST",
         "ok": true,
         "error": null,
-        "sample": "[{\"price\":\"69341.24\",\"time\":1770482096625,\"updateTime\":1770482096625,\"qty\":\"0.00359\",\"isBuyerMaker\":false},{\"price\":\"69341.24\",\"time\":1770482096837,\"updateTime\":1770482096837,\"qty\":\"0.00323\",\"isBuyerM",
+        "sample": "[{\"price\":\"69482.69\",\"time\":1770501622605,\"updateTime\":1770501622605,\"qty\":\"0.00301\",\"isBuyerMaker\":true},{\"price\":\"69482.69\",\"time\":1770501622823,\"updateTime\":1770501622823,\"qty\":\"0.00385\",\"isBuyerMa",
         "status": 200
       }
     }
@@ -387,18 +409,18 @@
     "name": "Trubit Pro",
     "type": "rest",
     "streams": {
-      "orderbook": {
+      "rest_orderbook": {
         "method": "REST",
         "ok": true,
         "error": null,
-        "sample": "{\"time\":1770482101835,\"bids\":[[\"69326.34\",\"0.18445\"],[\"69305.84\",\"0.17372\"],[\"69223.14\",\"0.23494\"],[\"69156.5\",\"0.18281\"],[\"69113.42\",\"0.26585\"]],\"asks\":[[\"69382.04\",\"0.22497\"],[\"69383.21\",\"0.2094\"],[\"",
+        "sample": "{\"time\":1770501629530,\"bids\":[[\"69422.48\",\"0.19545\"],[\"69419.43\",\"0.18096\"],[\"69411.92\",\"0.20306\"],[\"69400.67\",\"0.21511\"],[\"69360.63\",\"0.18649\"]],\"asks\":[[\"69513.96\",\"0.18725\"],[\"69527.43\",\"0.18651\"],",
         "status": 200
       },
-      "trades": {
+      "rest_trades": {
         "method": "REST",
         "ok": true,
         "error": null,
-        "sample": "[{\"price\":\"69346.04\",\"time\":1770482099078,\"qty\":\"0.06812\",\"isBuyerMaker\":true},{\"price\":\"69354.19\",\"time\":1770482101578,\"qty\":\"0.09495\",\"isBuyerMaker\":false},{\"price\":\"69354.19\",\"time\":1770482104328,\"",
+        "sample": "[{\"price\":\"69486.31\",\"time\":1770501619973,\"qty\":\"0.01397\",\"isBuyerMaker\":true},{\"price\":\"69486.31\",\"time\":1770501622919,\"qty\":\"0.01519\",\"isBuyerMaker\":false},{\"price\":\"69468.22\",\"time\":1770501625841,\"",
         "status": 200
       }
     }

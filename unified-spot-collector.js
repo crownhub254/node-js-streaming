@@ -1,10 +1,10 @@
 /**
  * ╔══════════════════════════════════════════════════════════════════╗
  * ║         UNIFIED SPOT COLLECTOR - BTC / ETH / SOL               ║
- * ║     24 Exchanges | Real-Time WebSocket | Per-Second Analytics   ║
+ * ║     29 Exchanges | Real-Time WebSocket | Per-Second Analytics   ║
  * ╚══════════════════════════════════════════════════════════════════╝
  * 
- * Streams spot trade data from 24 exchanges simultaneously for BTC, ETH, SOL.
+ * Streams spot trade data from 29 exchanges simultaneously for BTC, ETH, SOL.
  * Displays per-second collection rates per coin per exchange for throughput analysis.
  * 
  * Features:
@@ -635,35 +635,6 @@ const EXCHANGES = {
 
     // ═══════════════════════ TIER 3 ═══════════════════════
 
-    'Upbit': {
-        tier: 3,
-        getConfig: () => ({
-            url: 'wss://api.upbit.com/websocket/v1',
-            pingInterval: 30000,
-            pingMessage: 'PING',
-            onOpen: (ws) => {
-                ws.send(JSON.stringify([
-                    { ticket: 'unified-collector' },
-                    { type: 'trade', codes: ['KRW-BTC', 'KRW-ETH', 'KRW-SOL'] }
-                ]));
-            },
-            parseMessage: (msg) => {
-                try {
-                    // Upbit sends binary data
-                    const str = msg.toString();
-                    if (str === 'PONG') return null;
-                    const d = JSON.parse(str);
-                    if (d.type === 'trade' && d.code) {
-                        if (d.code === 'KRW-BTC') return 'BTC';
-                        if (d.code === 'KRW-ETH') return 'ETH';
-                        if (d.code === 'KRW-SOL') return 'SOL';
-                    }
-                } catch (e) {}
-                return null;
-            }
-        })
-    },
-
     'LBank': {
         tier: 3,
         getConfig: () => ({
@@ -851,6 +822,159 @@ const EXCHANGES = {
             }
         })
     },
+
+    // ═══════════════════════ NEW EXCHANGES ═══════════════════════
+
+    'XT.com': {
+        tier: 2,
+        getConfig: () => ({
+            url: 'wss://stream.xt.com/public',
+            pingInterval: 15000,
+            pingMessage: 'ping',
+            onOpen: (ws) => {
+                ws.send(JSON.stringify({ method: 'subscribe', params: ['trade@btc_usdt', 'trade@eth_usdt', 'trade@sol_usdt'] }));
+            },
+            parseMessage: (msg) => {
+                try {
+                    const d = JSON.parse(msg);
+                    const topic = d.event || d.topic || '';
+                    if (!topic.startsWith('trade@')) return null;
+                    const sym = topic.split('@')[1] || '';
+                    if (sym === 'btc_usdt') return 'BTC';
+                    if (sym === 'eth_usdt') return 'ETH';
+                    if (sym === 'sol_usdt') return 'SOL';
+                } catch (e) {}
+                return null;
+            }
+        })
+    },
+
+    'Zoomex': {
+        tier: 2,
+        getConfig: () => ({
+            url: 'wss://stream.zoomex.com/v5/public/spot',
+            pingInterval: 20000,
+            pingMessage: JSON.stringify({ op: 'ping' }),
+            onOpen: (ws) => {
+                ws.send(JSON.stringify({ op: 'subscribe', args: ['publicTrade.BTCUSDT', 'publicTrade.ETHUSDT', 'publicTrade.SOLUSDT'] }));
+            },
+            parseMessage: (msg) => {
+                try {
+                    const d = JSON.parse(msg);
+                    if (d.op === 'pong' || d.op === 'subscribe') return null;
+                    const topic = d.topic || '';
+                    if (!topic.startsWith('publicTrade')) return null;
+                    if (topic.includes('BTCUSDT')) return 'BTC';
+                    if (topic.includes('ETHUSDT')) return 'ETH';
+                    if (topic.includes('SOLUSDT')) return 'SOL';
+                } catch (e) {}
+                return null;
+            }
+        })
+    },
+
+    'Biconomy': {
+        tier: 3,
+        // deals.subscribe is single-symbol (each call replaces the previous).
+        // Must use separate connections per coin. Main connection handles BTC.
+        extraConnections: [
+            {
+                url: 'wss://bei.biconomy.com/ws',
+                pingInterval: 30000,
+                pingMessage: JSON.stringify({ method: 'server.ping', params: [], id: 5160 }),
+                onOpen: (ws) => {
+                    ws.send(JSON.stringify({ method: 'deals.subscribe', params: ['ETH_USDT'], id: 2 }));
+                }
+            },
+            {
+                url: 'wss://bei.biconomy.com/ws',
+                pingInterval: 30000,
+                pingMessage: JSON.stringify({ method: 'server.ping', params: [], id: 5160 }),
+                onOpen: (ws) => {
+                    ws.send(JSON.stringify({ method: 'deals.subscribe', params: ['SOL_USDT'], id: 3 }));
+                }
+            }
+        ],
+        getConfig: () => ({
+            url: 'wss://bei.biconomy.com/ws',
+            pingInterval: 30000,
+            pingMessage: JSON.stringify({ method: 'server.ping', params: [], id: 5160 }),
+            onOpen: (ws) => {
+                ws.send(JSON.stringify({ method: 'deals.subscribe', params: ['BTC_USDT'], id: 1 }));
+            },
+            parseMessage: (msg) => {
+                try {
+                    const d = JSON.parse(msg);
+                    if (d.method === 'deals.update' && Array.isArray(d.params) && d.params.length >= 1) {
+                        const sym = d.params[0];
+                        if (sym === 'BTC_USDT') return 'BTC';
+                        if (sym === 'ETH_USDT') return 'ETH';
+                        if (sym === 'SOL_USDT') return 'SOL';
+                    }
+                } catch (e) {}
+                return null;
+            }
+        })
+    },
+
+    'Hotcoin': {
+        tier: 3,
+        getConfig: () => ({
+            url: 'wss://wss.hotcoinfin.com/trade/multiple',
+            compression: 'gzip',
+            handlePing: (parsed, ws) => {
+                if (parsed.ping) {
+                    ws.send(JSON.stringify({ pong: 'pong' }));
+                    return true;
+                }
+                return false;
+            },
+            onOpen: (ws) => {
+                ws.send(JSON.stringify({ sub: 'market.btc_usdt.trade.detail' }));
+                ws.send(JSON.stringify({ sub: 'market.eth_usdt.trade.detail' }));
+                ws.send(JSON.stringify({ sub: 'market.sol_usdt.trade.detail' }));
+            },
+            parseMessage: (msg) => {
+                try {
+                    const d = JSON.parse(msg);
+                    if (d.ping) return null;
+                    if (d.ch && d.data && d.ch.includes('trade.detail')) {
+                        if (d.ch.includes('btc_usdt')) return 'BTC';
+                        if (d.ch.includes('eth_usdt')) return 'ETH';
+                        if (d.ch.includes('sol_usdt')) return 'SOL';
+                    }
+                } catch (e) {}
+                return null;
+            }
+        })
+    },
+
+    'NovaEx': {
+        tier: 3,
+        getConfig: () => ({
+            url: 'wss://wss.woox.io/ws/stream/OqdphuyIYbng-t001',
+            pingInterval: 9000,
+            pingMessage: JSON.stringify({ event: 'ping' }),
+            onOpen: (ws) => {
+                ws.send(JSON.stringify({ id: 'btc', event: 'subscribe', topic: 'SPOT_BTC_USDT@trade' }));
+                ws.send(JSON.stringify({ id: 'eth', event: 'subscribe', topic: 'SPOT_ETH_USDT@trade' }));
+                ws.send(JSON.stringify({ id: 'sol', event: 'subscribe', topic: 'SPOT_SOL_USDT@trade' }));
+            },
+            parseMessage: (msg) => {
+                try {
+                    const d = JSON.parse(msg);
+                    if (d.event === 'pong' || d.event === 'subscribe') return null;
+                    const topic = d.topic || '';
+                    if (topic.includes('@trade')) {
+                        if (topic.includes('BTC_USDT')) return 'BTC';
+                        if (topic.includes('ETH_USDT')) return 'ETH';
+                        if (topic.includes('SOL_USDT')) return 'SOL';
+                    }
+                } catch (e) {}
+                return null;
+            }
+        })
+    },
 };
 
 // ======================== BITFINEX CHANNEL TRACKING ========================
@@ -946,6 +1070,41 @@ function doConnect(name, config, exchangeDef) {
             // Custom ping setup (e.g., Toobit)
             if (config.customPingSetup) {
                 conn.customPingTimer = config.customPingSetup(ws);
+            }
+
+            // Handle extra connections (e.g., Biconomy single-symbol subscriptions)
+            if (exchangeDef.extraConnections) {
+                conn.extraWsList = [];
+                for (const ec of exchangeDef.extraConnections) {
+                    const ecWs = new WebSocket(ec.url, wsOpts);
+                    conn.extraWsList.push(ecWs);
+                    ecWs.on('open', () => {
+                        try { ec.onOpen(ecWs); } catch (e) {}
+                        if (ec.pingInterval && ec.pingMessage) {
+                            ecWs._pingTimer = setInterval(() => {
+                                if (ecWs.readyState === WebSocket.OPEN) {
+                                    ecWs.send(typeof ec.pingMessage === 'string' ? ec.pingMessage : JSON.stringify(ec.pingMessage));
+                                }
+                            }, ec.pingInterval);
+                        }
+                    });
+                    ecWs.on('message', (data) => {
+                        conn.lastMsg = Date.now();
+                        let str = data.toString();
+                        const result = config.parseMessage(str);
+                        if (result) {
+                            if (typeof result === 'string' && COINS.includes(result)) {
+                                recordMessage(name, result);
+                            } else if (result.coin && COINS.includes(result.coin)) {
+                                recordMessage(name, result.coin, result.count || 1);
+                            }
+                        }
+                    });
+                    ecWs.on('error', () => {});
+                    ecWs.on('close', () => {
+                        if (ecWs._pingTimer) clearInterval(ecWs._pingTimer);
+                    });
+                }
             }
         });
 
@@ -1045,6 +1204,13 @@ function doConnect(name, config, exchangeDef) {
             clearTimeout(connTimeout);
             if (conn.pingTimer) clearInterval(conn.pingTimer);
             if (conn.customPingTimer) clearInterval(conn.customPingTimer);
+            // Close extra connections
+            if (conn.extraWsList) {
+                for (const ecWs of conn.extraWsList) {
+                    if (ecWs._pingTimer) clearInterval(ecWs._pingTimer);
+                    try { ecWs.close(); } catch (e) {}
+                }
+            }
             conn.status = 'disconnected';
             
             if (!isShuttingDown) {

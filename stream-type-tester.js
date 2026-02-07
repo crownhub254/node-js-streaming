@@ -1,8 +1,8 @@
 /**
  * ╔══════════════════════════════════════════════════════════════════════════╗
  * ║   COMPREHENSIVE STREAM TYPE TESTER - Orderbook / Trades / Tickers      ║
- * ║   24 Exchanges × 3 Coins (BTC, ETH, SOL) × 3 Stream Types             ║
- * ║   Total Tests: 216 (24 × 3 × 3)                                       ║
+ * ║   29 Exchanges × 3 Coins (BTC, ETH, SOL) × 3 Stream Types             ║
+ * ║   Total Tests: 261 (29 × 3 × 3)                                       ║
  * ╚══════════════════════════════════════════════════════════════════════════╝
  */
 
@@ -626,36 +626,6 @@ const EXCHANGES = {
 
     // ═══════════════════════ TIER 3 ═══════════════════════
 
-    'Upbit': {
-        tier: 3,
-        getUrl: () => 'wss://api.upbit.com/websocket/v1',
-        pingInterval: 30000,
-        pingMessage: 'PING',
-        onOpen: (ws) => {
-            ws.send(JSON.stringify([
-                { ticket: 'stream-tester' },
-                { type: 'trade', codes: ['KRW-BTC', 'KRW-ETH', 'KRW-SOL'] },
-                { type: 'ticker', codes: ['KRW-BTC', 'KRW-ETH', 'KRW-SOL'] },
-                { type: 'orderbook', codes: ['KRW-BTC', 'KRW-ETH', 'KRW-SOL'] }
-            ]));
-        },
-        parseMessage: (msg) => {
-            try {
-                const str = msg.toString();
-                if (str === 'PONG') return [];
-                const d = JSON.parse(str);
-                const code = d.code || '';
-                const coin = code === 'KRW-BTC' ? 'BTC' : code === 'KRW-ETH' ? 'ETH' : code === 'KRW-SOL' ? 'SOL' : null;
-                if (!coin) return [];
-                const hits = [];
-                if (d.type === 'trade') hits.push({ type: 'trades', coin });
-                if (d.type === 'ticker') hits.push({ type: 'ticker', coin });
-                if (d.type === 'orderbook') hits.push({ type: 'orderbook', coin });
-                return hits;
-            } catch (e) { return []; }
-        }
-    },
-
     'LBank': {
         tier: 3,
         getUrl: () => 'wss://www.lbkex.net/ws/V2/',
@@ -856,6 +826,176 @@ const EXCHANGES = {
             } catch (e) { return []; }
         }
     },
+
+    // ═══════════════════════ NEW EXCHANGES ═══════════════════════
+
+    'XT.com': {
+        tier: 2,
+        getUrl: () => 'wss://stream.xt.com/public',
+        pingInterval: 15000,
+        pingMessage: 'ping',
+        onOpen: (ws) => {
+            ws.send(JSON.stringify({ method: 'subscribe', params: ['depth_update@btc_usdt', 'depth_update@eth_usdt', 'depth_update@sol_usdt'] }));
+            ws.send(JSON.stringify({ method: 'subscribe', params: ['trade@btc_usdt', 'trade@eth_usdt', 'trade@sol_usdt'] }));
+            ws.send(JSON.stringify({ method: 'subscribe', params: ['ticker@btc_usdt', 'ticker@eth_usdt', 'ticker@sol_usdt'] }));
+        },
+        parseMessage: (msg) => {
+            try {
+                const d = JSON.parse(msg);
+                if (!d.topic && !d.event) return [];
+                const topic = d.event || d.topic || '';
+                const hits = [];
+                const sym = topic.split('@')[1] || '';
+                const coin = sym === 'btc_usdt' ? 'BTC' : sym === 'eth_usdt' ? 'ETH' : sym === 'sol_usdt' ? 'SOL' : null;
+                if (!coin) return [];
+                if (topic.startsWith('depth_update') || topic.startsWith('depth')) hits.push({ type: 'orderbook', coin });
+                if (topic.startsWith('trade')) hits.push({ type: 'trades', coin });
+                if (topic.startsWith('ticker')) hits.push({ type: 'ticker', coin });
+                return hits;
+            } catch (e) { return []; }
+        }
+    },
+
+    'Zoomex': {
+        tier: 2,
+        getUrl: () => 'wss://stream.zoomex.com/v5/public/spot',
+        pingInterval: 20000,
+        pingMessage: JSON.stringify({ op: 'ping' }),
+        onOpen: (ws) => {
+            ws.send(JSON.stringify({ op: 'subscribe', args: ['orderbook.50.BTCUSDT', 'orderbook.50.ETHUSDT', 'orderbook.50.SOLUSDT'] }));
+            ws.send(JSON.stringify({ op: 'subscribe', args: ['publicTrade.BTCUSDT', 'publicTrade.ETHUSDT', 'publicTrade.SOLUSDT'] }));
+            ws.send(JSON.stringify({ op: 'subscribe', args: ['tickers.BTCUSDT', 'tickers.ETHUSDT', 'tickers.SOLUSDT'] }));
+        },
+        parseMessage: (msg) => {
+            try {
+                const d = JSON.parse(msg);
+                if (d.op === 'pong' || d.op === 'subscribe') return [];
+                const topic = d.topic || '';
+                const hits = [];
+                const coin = topic.includes('BTCUSDT') ? 'BTC' : topic.includes('ETHUSDT') ? 'ETH' : topic.includes('SOLUSDT') ? 'SOL' : null;
+                if (!coin) return [];
+                if (topic.startsWith('orderbook')) hits.push({ type: 'orderbook', coin });
+                if (topic.startsWith('publicTrade')) hits.push({ type: 'trades', coin });
+                if (topic.startsWith('tickers')) hits.push({ type: 'ticker', coin });
+                return hits;
+            } catch (e) { return []; }
+        }
+    },
+
+    'Biconomy': {
+        tier: 3,
+        getUrl: () => 'wss://bei.biconomy.com/ws',
+        pingInterval: 30000,
+        pingMessage: JSON.stringify({ method: 'server.ping', params: [], id: 5160 }),
+        // depth.subscribe and deals.subscribe are single-symbol (each call replaces the previous).
+        // Must use separate connections per coin for depth/deals. state.subscribe is multi-symbol.
+        extraConnections: [
+            {
+                getUrl: () => 'wss://bei.biconomy.com/ws',
+                onOpen: (ws) => {
+                    ws.send(JSON.stringify({ method: 'depth.subscribe', params: ['ETH_USDT', 50, '0.01'], id: 2 }));
+                    ws.send(JSON.stringify({ method: 'deals.subscribe', params: ['ETH_USDT'], id: 5 }));
+                }
+            },
+            {
+                getUrl: () => 'wss://bei.biconomy.com/ws',
+                onOpen: (ws) => {
+                    ws.send(JSON.stringify({ method: 'depth.subscribe', params: ['SOL_USDT', 50, '0.01'], id: 3 }));
+                    ws.send(JSON.stringify({ method: 'deals.subscribe', params: ['SOL_USDT'], id: 6 }));
+                }
+            }
+        ],
+        onOpen: (ws) => {
+            ws.send(JSON.stringify({ method: 'depth.subscribe', params: ['BTC_USDT', 50, '0.01'], id: 1 }));
+            ws.send(JSON.stringify({ method: 'deals.subscribe', params: ['BTC_USDT'], id: 4 }));
+            ws.send(JSON.stringify({ method: 'state.subscribe', params: ['BTC_USDT', 'ETH_USDT', 'SOL_USDT'], id: 7 }));
+        },
+        parseMessage: (msg) => {
+            try {
+                const d = JSON.parse(msg);
+                if (d.result || d.error !== undefined) return [];
+                const method = d.method || '';
+                const hits = [];
+
+                if (method === 'depth.update' && Array.isArray(d.params) && d.params.length >= 3) {
+                    const sym = d.params[2];
+                    const coin = sym === 'BTC_USDT' ? 'BTC' : sym === 'ETH_USDT' ? 'ETH' : sym === 'SOL_USDT' ? 'SOL' : null;
+                    if (coin) hits.push({ type: 'orderbook', coin });
+                }
+                if (method === 'deals.update' && Array.isArray(d.params) && d.params.length >= 1) {
+                    const sym = d.params[0];
+                    const coin = sym === 'BTC_USDT' ? 'BTC' : sym === 'ETH_USDT' ? 'ETH' : sym === 'SOL_USDT' ? 'SOL' : null;
+                    if (coin) hits.push({ type: 'trades', coin });
+                }
+                if (method === 'state.update' && Array.isArray(d.params) && d.params.length >= 1) {
+                    const sym = d.params[0];
+                    const coin = sym === 'BTC_USDT' ? 'BTC' : sym === 'ETH_USDT' ? 'ETH' : sym === 'SOL_USDT' ? 'SOL' : null;
+                    if (coin) hits.push({ type: 'ticker', coin });
+                }
+                return hits;
+            } catch (e) { return []; }
+        }
+    },
+
+    'Hotcoin': {
+        tier: 3,
+        getUrl: () => 'wss://wss.hotcoinfin.com/trade/multiple',
+        compression: 'gzip',
+        handlePing: (parsed, ws) => {
+            if (parsed.ping) { ws.send(JSON.stringify({ pong: 'pong' })); return true; }
+            return false;
+        },
+        onOpen: (ws) => {
+            ['btc_usdt', 'eth_usdt', 'sol_usdt'].forEach(sym => {
+                ws.send(JSON.stringify({ sub: `market.${sym}.trade.depth` }));
+                ws.send(JSON.stringify({ sub: `market.${sym}.trade.detail` }));
+                ws.send(JSON.stringify({ sub: `market.${sym}.24h.tickers` }));
+            });
+        },
+        parseMessage: (msg) => {
+            try {
+                const d = JSON.parse(msg);
+                if (d.ping) return [];
+                if (!d.ch || !d.data) return [];
+                const coin = d.ch.includes('btc_usdt') ? 'BTC' : d.ch.includes('eth_usdt') ? 'ETH' : d.ch.includes('sol_usdt') ? 'SOL' : null;
+                if (!coin) return [];
+                const hits = [];
+                if (d.ch.includes('trade.depth')) hits.push({ type: 'orderbook', coin });
+                if (d.ch.includes('trade.detail')) hits.push({ type: 'trades', coin });
+                if (d.ch.includes('24h.tickers')) hits.push({ type: 'ticker', coin });
+                return hits;
+            } catch (e) { return []; }
+        }
+    },
+
+    'NovaEx': {
+        tier: 3,
+        getUrl: () => 'wss://wss.woox.io/ws/stream/OqdphuyIYbng-t001',
+        pingInterval: 9000,
+        pingMessage: JSON.stringify({ event: 'ping' }),
+        noTicker: true,
+        onOpen: (ws) => {
+            ws.send(JSON.stringify({ id: 'ob1', event: 'subscribe', topic: 'SPOT_BTC_USDT@orderbook' }));
+            ws.send(JSON.stringify({ id: 'ob2', event: 'subscribe', topic: 'SPOT_ETH_USDT@orderbook' }));
+            ws.send(JSON.stringify({ id: 'ob3', event: 'subscribe', topic: 'SPOT_SOL_USDT@orderbook' }));
+            ws.send(JSON.stringify({ id: 'tr1', event: 'subscribe', topic: 'SPOT_BTC_USDT@trade' }));
+            ws.send(JSON.stringify({ id: 'tr2', event: 'subscribe', topic: 'SPOT_ETH_USDT@trade' }));
+            ws.send(JSON.stringify({ id: 'tr3', event: 'subscribe', topic: 'SPOT_SOL_USDT@trade' }));
+        },
+        parseMessage: (msg) => {
+            try {
+                const d = JSON.parse(msg);
+                if (d.event === 'pong' || d.event === 'subscribe') return [];
+                const topic = d.topic || '';
+                const hits = [];
+                const coin = topic.includes('BTC_USDT') ? 'BTC' : topic.includes('ETH_USDT') ? 'ETH' : topic.includes('SOL_USDT') ? 'SOL' : null;
+                if (!coin) return [];
+                if (topic.includes('@orderbook')) hits.push({ type: 'orderbook', coin });
+                if (topic.includes('@trade')) hits.push({ type: 'trades', coin });
+                return hits;
+            } catch (e) { return []; }
+        }
+    },
 };
 
 // ======================== TEST ENGINE ========================
@@ -892,11 +1032,13 @@ async function testExchange(name) {
             console.log(`  [${ts()}] ⏰ ${name} — Test timeout`);
             ws.terminate();
             if (ossWs) try { ossWs.terminate(); } catch (e) {}
+            for (const ecWs of extraWsList) { try { ecWs.terminate(); } catch (e) {} }
             results[name].status = 'timeout';
             done();
         }, TEST_TIMEOUT);
 
         let ws, ossWs;
+        const extraWsList = [];
         try {
             ws = new WebSocket(wsUrl, {
                 headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
@@ -953,6 +1095,53 @@ async function testExchange(name) {
             }
         }
 
+        // Handle extra connections (e.g., Biconomy single-symbol depth/deals subscriptions)
+        if (exDef.extraConnections) {
+            for (const ec of exDef.extraConnections) {
+                try {
+                    const ecUrl = typeof ec.getUrl === 'function' ? ec.getUrl() : ec.getUrl;
+                    const ecWs = new WebSocket(ecUrl, {
+                        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+                        handshakeTimeout: 10000
+                    });
+                    extraWsList.push(ecWs);
+                    ecWs.on('open', () => {
+                        try { ec.onOpen(ecWs); } catch (e) {}
+                        if (exDef.pingInterval && exDef.pingMessage) {
+                            ecWs._pingTimer = setInterval(() => {
+                                if (ecWs.readyState === WebSocket.OPEN) ecWs.send(exDef.pingMessage);
+                            }, exDef.pingInterval);
+                        }
+                    });
+                    ecWs.on('message', (data) => {
+                        let str;
+                        if (exDef.compression && Buffer.isBuffer(data)) {
+                            try {
+                                if (exDef.compression === 'gzip') str = zlib.gunzipSync(data).toString();
+                                else if (exDef.compression === 'inflate') str = zlib.inflateSync(data).toString();
+                                else str = data.toString();
+                            } catch (e) { str = data.toString(); }
+                        } else { str = data.toString(); }
+                        if (exDef.handlePing) {
+                            try { const p = JSON.parse(str); if (exDef.handlePing(p, ecWs)) return; } catch (e) {}
+                        }
+                        try {
+                            const hits = exDef.parseMessage(str, ctx);
+                            if (hits && hits.length > 0) {
+                                for (const h of hits) {
+                                    if (results[name][h.type] && results[name][h.type][h.coin] !== undefined) {
+                                        results[name][h.type][h.coin]++;
+                                    }
+                                }
+                            }
+                        } catch (e) {}
+                    });
+                    ecWs.on('error', () => {});
+                    ecWs.on('close', () => { if (ecWs._pingTimer) clearInterval(ecWs._pingTimer); });
+                } catch (e) {}
+            }
+        }
+
         ws.on('open', () => {
             clearTimeout(timeout);  // Cancel connection-phase timeout immediately
             console.log(`  [${ts()}] ✅ ${name} — Connected, subscribing...`);
@@ -989,6 +1178,7 @@ async function testExchange(name) {
 
                 try { ws.close(); } catch (e) {}
                 if (ossWs) try { ossWs.close(); } catch (e) {}
+                for (const ecWs of extraWsList) { try { ecWs.close(); } catch (e) {} }
                 setTimeout(done, 500);
             }, DATA_WAIT);
         });
@@ -1230,8 +1420,8 @@ async function main() {
     console.log('\n' + '╔' + '═'.repeat(78) + '╗');
     console.log('║  COMPREHENSIVE STREAM TYPE TESTER                                            ║');
     console.log('║  Testing: Orderbook / Trades / Tickers × BTC / ETH / SOL                    ║');
-    console.log('║  Exchanges: 24 | Tests per exchange: 9 (3 types × 3 coins)                  ║');
-    console.log('║  Total Tests: 216                                                            ║');
+    console.log('║  Exchanges: 29 | Tests per exchange: 9 (3 types × 3 coins)                  ║');
+    console.log('║  Total Tests: 261                                                            ║');
     console.log('╚' + '═'.repeat(78) + '╝\n');
 
     const exchangeNames = Object.keys(EXCHANGES);

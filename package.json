@@ -7,13 +7,23 @@
     "start": "node index.js",
     "binance": "node index.js",
     "mexc": "node mexc-stream.js",
+    "cryptoquant": "node cryptoquant-usdt-stream.js",
+    "cryptoquant:discover": "node cryptoquant-usdt-stream.js discover",
     "test-exchanges": "node exchange-tester.js",
     "fix-exchanges": "node exchange-fixer.js"
   },
-  "keywords": ["websocket", "crypto", "binance", "mexc", "orderbook", "open-interest"],
+  "keywords": [
+    "websocket",
+    "crypto",
+    "binance",
+    "mexc",
+    "orderbook",
+    "open-interest"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@duckdb/node-api": "^1.4.4-r.1",
     "ws": "^8.18.0"
   }
 }

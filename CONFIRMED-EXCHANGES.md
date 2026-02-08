@@ -1,9 +1,10 @@
 # CONFIRMED WORKING EXCHANGES - Data Streams Verified
 
-**Test Date:** February 8, 2026 (Updated - WS+REST Upgrade Test)  
-**Test Duration:** 141.6s  
-**Symbol Tested:** BTC/USDT  
-**Success Rate:** 93.75% (45/48 streams across 17 exchanges)
+**Test Date:** February 8, 2026 (Updated - Deep Research Multi-Coin Test)  
+**Test Duration:** 460.1s  
+**Symbols Tested:** BTC/USDT, ETH/USDT, SOL/USDT (Orderbook + Trades)  
+**Success Rate:** 97.8% (88/90 streams across 15 exchanges)  
+**DuckDB Verification:** 44 orderbook snapshots + 99 trade rows stored
 
 ---
 
@@ -28,17 +29,22 @@
 ---
 
 ### 2. NovaEx (WOO X White-Label)
-- **Type:** WebSocket  
+- **Type:** WebSocket + REST API  
 - **Spot:** ✅ | **Futures:** ✅  
 - **WebSocket URL:** `wss://wss.woox.io/ws/stream/OqdphuyIYbng-t001`  
+- **REST Base URL:** `https://api.woo.org/v1/public`  
+- **Symbol Format:** `SPOT_BTC_USDT` (WS), `SPOT_BTC_USDT` (REST)  
+- **Multi-Coin:** BTC ✅ ETH ✅ SOL ✅  
 - **Confirmed Streams (2/2):**
 
-| Stream | Subscription Message | Status |
-|--------|---------------------|--------|
-| Orderbook | `{"id":"sub1","topic":"SPOT_BTC_USDT@orderbook","event":"subscribe"}` | ✅ Working |
-| Trades | `{"id":"sub2","topic":"SPOT_BTC_USDT@trade","event":"subscribe"}` | ✅ Working |
+| Stream | Method | Subscription / Endpoint | Status |
+|--------|--------|------------------------|--------|
+| Orderbook | WS | `{"id":"sub1","topic":"SPOT_BTC_USDT@orderbook","event":"subscribe"}` | ✅ Working |
+| Trades | REST | `GET /v1/public/market_trades?symbol=SPOT_BTC_USDT&limit=5` | ✅ Working |
 
-- **Sample Data:** `{"topic":"SPOT_BTC_USDT@orderbook","ts":1770365111465,"data":{"symbol":"SPOT_BTC_USDT","asks":[[64803.82,0.308623]...],"bids":[...]}}`
+- **WS Data:** `{"topic":"SPOT_BTC_USDT@orderbook","ts":...,"data":{"symbol":"SPOT_BTC_USDT","asks":[[64803.82,0.308623]...],"bids":[...]}}`
+- **REST Trade Data:** `{"success":true,"rows":[{"symbol":"SPOT_BTC_USDT","executed_price":69150,"executed_quantity":0.01,"side":"BUY"}]}`
+- **⚠️ Note:** WOO X trades are extremely sparse via WS (0 trades in 40 seconds). Use REST `/v1/public/market_trades` for reliable trade data. WS `@bbo` topic works (200+ msgs) but `@trade` barely fires.
 
 ---
 
@@ -47,38 +53,46 @@
 - **Spot:** ✅ | **Futures:** ✅  
 - **Spot WebSocket URL:** `wss://stream.xt.com/public`  
 - **Futures WebSocket URL:** `wss://fstream.xt.com/ws/market`  
+- **Multi-Coin:** BTC ✅ ETH ✅ SOL ✅  
 - **Confirmed Streams (6/6):**
 
 | Stream | Market | Subscription Message | Status |
 |--------|--------|---------------------|--------|
-| Orderbook | Spot | `{"method":"subscribe","params":["depth_update@btc_usdt"]}` | ✅ Working |
-| Trades | Spot | `{"method":"subscribe","params":["trade@btc_usdt"]}` | ✅ Working |
+| Orderbook | Spot | `{"method":"subscribe","params":["depth_update@btc_usdt"],"id":"1"}` | ✅ Working |
+| Trades | Spot | `{"method":"subscribe","params":["trade@btc_usdt"],"id":"2"}` | ✅ Working |
 | Ticker | Spot | `{"method":"subscribe","params":["ticker@btc_usdt"]}` | ✅ Working |
 | Kline/OHLCV | Spot | `{"method":"subscribe","params":["kline@btc_usdt,1m"]}` | ✅ Working |
 | Orderbook | Futures | `{"method":"subscribe","params":["depth_update@btc_usdt"]}` | ✅ Working |
 | Ticker | Futures | `{"method":"subscribe","params":["ticker@btc_usdt"]}` | ✅ Working |
 
 - **Sample Data:** `{"topic":"trade","event":"trade@btc_usdt","data":{"s":"btc_usdt","p":"64926.98","q":"0.14120","b":false}}`
+- **⚠️ Note:** Subscribe messages MUST include `"id":"1"` field. The `onMsg` filter must check `p.topic === 'trade' && p.data` (not just `p.data`) to avoid matching subscription ack messages. Trade data format: `{topic:"trade", event:"trade@btc_usdt", data:{s,i,t,p,q,b}}` where `b` = isBuyerMaker.
 
 ---
 
 ### 4. Hotcoin.com
-- **Type:** WebSocket (gzip compressed)  
+- **Type:** WebSocket + REST API (gzip compressed)  
 - **Spot:** ✅ | **Futures:** ✅  
 - **WebSocket URL:** `wss://wss.hotcoinfin.com/trade/multiple`  
-- **Alt URL:** `wss://wss.hotcoin.top/trade/multiple`  
+- **REST Base URL:** `https://api.hotcoinfin.com/v1`  
 - **Compression:** gzip (must decompress incoming messages)  
-- **Ping:** `{"ping": <timestamp>}` every 15s → respond with `{"pong": <ping_value>}`  
+- **Ping:** `{"ping":"ping"}` → respond `{"pong":"pong"}` (STRING values, not numeric timestamps!)  
+- **Multi-Coin:** BTC ✅ ETH ✅ SOL ✅  
 - **Confirmed Streams (4/4):**
 
-| Stream | Subscription Message | Status |
-|--------|---------------------|--------|
-| Orderbook | `{"sub":"market.btc_usdt.depth.step0"}` | ✅ Working |
-| Trades | `{"sub":"market.btc_usdt.trade.detail"}` | ✅ Working |
-| Ticker | `{"sub":"market.btc_usdt.detail"}` | ✅ Working |
-| Kline/OHLCV | `{"sub":"market.btc_usdt.kline.1m"}` | ✅ Working |
+| Stream | Method | Subscription / Endpoint | Status |
+|--------|--------|------------------------|--------|
+| Orderbook | WS | `{"sub":"market.btc_usdt.trade.depth"}` | ✅ Working |
+| Trades | WS | `{"sub":"market.btc_usdt.trade.detail"}` | ✅ Working |
+| Orderbook | REST | `GET /v1/depth?symbol=btc_usdt` | ✅ Working |
+| Trades | REST | `GET /v1/trade?symbol=btc_usdt&count=5` | ✅ Working |
 
-- **Sample Data:** `{"ch":"market.btc_usdt.depth.step0","code":200,"msg":"SUCCESS","status":"ok","ts":1770365170762}`
+- **WS Data Format:** `{"ch":"market.btc_usdt.trade.depth","code":200,"data":{"bids":[[price,qty],...],"asks":[[price,qty],...]}}` — uses `{code:200, data:{}}` NOT `{tick:{}}`
+- **⚠️ CRITICAL CORRECTIONS from deep research:**
+  - Ping format is `{"ping":"ping"}` with STRING values, NOT `{"ping": <timestamp>}` with numbers
+  - Depth channel is `market.{sym}.trade.depth` NOT `market.{sym}.depth.step0`
+  - Data comes in `{ch, code:200, data:{bids,asks}}` format, NOT `{tick:{buys,asks}}`
+  - Live probe: 57 msgs in 25 seconds when ping handled correctly
 
 ---
 
@@ -114,7 +128,8 @@
 - **WebSocket URL (Trades):** `wss://api.exchange.bullish.com/trading-api/v1/market-data/trades`  
 - **REST Base URL:** `https://api.exchange.bullish.com/trading-api/v1`  
 - **API Style:** JSON-RPC 2.0  
-- **Symbol Format:** `BTCUSDC` (WS), `BTCUSDT` (REST)  
+- **Symbol Format:** `BTCUSDC` / `ETHUSDC` / `SOLUSDC` (WS), `BTCUSDT` (REST)  
+- **Multi-Coin:** BTC ✅ ETH ✅ SOL ✅  
 - **Confirmed WebSocket Streams (2/2):**
 
 | Stream | Subscription Message | Status |
@@ -122,9 +137,10 @@
 | Orderbook (L2) | `{"jsonrpc":"2.0","type":"command","method":"subscribe","params":{"topic":"l2Orderbook","symbol":"BTCUSDC"},"id":"1611082473000"}` | ✅ Working |
 | Trades | `{"jsonrpc":"2.0","type":"command","method":"subscribe","params":{"topic":"anonymousTrades","symbol":"BTCUSDC"},"id":"1611082473000"}` | ✅ Working |
 
-- **WS Orderbook Data:** `{"type":"snapshot","dataType":"V1TALevel2","data":{"timestamp":"...","bids":["69595.6000","0.00025698",...],"asks":[...]}}`
+- **WS Orderbook Data:** `{"type":"snapshot","dataType":"V1TALevel2","data":{"timestamp":"...","bids":["69595.6000","0.00025698",...],"asks":[...]}}` — FLAT ARRAY format `[price, qty, price, qty, ...]`
 - **WS Trade Data:** `{"type":"snapshot","dataType":"V1TAAnonymousTradeUpdate","data":{"symbol":"BTCUSDC","trades":[{"symbol":"BTCUSDC","price":"69150","quantity":"0.01","side":"BUY"},...]}}`
-- **Note:** Separate WS endpoints for orderbook vs trades. Unauthenticated. L2 provides full depth with snapshots+updates. Heartbeat every 30s.
+- **⚠️ CRITICAL:** Orderbook and trades use SEPARATE WebSocket endpoints. The `anonymousTrades` topic is ONLY valid on the `/trades` endpoint. Subscribing to it on the `/orderbook` endpoint will fail silently.
+- **Note:** Unauthenticated. L2 provides full depth with snapshots+updates. Keepalive ping every 5 minutes. Orderbook data uses flat arrays `[price, qty, price, qty, ...]` — must parse in pairs.
 - **Confirmed REST Endpoints (3/3):**
 
 | Endpoint | URL | Status |
@@ -145,6 +161,7 @@
 - **Compression:** gzip (must decompress incoming messages)  
 - **Ping:** `{"ping": <timestamp>}` → respond with `{"pong": <ping_value>}`  
 - **Symbol Format:** `btcusdt` (lowercase, no separator) for WS; `BTCUSDT` (uppercase) for REST  
+- **Multi-Coin:** BTC ✅ ETH ✅ SOL ❌ (not listed)  
 - **Confirmed WebSocket Streams (2/2):**
 
 | Stream | Subscription Message | Status |
@@ -154,7 +171,7 @@
 
 - **WS Depth Data:** `{"channel":"market_btcusdt_depth_step0","tick":{"asks":[[68822.15,0.40951],...],"buys":[[...]]}}`
 - **WS Trade Data:** `{"channel":"market_btcusdt_trade_ticker","tick":{"data":[{"amount":"7456.14","price":"68821.73","side":"SELL","ts":1770475245956,"vol":"0.10834"}]}}`
-- **Note:** WS uses lowercase symbols (`btcusdt`), uppercase returns empty data. Messages are gzip compressed.
+- **⚠️ SOL NOT LISTED:** `SOLUSDT` + `SOL-USDT` both return `{"code":"-1121","msg":"Invalid symbol"}`. SOL is not available on Darkex exchange.
 - **Confirmed REST Endpoints (4/4):**
 
 | Endpoint | URL | Status |
@@ -174,16 +191,23 @@
 - **WebSocket URL (Spot):** `wss://ws.bitrue.com/market/ws`  
 - **REST Base URL:** `https://openapi.bitrue.com/api/v1`  
 - **Compression:** gzip (WS messages must be decompressed)  
-- **Ping:** `{"event":"ping"}` every 30s  
+- **Ping:** Handled globally (standard ping/pong)  
 - **Symbol Format:** `BTCUSDT` (concatenated, uppercase)  
-- **Confirmed WebSocket Streams (Spot - 1/1):**
+- **Multi-Coin:** BTC ✅ ETH ✅ SOL ✅  
+- **Confirmed Streams (WS + REST):**
 
-| Stream | Subscription Message | Status |
-|--------|---------------------|--------|
-| Orderbook | `{"event":"sub","params":{"cb_id":"BTCUSDT","channel":"market_BTCUSDT_simple_depth_step0"}}` | ✅ Working |
+| Stream | Method | Subscription / Endpoint | Status |
+|--------|--------|------------------------|--------|
+| Orderbook | WS | `{"event":"sub","params":{"cb_id":"BTCUSDT","channel":"market_BTCUSDT_depth_step0"}}` | ✅ Working (sometimes slow) |
+| Orderbook | REST | `GET /api/v1/depth?symbol=BTCUSDT&limit=5` | ✅ Working |
+| Trades | REST | `GET /api/v1/trades?symbol=BTCUSDT&limit=5` | ✅ Working |
 
-- **WS Orderbook Data:** `{"channel":"market_BTCUSDT_simple_depth_step0","tick":{"buys":[["69628.38","3.4585"],...],"asks":[["69628.39","0.0009"],...]}}`
-- **WS Notes:** Spot trades channel not available via WS (use REST). Futures WS (`wss://wsapi.bitrue.com`) returns 502.
+- **WS Orderbook Data:** `{"channel":"market_BTCUSDT_depth_step0","tick":{"buys":[["69628.38","3.4585"],...],"asks":[["69628.39","0.0009"],...]}}`
+- **⚠️ CORRECTIONS from deep research:**
+  - Use `market_BTCUSDT_depth_step0` NOT `market_BTCUSDT_simple_depth_step0` (more reliable)
+  - ALL trade channel names tested (`trade_ticker`, `trade_detail`, `trade`, `kline_*_trade`) return `{"status":"error"}` — NO WS trade channels exist
+  - WS orderbook sometimes times out — REST fallback handles it
+  - Futures WS (`wss://wsapi.bitrue.com`) returns 502
 - **Confirmed Endpoints (3/4):**
 
 | Endpoint | URL | Status |
@@ -203,12 +227,13 @@
 - **WebSocket URL:** `wss://wsapi.fameex.com/v1/ws/stream/public`  
 - **REST Base URLs:** `https://api.fameex.com/v2/public` (ticker/orderbook), `https://api.fameex.com/sapi/v1` (trades)  
 - **WS Connection Response:** `{"channel":"system","data":{"status":"ready"}}`  
+- **Multi-Coin:** BTC ✅ ETH ✅ SOL ✅  
 - **Confirmed WebSocket Streams (2/2):**
 
 | Stream | Subscription Message | Status |
 |--------|---------------------|--------|
 | Orderbook (Depth) | `{"event":"sub","params":{"channel":"market_btcusdt_depth_step0"}}` | ✅ Working |
-| Trades | `{"sub":"market.btcusdt.trade.detail"}` | ✅ Working |
+| Trades | `{"event":"sub","params":{"channel":"market_btcusdt_trade_detail"}}` | ✅ Working |
 
 - **WS Depth Data:** `{"event_rep":"","channel":"market_btcusdt_depth_step","tick":{"pair":"BTCUSDT","bids":[["68414.3","0"],...],"asks":[...]}}`
 - **WS Trade Data:** `{"channel":"market_btcusdt_trade","data":[{"amount":"4408.67","price":"68391.9","side":"SELL","ts":"1770465840780","vol":"0.064462"}]}`
@@ -221,7 +246,7 @@
 | Orderbook | `/v2/public/orderbook?symbol=BTCUSDT&limit=5` | ✅ 200 OK |
 | Trades | `/sapi/v1/trades?symbol=BTCUSDT&limit=5` | ✅ 200 OK |
 
-- **Note:** WS subscription uses Huobi-style format. Depth channel: `market_btcusdt_depth_step0`. Trade channel: `market.btcusdt.trade.detail` (dot-separated). All futures path patterns return 404.
+- **⚠️ CRITICAL CORRECTION:** Trade subscription MUST use underscore format `{"event":"sub","params":{"channel":"market_btcusdt_trade_detail"}}` — NOT old Huobi dot-notation `{"sub":"market.btcusdt.trade.detail"}` which is silently ignored and produces zero trade data. Depth uses underscores; trades ALSO use underscores.
 
 ---
 
@@ -308,6 +333,7 @@
 - **REST Base URL:** `https://openapi.blofin.com/api/v1/market`  
 - **API Style:** OKX-compatible (instId, op, args)  
 - **Symbol Format:** `BTC-USDT` (hyphenated)  
+- **Multi-Coin:** BTC ✅ ETH ✅ SOL ✅  
 - **Confirmed WebSocket Streams (2/2):**
 
 | Stream | Subscription Message | Status |
@@ -318,6 +344,7 @@
 - **WS Sub Confirm:** `{"event":"subscribe","arg":{"channel":"trades","instId":"BTC-USDT"}}`
 - **WS Orderbook Data:** `{"arg":{"channel":"books5","instId":"BTC-USDT"},"action":"snapshot","data":{"asks":[["68848.6","1342"],...],"bids":[["68847.9","750"],...],"ts":"..."}}`
 - **WS Trade Data:** `{"arg":{"channel":"trades","instId":"BTC-USDT"},"data":[{"tradeId":"...","instId":"BTC-USDT","price":"69149","size":"8","side":"buy","ts":"..."}]}`
+- **⚠️ Note:** ETH and SOL trades arrive slowly (~10s between trades). Timeout must be ≥30s (20s is too short). REST fallback works reliably for all coins.
 - **Confirmed REST Endpoints (2/2):**
 
 | Endpoint | URL | Status |
@@ -392,18 +419,18 @@ biconomyWS.on('open', () => {
 });
 // Ping every 30s: {"method":"server.ping","params":[],"id":5160}
 
-// 2. NovaEx / WOO X (Spot)
+// 2. NovaEx / WOO X (Spot) — WS for orderbook, REST for trades
 const novaexWS = new WebSocket('wss://wss.woox.io/ws/stream/OqdphuyIYbng-t001');
 novaexWS.on('open', () => {
   novaexWS.send(JSON.stringify({"id":"sub1","topic":"SPOT_BTC_USDT@orderbook","event":"subscribe"}));
-  novaexWS.send(JSON.stringify({"id":"sub2","topic":"SPOT_BTC_USDT@trade","event":"subscribe"}));
+  // Trades via REST: GET https://api.woo.org/v1/public/market_trades?symbol=SPOT_BTC_USDT&limit=5
 });
 
-// 3. XT.com (Spot)
+// 3. XT.com (Spot) — id field required
 const xtSpotWS = new WebSocket('wss://stream.xt.com/public');
 xtSpotWS.on('open', () => {
-  xtSpotWS.send(JSON.stringify({"method":"subscribe","params":["depth_update@btc_usdt"]}));
-  xtSpotWS.send(JSON.stringify({"method":"subscribe","params":["trade@btc_usdt"]}));
+  xtSpotWS.send(JSON.stringify({"method":"subscribe","params":["depth_update@btc_usdt"],"id":"1"}));
+  xtSpotWS.send(JSON.stringify({"method":"subscribe","params":["trade@btc_usdt"],"id":"2"}));
   xtSpotWS.send(JSON.stringify({"method":"subscribe","params":["ticker@btc_usdt"]}));
   xtSpotWS.send(JSON.stringify({"method":"subscribe","params":["kline@btc_usdt,1m"]}));
 });
@@ -416,14 +443,14 @@ xtFuturesWS.on('open', () => {
 });
 
 // 4. Hotcoin (Spot) - requires gzip decompression
+// CRITICAL: ping is {"ping":"ping"} with STRING values, NOT numeric timestamps
 const hotcoinWS = new WebSocket('wss://wss.hotcoinfin.com/trade/multiple');
 hotcoinWS.on('open', () => {
-  hotcoinWS.send(JSON.stringify({"sub":"market.btc_usdt.depth.step0"}));
+  hotcoinWS.send(JSON.stringify({"sub":"market.btc_usdt.trade.depth"}));
   hotcoinWS.send(JSON.stringify({"sub":"market.btc_usdt.trade.detail"}));
-  hotcoinWS.send(JSON.stringify({"sub":"market.btc_usdt.detail"}));
-  hotcoinWS.send(JSON.stringify({"sub":"market.btc_usdt.kline.1m"}));
 });
-// Ping every 15s: {"ping": Date.now()} → respond with {"pong": <ping_value>}
+// Ping: {"ping":"ping"} → respond with {"pong":"pong"} (STRING values!)
+// Data format: {ch, code:200, data:{bids,asks}} NOT {tick:{buys,asks}}
 
 // 5. Zoomex (Spot)
 const zoomexSpotWS = new WebSocket('wss://stream.zoomex.com/v5/public/spot');
@@ -454,22 +481,22 @@ bullishTradesWS.on('open', () => {
   bullishTradesWS.send(JSON.stringify({"jsonrpc":"2.0","type":"command","method":"subscribe","params":{"topic":"anonymousTrades","symbol":"BTCUSDC"},"id":"1611082473000"}));
 });
 
-// 8. Bitrue (Spot) - gzip compressed orderbook
+// 8. Bitrue (Spot) - gzip compressed orderbook, NO trade channels
 const bitrueWS = new WebSocket('wss://ws.bitrue.com/market/ws');
 bitrueWS.on('open', () => {
-  bitrueWS.send(JSON.stringify({"event":"sub","params":{"cb_id":"BTCUSDT","channel":"market_BTCUSDT_simple_depth_step0"}}));
+  bitrueWS.send(JSON.stringify({"event":"sub","params":{"cb_id":"BTCUSDT","channel":"market_BTCUSDT_depth_step0"}}));
 });
-// Ping every 30s: {"event":"ping"}
-// Messages are gzip compressed — must decompress
+// NO trade WS channels available — use REST for trades
+// REST: GET https://openapi.bitrue.com/api/v1/trades?symbol=BTCUSDT&limit=5
 
-// 9. FameEX (Spot) - Huobi-style channels
+// 9. FameEX (Spot) - ALL channels use underscore format
 const fameexWS = new WebSocket('wss://wsapi.fameex.com/v1/ws/stream/public');
 fameexWS.on('open', () => {
   fameexWS.send(JSON.stringify({"event":"sub","params":{"channel":"market_btcusdt_depth_step0"}}));
-  fameexWS.send(JSON.stringify({"sub":"market.btcusdt.trade.detail"}));
+  fameexWS.send(JSON.stringify({"event":"sub","params":{"channel":"market_btcusdt_trade_detail"}}));
 });
-// Connection response: {"channel":"system","data":{"status":"ready"}}
-// 33 messages in 15 seconds — very active!
+// CRITICAL: Trade sub uses {event:"sub",params:{channel:"market_btcusdt_trade_detail"}}
+//           NOT {sub:"market.btcusdt.trade.detail"} (Huobi dot-notation is silently ignored!)
 
 // 11. Websea (Spot) - binary buffers, decode as UTF-8
 const webseaSpotWS = new WebSocket('wss://oapi.websea.com/ws/v1/spot/market');
@@ -490,23 +517,31 @@ webseaFuturesWS.on('open', () => {
 // REST API ENDPOINTS (copy-paste ready)
 // ═══════════════════════════════════════════════
 
-// 6. Bullish (REST also available)
-// GET https://api.exchange.bullish.com/trading-api/v1/markets/BTCUSDT/orderbook/hybrid
-// GET https://api.exchange.bullish.com/trading-api/v1/markets/BTCUSDT/trades
+// 2. NovaEx / WOO X (WS orderbook + REST trades)
+// WS: wss://wss.woox.io/ws/stream/OqdphuyIYbng-t001
+// WS Subscribe Orderbook: {"id":"sub1","topic":"SPOT_BTC_USDT@orderbook","event":"subscribe"}
+// Trades via REST (WS trades too sparse):
+// GET https://api.woo.org/v1/public/market_trades?symbol=SPOT_BTC_USDT&limit=5
+// GET https://api.woo.org/v1/public/orderbook/SPOT_BTC_USDT
 
 // 7. Darkex (ticker needs API key, removed)
 // GET https://openapi.darkex.com/sapi/v1/depth?symbol=BTCUSDT&limit=5
 // GET https://openapi.darkex.com/sapi/v1/trades?symbol=BTCUSDT&limit=5
 
-// 8. Bitrue (WS + REST, spot orderbook WS, gzip)
-// WS: wss://ws.bitrue.com/market/ws
-// WS Subscribe Orderbook: {"event":"sub","params":{"cb_id":"BTCUSDT","channel":"market_BTCUSDT_simple_depth_step0"}}
+// 8. Bitrue (WS orderbook + REST trades)
+// WS: wss://ws.bitrue.com/market/ws (gzip compressed)
+// WS Subscribe Orderbook: {"event":"sub","params":{"cb_id":"BTCUSDT","channel":"market_BTCUSDT_depth_step0"}}
+// No WS trade channels available — all return {status:"error"}
 // REST:
 // GET https://openapi.bitrue.com/api/v1/ticker/24hr?symbol=BTCUSDT
 // GET https://openapi.bitrue.com/api/v1/depth?symbol=BTCUSDT&limit=5
 // GET https://openapi.bitrue.com/api/v1/trades?symbol=BTCUSDT&limit=5
 
-// 9. FameEX (REST also available)
+// 9. FameEX (WS uses underscore format for ALL channels)
+// WS: wss://wsapi.fameex.com/v1/ws/stream/public
+// WS Subscribe Depth: {"event":"sub","params":{"channel":"market_btcusdt_depth_step0"}}
+// WS Subscribe Trades: {"event":"sub","params":{"channel":"market_btcusdt_trade_detail"}}
+// REST:
 // GET https://api.fameex.com/v2/public/ticker
 // GET https://api.fameex.com/v2/public/orderbook?symbol=BTCUSDT&limit=5
 // GET https://api.fameex.com/sapi/v1/trades?symbol=BTCUSDT&limit=5
@@ -567,17 +602,41 @@ webseaFuturesWS.on('open', () => {
 
 | Category | Count | Exchanges |
 |----------|-------|-----------|
-| ✅ WS Fully Working | 5 | Biconomy, NovaEx, XT.com, Hotcoin, Zoomex |
-| ✅ REST Only | 3 | OrangeX, BVOX, Trubit Pro |
-| ✅ WS + REST | 7 | Bullish, Darkex, Bitrue, FameEX, Websea, BloFin, Azbit (REST only, WS 404) |
+| ✅ WS Fully Working | 3 | Biconomy, Zoomex, XT.com |
+| ✅ WS + REST Hybrid | 8 | Bullish, NovaEx, Hotcoin, FameEX, Darkex, Bitrue, BloFin, Websea |
+| ✅ REST Only | 4 | OrangeX, BVOX, Trubit Pro, Azbit |
 
-| **Total Confirmed** | **17** | **48 orderbook+trades streams tested, 45 passed** |
+| **Total Confirmed** | **15** | **90 orderbook+trades streams tested (BTC/ETH/SOL), 88 passed (97.8%)** |
+
+### Multi-Coin Test Results (BTC / ETH / SOL)
+
+| Exchange | BTC OB | BTC TR | ETH OB | ETH TR | SOL OB | SOL TR | Score |
+|----------|--------|--------|--------|--------|--------|--------|-------|
+| Azbit | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 6/6 |
+| Biconomy | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 6/6 |
+| Bitrue | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 6/6 ¹ |
+| BloFin | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 6/6 ² |
+| Bullish | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 6/6 |
+| BVOX | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 6/6 |
+| Darkex | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | 4/6 ³ |
+| FameEX | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 6/6 |
+| Hotcoin | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 6/6 |
+| NovaEx | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 6/6 |
+| OrangeX | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 6/6 |
+| Trubit Pro | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 6/6 |
+| Websea | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 6/6 |
+| XT.com | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 6/6 |
+| Zoomex | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 6/6 |
+
+¹ Bitrue: WS OB sometimes slow, REST fallback handles all 3 coins reliably  
+² BloFin: SOL trades WS can timeout at <30s, REST fallback works  
+³ Darkex: SOL not listed on exchange (`{"code":"-1121","msg":"Invalid symbol"}`)
 
 | Stream Type | Available On |
 |-------------|-------------|
-| **Orderbook** | Biconomy, NovaEx, XT.com (Spot+Futures), Zoomex (Spot+Futures), FameEX (WS), Darkex (WS+REST), BloFin (WS+REST), Bullish (WS+REST), Bitrue (WS+REST), OrangeX (Futures), Websea (REST Spot+Futures), Azbit, BVOX, Trubit Pro |
-| **Trades** | Biconomy, NovaEx, XT.com, Hotcoin, Zoomex (Spot+Futures), FameEX (WS), Darkex (WS+REST), BloFin (WS+REST), Bullish (WS+REST), Bitrue (REST), OrangeX (Spot+Futures), Websea (WS+REST Spot+Futures), Azbit, BVOX, Trubit Pro |
-| **Ticker** | Biconomy, XT.com (Spot+Futures), Hotcoin (REST), Zoomex (Spot+Futures), Bitrue, FameEX (REST), OrangeX (Futures), Websea (REST Spot+Futures), Azbit, BVOX, Trubit Pro |
+| **Orderbook** | All 15 exchanges (WS: Biconomy, NovaEx, XT.com, Zoomex, Bullish, Darkex, Bitrue, FameEX, BloFin, Hotcoin; REST: OrangeX, BVOX, Trubit Pro, Azbit, Websea) |
+| **Trades** | All 15 exchanges (WS: Biconomy, XT.com, Zoomex, Bullish, Darkex, FameEX, BloFin, Hotcoin, Websea; REST: NovaEx, Bitrue, OrangeX, BVOX, Trubit Pro, Azbit) |
+| **Ticker** | Biconomy, XT.com (Spot+Futures), Zoomex (Spot+Futures), Bitrue, OrangeX, Websea, Azbit, BVOX, Trubit Pro |
 | **Kline** | Websea (WS Spot+Futures), Darkex (REST) |
 
 ### Exchanges Tested But Not Added
@@ -597,13 +656,24 @@ webseaFuturesWS.on('open', () => {
 | Trubit Pro spot WS | `wss://ws.trubit.com` returns 403 (geo-blocked). |
 | Trubit Pro futures WS | `wss://api-futures.trubit.com/ws/market` connects but all JSON formats return \"failed to deSerialize\". |
 | FameEX futures | All futures/perpetual/fapi/swap/contract path patterns return 404. Spot-only API. |
-| Hotcoin depth | WS depth subscription works but data arrives slowly (~20s+). Server confirms `status:ok` immediately; depth updates follow after initial delay |
+| Hotcoin depth | WS depth correct channel is `market.{sym}.trade.depth` — NOT `depth.step0`. Data format: `{code:200, data:{}}` NOT `{tick:{}}`. Ping: `{"ping":"ping"}` string, NOT numeric timestamp. |
+
+### Deep Research Corrections Applied (February 8, 2026)
+
+| Exchange | Issue Found | Fix Applied |
+|----------|------------|-------------|
+| Bullish | OB data is flat array `[price, qty, price, qty, ...]` | Added paired-element parser |
+| Hotcoin | Ping was `{ping:<number>}` but needs `{ping:"ping"}` string; depth channel was `depth.step0` but correct is `trade.depth`; data is `{code:200, data:{}}` not `{tick:{}}` | Fixed all 3 issues + added REST fallback |
+| XT.com | Subscribe missing `id` field; `onMsg` filter matched ack messages | Added `id:"1"`, filter for `p.topic === 'trade'` |
+| NovaEx/WOO | Trades extremely sparse via WS (0 in 40s) | Switched trades to REST `/v1/public/market_trades` |
+| FameEX | Trade sub used Huobi dot-notation `{sub:"market.X.trade.detail"}` silently ignored | Fixed to `{event:"sub",params:{channel:"market_X_trade_detail"}}` |
+| Bitrue | `simple_depth_step0` less reliable than `depth_step0`; no trade channels exist | Changed to `depth_step0`, trades REST-only |
+| BloFin | ETH/SOL trades slow (~10s gaps) | Increased timeout to 30s + REST fallback |
+| Darkex | SOL returns `{"code":"-1121","msg":"Invalid symbol"}` | Confirmed SOL not listed — cannot be fixed |
 
 ---
 
-*Generated from test-confirmed-exchanges.js deep test results on February 7, 2026*
-*Verification test: 17/17 exchanges confirmed, 0 errors, 100% health rate*
-*Added: BloFin (WS+REST OKX-style), BVOX/BitVenus (REST Binance-style), Azbit (REST), Trubit Pro (REST Binance-style).*
-*Upgraded: Darkex (REST → WS+REST, lowercase gzip WS), FameEX (WS+REST), Websea (WS+REST).*
-*BloFin WS: wss://openapi.blofin.com/ws/public — OKX-style channels, books5+trades*
-*Darkex WS: wss://ws.darkex.com/kline-api/ws — gzip compressed, lowercase symbols*
+*Generated from duckdb-stream-test.js deep research multi-coin test on February 8, 2026*  
+*Multi-Coin Test: 88/90 streams passed (97.8%), 15/15 exchanges confirmed, 44/45 coin pairs*  
+*DuckDB Verification: 44 orderbook snapshots + 99 trade rows stored in streaming.duckdb*  
+*Tables: stream_test_orderbook, stream_test_trades, stream_test_results*

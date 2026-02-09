@@ -2,8 +2,8 @@
  * ╔══════════════════════════════════════════════════════════════════════════╗
  * ║   CANONICAL PAIR SYSTEM — DuckDB Schema Initialization                  ║
  * ║   Creates: assets, symbol_map, trades, orderbook tables                 ║
- * ║   Populates: assets + symbol_map for 30 exchanges × BTC/ETH/SOL        ║
- * ║   Quote currencies: USD, USDT, USDC                                     ║
+ * ║   Populates: assets + symbol_map for 48 exchanges × BTC/ETH/SOL        ║
+ * ║   Quote currencies: USD, USDT, USDC, DAI                                ║
  * ╚══════════════════════════════════════════════════════════════════════════╝
  */
 
@@ -42,6 +42,7 @@ async function main() {
         ['SOL', 'crypto',     true,  []],
         ['USDT','stablecoin', true,  ['UST']],
         ['USDC','stablecoin', true,  []],
+        ['DAI', 'stablecoin', false, []],
         ['USD', 'fiat',       true,  []],
 
     ];
@@ -303,6 +304,89 @@ async function main() {
         ['Websea', 'BTC-USDT', 'BTC', 'USDT'],
         ['Websea', 'ETH-USDT', 'ETH', 'USDT'],
         ['Websea', 'SOL-USDT', 'SOL', 'USDT'],
+
+        // ─────────── Bullish (WS USDC pairs) ───────────
+        ['Bullish', 'BTCUSDC', 'BTC', 'USDC'],
+        ['Bullish', 'ETHUSDC', 'ETH', 'USDC'],
+        ['Bullish', 'SOLUSDC', 'SOL', 'USDC'],
+
+        // ─────────── Darkex (no SOL) ───────────
+        ['Darkex', 'BTCUSDT', 'BTC', 'USDT'],
+        ['Darkex', 'ETHUSDT', 'ETH', 'USDT'],
+
+        // ─────────── Bitrue ───────────
+        ['Bitrue', 'BTCUSDT', 'BTC', 'USDT'],
+        ['Bitrue', 'ETHUSDT', 'ETH', 'USDT'],
+        ['Bitrue', 'SOLUSDT', 'SOL', 'USDT'],
+
+        // ─────────── BloFin ───────────
+        ['BloFin', 'BTC-USDT', 'BTC', 'USDT'],
+        ['BloFin', 'ETH-USDT', 'ETH', 'USDT'],
+        ['BloFin', 'SOL-USDT', 'SOL', 'USDT'],
+
+        // ─────────── OrangeX ───────────
+        ['OrangeX', 'BTC-USDT', 'BTC', 'USDT'],
+        ['OrangeX', 'ETH-USDT', 'ETH', 'USDT'],
+        ['OrangeX', 'SOL-USDT', 'SOL', 'USDT'],
+
+        // ─────────── Azbit ───────────
+        ['Azbit', 'BTC_USDT', 'BTC', 'USDT'],
+        ['Azbit', 'ETH_USDT', 'ETH', 'USDT'],
+        ['Azbit', 'SOL_USDT', 'SOL', 'USDT'],
+
+        // ─────────── BVOX ───────────
+        ['BVOX', 'BTCUSDT', 'BTC', 'USDT'],
+        ['BVOX', 'ETHUSDT', 'ETH', 'USDT'],
+        ['BVOX', 'SOLUSDT', 'SOL', 'USDT'],
+
+        // ─────────── Trubit Pro ───────────
+        ['Trubit Pro', 'BTCUSDT', 'BTC', 'USDT'],
+        ['Trubit Pro', 'ETHUSDT', 'ETH', 'USDT'],
+        ['Trubit Pro', 'SOLUSDT', 'SOL', 'USDT'],
+
+        // ─────────── Bitget (Native WS) ───────────
+        ['Bitget', 'BTCUSDT', 'BTC', 'USDT'],
+        ['Bitget', 'ETHUSDT', 'ETH', 'USDT'],
+        ['Bitget', 'SOLUSDT', 'SOL', 'USDT'],
+
+        // ─────────── Gemini (Native WS, USD pairs) ───────────
+        ['Gemini', 'BTCUSD', 'BTC', 'USD'],
+        ['Gemini', 'ETHUSD', 'ETH', 'USD'],
+
+        // ─────────── Binance.US (Native WS) ───────────
+        ['Binance.US', 'btcusdt', 'BTC', 'USDT'],
+        ['Binance.US', 'ethusdt', 'ETH', 'USDT'],
+        ['Binance.US', 'solusdt', 'SOL', 'USDT'],
+
+        // ─────────── CEX.IO (CCXT WS) ───────────
+        ['CEX.IO', 'BTC/USDT', 'BTC', 'USDT'],
+        ['CEX.IO', 'ETH/USDT', 'ETH', 'USDT'],
+
+        // ─────────── CoinEx (CCXT WS) ───────────
+        ['CoinEx', 'BTC/USDT', 'BTC', 'USDT'],
+        ['CoinEx', 'ETH/USDT', 'ETH', 'USDT'],
+        ['CoinEx', 'SOL/USDT', 'SOL', 'USDT'],
+
+        // ─────────── DigiFinex (Native WS) ───────────
+        ['DigiFinex', 'BTC_USDT', 'BTC', 'USDT'],
+        ['DigiFinex', 'ETH_USDT', 'ETH', 'USDT'],
+        ['DigiFinex', 'SOL_USDT', 'SOL', 'USDT'],
+
+        // ─────────── BigONE (CCXT REST) ───────────
+        ['BigONE', 'BTC/USDT', 'BTC', 'USDT'],
+        ['BigONE', 'ETH/USDT', 'ETH', 'USDT'],
+        ['BigONE', 'SOL/USDT', 'SOL', 'USDT'],
+
+        // ─────────── EXMO (Native WS) ───────────
+        ['EXMO', 'BTC_USDT', 'BTC', 'USDT'],
+        ['EXMO', 'ETH_USDT', 'ETH', 'USDT'],
+        ['EXMO', 'SOL_USDT', 'SOL', 'USDT'],
+        ['EXMO', 'BTC_DAI', 'BTC', 'DAI'],
+
+        // ─────────── LATOKEN (CCXT REST) ───────────
+        ['LATOKEN', 'BTC/USDT', 'BTC', 'USDT'],
+        ['LATOKEN', 'ETH/USDT', 'ETH', 'USDT'],
+        ['LATOKEN', 'SOL/USDT', 'SOL', 'USDT'],
     ];
 
     let inserted = 0;

@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Crypto Stream Monitor — 47 Exchanges</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #0a0e17; --bg2: #111827; --bg3: #1e293b;
+  --border: #334155; --text: #e2e8f0; --text2: #94a3b8;
+  --green: #22c55e; --red: #ef4444; --yellow: #eab308;
+  --blue: #3b82f6; --cyan: #06b6d4; --purple: #a855f7;
+  --orange: #f97316;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+/* Header */
+.header { background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
+.header h1 { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+.header h1 .dot { width: 10px; height: 10px; border-radius: 50%; animation: pulse 2s infinite; }
+.header h1 .dot.live { background: var(--green); box-shadow: 0 0 8px var(--green); }
+.header h1 .dot.off { background: var(--red); }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+.header-stats { display: flex; gap: 24px; }
+.header-stat { text-align: center; }
+.header-stat .val { font-size: 22px; font-weight: 700; color: var(--cyan); }
+.header-stat .lbl { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 1px; }
+
+/* Grid Layout */
+.grid { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto 1fr; gap: 16px; padding: 16px 24px; max-width: 1600px; margin: 0 auto; }
+.card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.card-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.card-header h2 { font-size: 14px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 1px; }
+.card-body { padding: 16px; }
+
+/* Throughput Chart */
+.chart-card { grid-column: 1 / -1; }
+.chart-card .card-body { height: 200px; }
+
+/* Exchange Table */
+.exchange-card { grid-column: 1 / -1; }
+.ex-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ex-table thead th { padding: 8px 12px; text-align: left; color: var(--text2); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid var(--border); cursor: pointer; user-select: none; white-space: nowrap; }
+.ex-table thead th:hover { color: var(--cyan); }
+.ex-table thead th.sorted { color: var(--cyan); }
+.ex-table tbody tr { border-bottom: 1px solid #1e293b22; transition: background 0.15s; }
+.ex-table tbody tr:hover { background: var(--bg3); }
+.ex-table td { padding: 6px 12px; white-space: nowrap; }
+.ex-table .num { text-align: right; font-variant-numeric: tabular-nums; font-family: 'Cascadia Code', 'Fira Code', monospace; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+.status-dot.ok { background: var(--green); box-shadow: 0 0 4px var(--green); }
+.status-dot.warn { background: var(--yellow); box-shadow: 0 0 4px var(--yellow); }
+.status-dot.err { background: var(--red); box-shadow: 0 0 4px var(--red); }
+.status-dot.pending { background: var(--text2); }
+.bar-cell { position: relative; }
+.bar-bg { position: absolute; top: 2px; left: 0; bottom: 2px; border-radius: 3px; opacity: 0.15; }
+.bar-bg.trades { background: var(--blue); }
+.bar-bg.ob { background: var(--purple); }
+.type-badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.type-badge.ws { background: rgba(34,197,94,0.15); color: var(--green); }
+.type-badge.ccxt-ws { background: rgba(168,85,247,0.15); color: var(--purple); }
+.type-badge.rest { background: rgba(249,115,22,0.15); color: var(--orange); }
+.type-badge.ccxt-rest { background: rgba(6,182,212,0.15); color: var(--cyan); }
+
+/* Symbol Breakdown */
+.symbol-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.symbol-card { background: var(--bg3); border-radius: 8px; padding: 12px; }
+.symbol-card .pair { font-size: 15px; font-weight: 700; color: var(--cyan); margin-bottom: 4px; }
+.symbol-card .row { display: flex; justify-content: space-between; font-size: 12px; color: var(--text2); margin-top: 2px; }
+.symbol-card .row .val { color: var(--text); font-weight: 600; }
+.mini-bar { height: 4px; border-radius: 2px; background: var(--bg); margin-top: 6px; overflow: hidden; }
+.mini-bar-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
+.mini-bar-fill.t { background: linear-gradient(90deg, var(--blue), var(--cyan)); }
+.mini-bar-fill.o { background: linear-gradient(90deg, var(--purple), #c084fc); }
+
+/* Event Log */
+.log-card { max-height: 350px; }
+.log-body { max-height: 300px; overflow-y: auto; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 12px; line-height: 1.8; }
+.log-body::-webkit-scrollbar { width: 6px; }
+.log-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.log-entry { padding: 2px 0; }
+.log-entry .ts { color: var(--text2); }
+.log-entry .ok { color: var(--green); }
+.log-entry .warn { color: var(--yellow); }
+.log-entry .err { color: var(--red); }
+.log-entry .info { color: var(--blue); }
+
+/* Responsive */
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+
+/* Tier labels */
+.tier { font-size: 10px; padding: 1px 5px; border-radius: 3px; font-weight: 700; }
+.tier.t1 { background: rgba(234,179,8,0.2); color: var(--yellow); }
+.tier.t2 { background: rgba(59,130,246,0.2); color: var(--blue); }
+.tier.t3 { background: rgba(148,163,184,0.2); color: var(--text2); }
+
+/* Connection type summary */
+.conn-summary { display: flex; gap: 16px; flex-wrap: wrap; }
+.conn-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); }
+.conn-item .count { font-weight: 700; color: var(--text); }
+
+/* Sort arrow */
+th .arrow { margin-left: 3px; font-size: 10px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>
+    <span class="dot off" id="liveDot"></span>
+    CRYPTO STREAM MONITOR
+  </h1>
+  <div class="header-stats">
+    <div class="header-stat"><div class="val" id="hExchanges">—</div><div class="lbl">Exchanges</div></div>
+    <div class="header-stat"><div class="val" id="hTrades">—</div><div class="lbl">Trades</div></div>
+    <div class="header-stat"><div class="val" id="hOB">—</div><div class="lbl">Orderbook</div></div>
+    <div class="header-stat"><div class="val" id="hTotal">—</div><div class="lbl">Total Rows</div></div>
+    <div class="header-stat"><div class="val" id="hRate">—</div><div class="lbl">Rows/min</div></div>
+    <div class="header-stat"><div class="val" id="hUptime">—</div><div class="lbl">Uptime</div></div>
+  </div>
+</div>
+
+<div class="grid">
+  <!-- Throughput Chart -->
+  <div class="card chart-card">
+    <div class="card-header">
+      <h2>Data Throughput (rows/min)</h2>
+      <div class="conn-summary" id="connSummary"></div>
+    </div>
+    <div class="card-body"><canvas id="throughputChart"></canvas></div>
+  </div>
+
+  <!-- Exchange Table -->
+  <div class="card exchange-card">
+    <div class="card-header">
+      <h2>Exchange Health</h2>
+      <div style="font-size:12px;color:var(--text2)"><span id="activeCount">—</span> active</div>
+    </div>
+    <div class="card-body" style="padding:0;overflow-x:auto;">
+      <table class="ex-table" id="exTable">
+        <thead>
+          <tr>
+            <th data-sort="name">Exchange <span class="arrow"></span></th>
+            <th data-sort="tier">Tier <span class="arrow"></span></th>
+            <th data-sort="type">Type <span class="arrow"></span></th>
+            <th data-sort="status">Status <span class="arrow"></span></th>
+            <th data-sort="trades" class="num">Trades <span class="arrow"></span></th>
+            <th data-sort="ob" class="num">Orderbook <span class="arrow"></span></th>
+            <th data-sort="total" class="num">Total <span class="arrow"></span></th>
+            <th data-sort="tpm" class="num">T/min <span class="arrow"></span></th>
+            <th data-sort="reconnects" class="num">Reconn <span class="arrow"></span></th>
+            <th data-sort="errors" class="num">Errors <span class="arrow"></span></th>
+          </tr>
+        </thead>
+        <tbody id="exTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Symbol Breakdown -->
+  <div class="card">
+    <div class="card-header"><h2>Canonical Pairs</h2></div>
+    <div class="card-body"><div class="symbol-grid" id="symbolGrid"></div></div>
+  </div>
+
+  <!-- Event Log -->
+  <div class="card log-card">
+    <div class="card-header"><h2>Live Events</h2><div style="font-size:11px;color:var(--text2)" id="eventCount">0 events</div></div>
+    <div class="card-body"><div class="log-body" id="logBody"></div></div>
+  </div>
+</div>
+
+<script>
+// ─── State ───
+let data = null;
+let prevData = null;
+let throughputHistory = { labels: [], trades: [], ob: [] };
+const MAX_HISTORY = 60;
+let sortCol = 'total', sortDir = -1;
+let eventLog = [];
+const MAX_LOG = 200;
+let lastTradeTotal = 0, lastOBTotal = 0, lastTime = Date.now();
+
+// ─── Throughput Chart ───
+const ctx = document.getElementById('throughputChart').getContext('2d');
+const chart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [
+      { label: 'Trades/min', data: [], borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', fill: true, tension: 0.3, pointRadius: 0 },
+      { label: 'OB/min', data: [], borderColor: '#a855f7', backgroundColor: 'rgba(168,85,247,0.1)', fill: true, tension: 0.3, pointRadius: 0 }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    animation: { duration: 300 },
+    scales: {
+      x: { ticks: { color: '#64748b', maxTicksLimit: 15 }, grid: { color: '#1e293b' } },
+      y: { ticks: { color: '#64748b' }, grid: { color: '#1e293b' }, beginAtZero: true }
+    },
+    plugins: { legend: { labels: { color: '#94a3b8', usePointStyle: true, pointStyle: 'circle' } } }
+  }
+});
+
+// ─── Fetch Data ───
+async function fetchStats() {
+  try {
+    const r = await fetch('/api/stats');
+    if (!r.ok) return;
+    prevData = data;
+    data = await r.json();
+    updateUI();
+  } catch (e) { /* silent */ }
+}
+
+function fmtNum(n) {
+  if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n/1e3).toFixed(1) + 'K';
+  return String(n);
+}
+
+function getType(ex) {
+  if (ex.type === 'ccxt-ws') return 'ccxt-ws';
+  if (ex.type === 'ccxt-rest') return 'ccxt-rest';
+  if (ex.type === 'rest') return 'rest';
+  return 'ws';
+}
+
+// ─── Update UI ───
+function updateUI() {
+  if (!data) return;
+  const { exchanges, uptime, running } = data;
+  const names = Object.keys(exchanges);
+  
+  // Live dot
+  document.getElementById('liveDot').className = 'dot ' + (running ? 'live' : 'off');
+  
+  // Header stats
+  let totalT = 0, totalOB = 0, active = 0;
+  for (const n of names) {
+    const e = exchanges[n];
+    totalT += e.trades;
+    totalOB += e.orderbook;
+    if (e.trades > 0 || e.orderbook > 0) active++;
+  }
+  const total = totalT + totalOB;
+  
+  // Rate calc
+  const now = Date.now();
+  const dt = (now - lastTime) / 60000;
+  let rate = 0;
+  if (dt > 0 && prevData) {
+    let prevT = 0, prevOB = 0;
+    for (const n of Object.keys(prevData.exchanges)) {
+      prevT += prevData.exchanges[n].trades;
+      prevOB += prevData.exchanges[n].orderbook;
+    }
+    rate = Math.round((total - prevT - prevOB) / dt);
+  }
+  
+  document.getElementById('hExchanges').textContent = `${active}/${names.length}`;
+  document.getElementById('hTrades').textContent = fmtNum(totalT);
+  document.getElementById('hOB').textContent = fmtNum(totalOB);
+  document.getElementById('hTotal').textContent = fmtNum(total);
+  document.getElementById('hRate').textContent = rate > 0 ? fmtNum(rate) : '—';
+  document.getElementById('activeCount').textContent = `${active}/${names.length}`;
+  
+  // Uptime
+  const mins = Math.floor(uptime / 60);
+  const secs = uptime % 60;
+  document.getElementById('hUptime').textContent = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+  
+  // Throughput history (if we have prev data)
+  if (prevData && dt > 0.05) {
+    let prevTot = 0, prevOBTot = 0;
+    for (const n of Object.keys(prevData.exchanges)) {
+      prevTot += prevData.exchanges[n].trades;
+      prevOBTot += prevData.exchanges[n].orderbook;
+    }
+    const tpm = Math.round((totalT - prevTot) / dt);
+    const opm = Math.round((totalOB - prevOBTot) / dt);
+    const timeLabel = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    
+    chart.data.labels.push(timeLabel);
+    chart.data.datasets[0].data.push(Math.max(0, tpm));
+    chart.data.datasets[1].data.push(Math.max(0, opm));
+    if (chart.data.labels.length > MAX_HISTORY) {
+      chart.data.labels.shift();
+      chart.data.datasets[0].data.shift();
+      chart.data.datasets[1].data.shift();
+    }
+    chart.update('none');
+    lastTime = now;
+  }
+  
+  // Connection summary
+  let ws = 0, ccxtWs = 0, rest = 0, ccxtRest = 0;
+  for (const n of names) {
+    const t = getType(exchanges[n]);
+    if (t === 'ws') ws++;
+    else if (t === 'ccxt-ws') ccxtWs++;
+    else if (t === 'rest') rest++;
+    else if (t === 'ccxt-rest') ccxtRest++;
+  }
+  document.getElementById('connSummary').innerHTML = `
+    <div class="conn-item"><span class="type-badge ws">WS</span><span class="count">${ws}</span></div>
+    ${ccxtWs ? `<div class="conn-item"><span class="type-badge ccxt-ws">CCXT WS</span><span class="count">${ccxtWs}</span></div>` : ''}
+    ${rest ? `<div class="conn-item"><span class="type-badge rest">REST</span><span class="count">${rest}</span></div>` : ''}
+    ${ccxtRest ? `<div class="conn-item"><span class="type-badge ccxt-rest">CCXT REST</span><span class="count">${ccxtRest}</span></div>` : ''}
+  `;
+  
+  // Exchange Table
+  const maxT = Math.max(1, ...names.map(n => exchanges[n].trades));
+  const maxOB = Math.max(1, ...names.map(n => exchanges[n].orderbook));
+  
+  const rows = names.map(n => {
+    const e = exchanges[n];
+    return { name: n, ...e, total: e.trades + e.orderbook, tpm: dt > 0 && prevData && prevData.exchanges[n] ? Math.round(((e.trades + e.orderbook) - (prevData.exchanges[n].trades + prevData.exchanges[n].orderbook)) / dt) : 0 };
+  });
+  
+  rows.sort((a, b) => {
+    let av = a[sortCol], bv = b[sortCol];
+    if (typeof av === 'string') return sortDir * av.localeCompare(bv);
+    return sortDir * (av - bv);
+  });
+  
+  const tbody = document.getElementById('exTableBody');
+  tbody.innerHTML = rows.map(r => {
+    const type = getType(r);
+    const tierClass = r.tier === 1 ? 't1' : r.tier === 2 ? 't2' : 't3';
+    const statusClass = (r.trades > 0 || r.orderbook > 0) ? 'ok' : r.status === 'pending' ? 'pending' : 'err';
+    const statusText = statusClass === 'ok' ? 'Active' : statusClass === 'pending' ? 'Pending' : 'No Data';
+    const tPct = Math.round(r.trades / maxT * 100);
+    const oPct = Math.round(r.orderbook / maxOB * 100);
+    const errCount = r.errors ? r.errors.length : 0;
+    return `<tr>
+      <td><strong>${r.name}</strong></td>
+      <td><span class="tier ${tierClass}">T${r.tier}</span></td>
+      <td><span class="type-badge ${type}">${type}</span></td>
+      <td><span class="status-dot ${statusClass}"></span>${statusText}</td>
+      <td class="num bar-cell"><div class="bar-bg trades" style="width:${tPct}%"></div>${r.trades.toLocaleString()}</td>
+      <td class="num bar-cell"><div class="bar-bg ob" style="width:${oPct}%"></div>${r.orderbook.toLocaleString()}</td>
+      <td class="num" style="font-weight:700">${r.total.toLocaleString()}</td>
+      <td class="num">${r.tpm > 0 ? r.tpm.toLocaleString() : '—'}</td>
+      <td class="num">${r.reconnects || 0}</td>
+      <td class="num" style="color:${errCount > 0 ? 'var(--red)' : 'var(--text2)'}">${errCount}</td>
+    </tr>`;
+  }).join('');
+  
+  // Symbol breakdown
+  if (data.symbols) {
+    const maxST = Math.max(1, ...Object.values(data.symbols).map(s => s.trades));
+    const maxSO = Math.max(1, ...Object.values(data.symbols).map(s => s.orderbook));
+    const grid = document.getElementById('symbolGrid');
+    const pairs = Object.entries(data.symbols).sort((a, b) => (b[1].trades + b[1].orderbook) - (a[1].trades + a[1].orderbook));
+    grid.innerHTML = pairs.map(([pair, s]) => `
+      <div class="symbol-card">
+        <div class="pair">${pair}</div>
+        <div class="row"><span>Trades</span><span class="val">${s.trades.toLocaleString()}</span></div>
+        <div class="mini-bar"><div class="mini-bar-fill t" style="width:${Math.round(s.trades/maxST*100)}%"></div></div>
+        <div class="row"><span>Orderbook</span><span class="val">${s.orderbook.toLocaleString()}</span></div>
+        <div class="mini-bar"><div class="mini-bar-fill o" style="width:${Math.round(s.orderbook/maxSO*100)}%"></div></div>
+        <div class="row"><span>Exchanges</span><span class="val">${s.exchangeCount}</span></div>
+      </div>
+    `).join('');
+  }
+}
+
+// ─── SSE for Live Events ───
+function connectSSE() {
+  const sse = new EventSource('/api/events');
+  sse.onmessage = (e) => {
+    try {
+      const evt = JSON.parse(e.data);
+      addLogEntry(evt);
+    } catch (err) { /* ignore */ }
+  };
+  sse.onerror = () => { setTimeout(connectSSE, 3000); sse.close(); };
+}
+
+function addLogEntry(evt) {
+  eventLog.unshift(evt);
+  if (eventLog.length > MAX_LOG) eventLog.pop();
+  
+  const logBody = document.getElementById('logBody');
+  const cls = evt.type === 'connect' ? 'ok' : evt.type === 'reconnect' ? 'warn' : evt.type === 'error' ? 'err' : 'info';
+  const icon = evt.type === 'connect' ? '✅' : evt.type === 'reconnect' ? '🔄' : evt.type === 'error' ? '❌' : evt.type === 'flush' ? '💾' : 'ℹ️';
+  
+  const div = document.createElement('div');
+  div.className = 'log-entry';
+  div.innerHTML = `<span class="ts">[${evt.time}]</span> <span class="${cls}">${icon} ${evt.exchange || ''}</span> ${evt.message}`;
+  logBody.prepend(div);
+  
+  while (logBody.children.length > MAX_LOG) logBody.lastChild.remove();
+  document.getElementById('eventCount').textContent = `${eventLog.length} events`;
+}
+
+// ─── Sorting ───
+document.querySelectorAll('.ex-table thead th').forEach(th => {
+  th.addEventListener('click', () => {
+    const col = th.dataset.sort;
+    if (!col) return;
+    if (sortCol === col) sortDir *= -1;
+    else { sortCol = col; sortDir = -1; }
+    document.querySelectorAll('.ex-table thead th').forEach(t => {
+      t.classList.remove('sorted');
+      t.querySelector('.arrow').textContent = '';
+    });
+    th.classList.add('sorted');
+    th.querySelector('.arrow').textContent = sortDir === 1 ? '▲' : '▼';
+    if (data) updateUI();
+  });
+});
+
+// Default sort indicator
+document.querySelector('[data-sort="total"]').classList.add('sorted');
+document.querySelector('[data-sort="total"] .arrow').textContent = '▼';
+
+// ─── Init ───
+fetchStats();
+setInterval(fetchStats, 2000);
+connectSSE();
+</script>
+</body>
+</html>

@@ -24,6 +24,7 @@
   "license": "ISC",
   "dependencies": {
     "@duckdb/node-api": "^1.4.4-r.1",
+    "ccxt": "^4.5.36",
     "ws": "^8.18.0"
   }
 }

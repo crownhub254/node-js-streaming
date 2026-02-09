@@ -1,7 +1,7 @@
 /**
  * ╔══════════════════════════════════════════════════════════════════════════╗
  * ║   NORMALIZED STREAM TESTER — Canonical Pair System                      ║
- * ║   47 Exchanges × BTC/ETH/SOL × USD/USDT/USDC/DAI                      ║
+ * ║   48 Exchanges × BTC/ETH/SOL × USD/USDT/USDC/DAI                      ║
  * ║   Collects trades + orderbook snapshots → DuckDB                       ║
  * ║   All data stored with canonical_pair (e.g., BTC_USDT) not raw symbols  ║
  * ╚══════════════════════════════════════════════════════════════════════════╝
@@ -10,19 +10,14 @@
 const WebSocket = require('ws');
 const zlib = require('zlib');
 const https = require('https');
-const http = require('http');
-const fs = require('fs');
-const path = require('path');
 const { DuckDBInstance } = require('@duckdb/node-api');
 const ccxt = require('ccxt');
 
 // ======================== CONFIGURATION ========================
-const RUN_DURATION = 300000;     // 5 minutes deep test
-const FLUSH_INTERVAL = 60000;    // flush to DuckDB every 60s
-const STATUS_INTERVAL = 300000;  // print status every 5 min
-const STAGGER_DELAY = 500;       // stagger WS connections
-const MAX_RECONNECTS = 10;       // max reconnects per exchange
-const REST_POLL_DELAY = 10000;   // 10s between REST poll rounds
+const TEST_TIMEOUT = 320000;
+const DATA_WAIT = 300000;     // 5 minutes to collect data
+const STAGGER_DELAY = 300;
+const MAX_CONCURRENT = 6;
 
 // ======================== UTILITIES ========================
 function httpsRequest(url, options = {}) {
@@ -43,7 +38,6 @@ function httpsRequest(url, options = {}) {
 
 function ts() { return new Date().toISOString().substring(11, 19); }
 function nowISO() { return new Date().toISOString(); }
-function shortErr(msg) { return String(msg).length > 200 ? String(msg).substring(0, 200) + '...[truncated]' : String(msg); }
 
 // ======================== SYMBOL MAP (in-memory) ========================
 // Maps: { "Binance:BTCUSDT" → { base: "BTC", quote: "USDT", canonical: "BTC_USDT" } }
@@ -137,16 +131,17 @@ function buildSymbolMap() {
         'BVOX': { 'BTCUSDT':'BTC_USDT','ETHUSDT':'ETH_USDT','SOLUSDT':'SOL_USDT' },
         // ─── Trubit Pro ───
         'Trubit Pro': { 'BTCUSDT':'BTC_USDT','ETHUSDT':'ETH_USDT','SOLUSDT':'SOL_USDT' },
-        // ─── CCXT WS → Native WS Exchanges ───
-        'Bitget': { 'BTCUSDT':'BTC_USDT','ETHUSDT':'ETH_USDT','SOLUSDT':'SOL_USDT' },
-        'Gemini': { 'BTCUSD':'BTC_USD','ETHUSD':'ETH_USD' },
-        'Binance.US': { 'btcusdt':'BTC_USDT','ethusdt':'ETH_USDT','solusdt':'SOL_USDT' },
-        'CEX.IO': { 'BTC/USDT':'BTC_USDT','ETH/USDT':'ETH_USDT' },
+        // ─── CCXT WS Exchanges ───
+        'Bitget': { 'BTC/USDT':'BTC_USDT','ETH/USDT':'ETH_USDT','SOL/USDT':'SOL_USDT' },
+        'MEXC': { 'BTC/USDT':'BTC_USDT','ETH/USDT':'ETH_USDT','SOL/USDT':'SOL_USDT' },
+        'Gemini': { 'BTC/USD':'BTC_USD','ETH/USD':'ETH_USD','SOL/USD':'SOL_USD' },
+        'Binance.US': { 'BTC/USD':'BTC_USD','ETH/USD':'ETH_USD','SOL/USD':'SOL_USD','BTC/USDT':'BTC_USDT','ETH/USDT':'ETH_USDT','SOL/USDT':'SOL_USDT' },
+        'CEX.IO': { 'BTC/USDT':'BTC_USDT','ETH/USDT':'ETH_USDT','SOL/USDT':'SOL_USDT','BTC/USD':'BTC_USD','ETH/USD':'ETH_USD' },
         'CoinEx': { 'BTC/USDT':'BTC_USDT','ETH/USDT':'ETH_USDT','SOL/USDT':'SOL_USDT' },
-        // ─── CCXT REST → Native WS Exchanges ───
-        'DigiFinex': { 'BTC_USDT':'BTC_USDT','ETH_USDT':'ETH_USDT','SOL_USDT':'SOL_USDT' },
+        // ─── CCXT REST Exchanges ───
+        'DigiFinex': { 'BTC/USDT':'BTC_USDT','ETH/USDT':'ETH_USDT','SOL/USDT':'SOL_USDT' },
         'BigONE': { 'BTC/USDT':'BTC_USDT','ETH/USDT':'ETH_USDT','SOL/USDT':'SOL_USDT' },
-        'EXMO': { 'BTC_USDT':'BTC_USDT','ETH_USDT':'ETH_USDT','SOL_USDT':'SOL_USDT','BTC_DAI':'BTC_DAI' },
+        'EXMO': { 'BTC/USDT':'BTC_USDT','ETH/USDT':'ETH_USDT','SOL/USDT':'SOL_USDT','BTC/DAI':'BTC_DAI' },
         'LATOKEN': { 'BTC/USDT':'BTC_USDT','ETH/USDT':'ETH_USDT','SOL/USDT':'SOL_USDT' },
     };
     for (const [exchange, symbols] of Object.entries(map)) {
@@ -163,133 +158,7 @@ let obBuffer = [];
 const stats = {};             // { exchange: { trades: n, orderbook: n } }
 
 function initStats(exchange) {
-    stats[exchange] = { trades: 0, orderbook: 0, status: 'pending', errors: [], reconnects: 0 };
-}
-
-// ======================== DASHBOARD SERVER ========================
-const DASHBOARD_PORT = 3000;
-const sseClients = new Set();
-let dashboardStartTime = Date.now();
-
-function broadcastEvent(evt) {
-    evt.time = ts();
-    const data = `data: ${JSON.stringify(evt)}\n\n`;
-    for (const res of sseClients) {
-        try { res.write(data); } catch(e) { sseClients.delete(res); }
-    }
-}
-
-function emitConnect(exchange) { broadcastEvent({ type: 'connect', exchange, message: 'Connected' }); }
-function emitReconnect(exchange, attempt) { broadcastEvent({ type: 'reconnect', exchange, message: `Reconnecting (${attempt}/${MAX_RECONNECTS})` }); stats[exchange] && stats[exchange].reconnects++; }
-function emitError(exchange, msg) { broadcastEvent({ type: 'error', exchange, message: msg }); }
-function emitFlush(rows) { broadcastEvent({ type: 'flush', message: `Flushed ${rows.toLocaleString()} rows` }); }
-
-function getStatsSnapshot() {
-    const exchanges = {};
-    for (const [name, s] of Object.entries(stats)) {
-        const exDef = EXCHANGES[name] || {};
-        exchanges[name] = {
-            trades: s.trades, orderbook: s.orderbook, status: s.status,
-            errors: s.errors || [], reconnects: s.reconnects || 0,
-            tier: exDef.tier || 3,
-            type: exDef.type || (exDef.restUrl ? 'rest' : 'ws')
-        };
-    }
-    // Per-symbol aggregation
-    const symbols = {};
-    for (const [name, s] of Object.entries(stats)) {
-        const map = SYMBOL_MAP[name] || {};
-        for (const [rawSym, canonical] of Object.entries(map)) {
-            if (!symbols[canonical]) symbols[canonical] = { trades: 0, orderbook: 0, exchanges: new Set() };
-            // We can't distinguish per-symbol counts from stats, so we'll aggregate from buffers on first call
-        }
-    }
-    // Aggregate symbol data from the DuckDB-queried cache or use placeholder
-    return {
-        exchanges,
-        symbols: symbolCache,
-        uptime: Math.round((Date.now() - dashboardStartTime) / 1000),
-        running: !stopFlag
-    };
-}
-
-let symbolCache = {};
-async function refreshSymbolCache(conn) {
-    try {
-        const r1 = await conn.runAndReadAll(`SELECT canonical_pair, count(*) as c FROM trades GROUP BY canonical_pair`);
-        const r2 = await conn.runAndReadAll(`SELECT canonical_pair, count(*) as c FROM orderbook GROUP BY canonical_pair`);
-        const r3 = await conn.runAndReadAll(`SELECT canonical_pair, count(DISTINCT exchange) as c FROM trades GROUP BY canonical_pair`);
-        
-        const cache = {};
-        for (const row of r1.getRows()) {
-            const pair = row[0];
-            if (!cache[pair]) cache[pair] = { trades: 0, orderbook: 0, exchangeCount: 0 };
-            cache[pair].trades = Number(row[1]);
-        }
-        for (const row of r2.getRows()) {
-            const pair = row[0];
-            if (!cache[pair]) cache[pair] = { trades: 0, orderbook: 0, exchangeCount: 0 };
-            cache[pair].orderbook = Number(row[1]);
-        }
-        for (const row of r3.getRows()) {
-            const pair = row[0];
-            if (cache[pair]) cache[pair].exchangeCount = Number(row[1]);
-        }
-        
-        // Also count in-buffer data
-        for (const t of tradeBuffer) {
-            if (!cache[t.canonical_pair]) cache[t.canonical_pair] = { trades: 0, orderbook: 0, exchangeCount: 0 };
-            cache[t.canonical_pair].trades++;
-        }
-        for (const o of obBuffer) {
-            if (!cache[o.canonical_pair]) cache[o.canonical_pair] = { trades: 0, orderbook: 0, exchangeCount: 0 };
-            cache[o.canonical_pair].orderbook++;
-        }
-        
-        symbolCache = cache;
-    } catch(e) { /* DuckDB may not be ready */ }
-}
-
-function startDashboardServer(conn) {
-    const dashboardHtml = fs.readFileSync(path.join(__dirname, 'dashboard.html'), 'utf8');
-    
-    const server = http.createServer((req, res) => {
-        const url = new URL(req.url, `http://localhost:${DASHBOARD_PORT}`);
-        
-        if (url.pathname === '/' || url.pathname === '/dashboard') {
-            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-            res.end(dashboardHtml);
-        }
-        else if (url.pathname === '/api/stats') {
-            res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-            res.end(JSON.stringify(getStatsSnapshot()));
-        }
-        else if (url.pathname === '/api/events') {
-            res.writeHead(200, {
-                'Content-Type': 'text/event-stream',
-                'Cache-Control': 'no-cache',
-                'Connection': 'keep-alive',
-                'Access-Control-Allow-Origin': '*'
-            });
-            res.write('data: {"type":"info","message":"Connected to event stream"}\n\n');
-            sseClients.add(res);
-            req.on('close', () => sseClients.delete(res));
-        }
-        else {
-            res.writeHead(404);
-            res.end('Not found');
-        }
-    });
-    
-    server.listen(DASHBOARD_PORT, () => {
-        console.log(`  📊 Dashboard: http://localhost:${DASHBOARD_PORT}\n`);
-    });
-    
-    // Refresh symbol cache every 15s
-    setInterval(() => refreshSymbolCache(conn), 15000);
-    refreshSymbolCache(conn);
-    
-    return server;
+    stats[exchange] = { trades: 0, orderbook: 0, status: 'pending', errors: [] };
 }
 
 function recordTrade(exchange, exchangeSymbol, price, qty, side, timestamp) {
@@ -1245,53 +1114,22 @@ const EXCHANGES = {
                 ws.send(JSON.stringify({jsonrpc:'2.0',type:'command',method:'subscribe',params:{topic:'anonymousTrades',symbol:sym},id:sym+'_t'}));
             }
         },
-        handlePing: (d, ws) => {
-            // Respond to server pings to keep connection alive
-            if (d.type === 'ping' || d.method === 'ping') {
-                try { ws.send(JSON.stringify({ type: 'pong', id: d.id || 'pong' })); } catch(e){}
-                return true;
-            }
-            return false;
-        },
         parseMessage: (msg) => {
             try {
                 const d = JSON.parse(msg);
-                // Handle subscription confirmations
                 if (d.jsonrpc || (d.result && d.result.responseCode)) return [];
+                if (!d.type && !d.dataType) return [];
                 // Trades: {data:{symbol:"BTCUSDC",trades:[{price,quantity,side}]}}
                 if (d.data && d.data.trades && d.data.symbol) {
                     for (const t of d.data.trades) recordTrade('Bullish', d.data.symbol, t.price, t.quantity, (t.side||'buy').toLowerCase());
                 }
-                // OB: could be flat array {bids:[p,q,p,q...]} or nested [[p,q],[p,q]...]
-                if (d.data && (d.data.bids || d.data.asks)) {
+                // OB: flat array {data:{bids:[p,q,p,q...],asks:[...]}} 
+                else if (d.data && d.data.bids && typeof d.data.bids[0] === 'string') {
                     const sym = d.data.symbol || d.data.marketSymbol || 'BTCUSDC';
-                    let bids = [], asks = [];
-                    const rawBids = d.data.bids || [];
-                    const rawAsks = d.data.asks || [];
-                    if (rawBids.length > 0) {
-                        if (Array.isArray(rawBids[0])) {
-                            // Nested: [[price, qty], ...]
-                            bids = rawBids.slice(0, 5);
-                        } else if (typeof rawBids[0] === 'string' || typeof rawBids[0] === 'number') {
-                            // Flat: [p, q, p, q, ...]
-                            for (let i = 0; i + 1 < rawBids.length; i += 2) bids.push([rawBids[i], rawBids[i+1]]);
-                            bids = bids.slice(0, 5);
-                        } else if (rawBids[0].price !== undefined) {
-                            // Object: [{price, quantity}, ...]
-                            bids = rawBids.slice(0, 5).map(b => [b.price, b.quantity || b.size || b.amount]);
-                        }
-                    }
-                    if (rawAsks.length > 0) {
-                        if (Array.isArray(rawAsks[0])) {
-                            asks = rawAsks.slice(0, 5);
-                        } else if (typeof rawAsks[0] === 'string' || typeof rawAsks[0] === 'number') {
-                            for (let i = 0; i + 1 < rawAsks.length; i += 2) asks.push([rawAsks[i], rawAsks[i+1]]);
-                            asks = asks.slice(0, 5);
-                        } else if (rawAsks[0].price !== undefined) {
-                            asks = rawAsks.slice(0, 5).map(a => [a.price, a.quantity || a.size || a.amount]);
-                        }
-                    }
-                    if (bids.length || asks.length) recordOrderbook('Bullish', sym, bids, asks);
+                    const bids = [], asks = [];
+                    for (let i = 0; i + 1 < d.data.bids.length; i += 2) bids.push([d.data.bids[i], d.data.bids[i+1]]);
+                    for (let i = 0; i + 1 < d.data.asks.length; i += 2) asks.push([d.data.asks[i], d.data.asks[i+1]]);
+                    recordOrderbook('Bullish', sym, bids.slice(0,5), asks.slice(0,5));
                 }
                 return [];
             } catch(e) { return []; }
@@ -1398,8 +1236,8 @@ const EXCHANGES = {
                         recordTrade('BloFin', sym, t.price, t.size, t.side);
                 }
                 if (d.arg.channel === 'books5' && d.data) {
-                    for (const ob of (Array.isArray(d.data) ? d.data : [d.data]))
-                        recordOrderbook('BloFin', sym, ob.bids || ob.b, ob.asks || ob.a);
+                    const ob = d.data;
+                    recordOrderbook('BloFin', sym, ob.bids || ob.b, ob.asks || ob.a);
                 }
                 return [];
             } catch(e) { return []; }
@@ -1488,203 +1326,64 @@ const EXCHANGES = {
         }
     },
     // ═══════════════════════════════════════════════════════════════════════════
-    // ══════════════════ NATIVE WS (ex-CCXT WS) EXCHANGES ════════════════════
+    // ═══════════════════════ CCXT WS EXCHANGES ═══════════════════════════════
     // ═══════════════════════════════════════════════════════════════════════════
 
     'Bitget': {
-        tier: 2,
-        getUrl: () => 'wss://ws.bitget.com/v2/ws/public',
-        onOpen: (ws) => {
-            ws.send(JSON.stringify({ op: 'subscribe', args: [
-                { instType: 'SPOT', channel: 'trade', instId: 'BTCUSDT' },
-                { instType: 'SPOT', channel: 'trade', instId: 'ETHUSDT' },
-                { instType: 'SPOT', channel: 'trade', instId: 'SOLUSDT' },
-                { instType: 'SPOT', channel: 'books5', instId: 'BTCUSDT' },
-                { instType: 'SPOT', channel: 'books5', instId: 'ETHUSDT' },
-                { instType: 'SPOT', channel: 'books5', instId: 'SOLUSDT' },
-            ] }));
-        },
-        customPing: (ws) => ws.send(JSON.stringify({ op: 'ping' })),
-        customPingInterval: 30000,
-        parseMessage: (msg) => {
-            try {
-                const d = JSON.parse(msg);
-                if (d.event || d.op === 'pong') return [];
-                const arg = d.arg || {};
-                const sym = arg.instId;
-                if (!sym) return [];
-                if (arg.channel === 'trade' && d.data) {
-                    for (const t of d.data) {
-                        recordTrade('Bitget', sym, t.px || t.price, t.sz || t.size, t.side, t.ts ? new Date(Number(t.ts)).toISOString() : null);
-                    }
-                }
-                if (arg.channel === 'books5' && d.data) {
-                    for (const ob of d.data) {
-                        recordOrderbook('Bitget', sym, ob.bids, ob.asks);
-                    }
-                }
-                return [];
-            } catch (e) { return []; }
-        }
+        tier: 2, type: 'ccxt-ws',
+        ccxtId: 'bitget',
+        ccxtSymbols: ['BTC/USDT', 'ETH/USDT', 'SOL/USDT'],
+    },
+
+    'MEXC': {
+        tier: 2, type: 'ccxt-ws',
+        ccxtId: 'mexc',
+        ccxtSymbols: ['BTC/USDT', 'ETH/USDT', 'SOL/USDT'],
     },
 
     'Gemini': {
-        tier: 2,
-        getUrl: () => 'wss://api.gemini.com/v2/marketdata',
-        onOpen: (ws) => {
-            ws.send(JSON.stringify({ type: 'subscribe', subscriptions: [
-                { name: 'l2', symbols: ['BTCUSD', 'ETHUSD'] },
-            ] }));
-        },
-        parseMessage: (msg) => {
-            try {
-                const d = JSON.parse(msg);
-                if (d.type === 'l2_updates' && d.symbol) {
-                    const sym = d.symbol;
-                    if (d.trades) {
-                        for (const t of d.trades) {
-                            recordTrade('Gemini', sym, t.price, t.quantity, t.side ? t.side.toLowerCase() : null, t.timestamp ? new Date(t.timestamp).toISOString() : null);
-                        }
-                    }
-                    if (d.changes) {
-                        const bids = d.changes.filter(c => c[0] === 'buy').map(c => [c[1], c[2]]);
-                        const asks = d.changes.filter(c => c[0] === 'sell').map(c => [c[1], c[2]]);
-                        if (bids.length || asks.length) recordOrderbook('Gemini', sym, bids, asks);
-                    }
-                }
-                if (d.type === 'trade') {
-                    recordTrade('Gemini', d.symbol, d.price, d.quantity, d.side ? d.side.toLowerCase() : null);
-                }
-                return [];
-            } catch (e) { return []; }
-        }
+        tier: 2, type: 'ccxt-ws',
+        ccxtId: 'gemini',
+        ccxtSymbols: ['BTC/USD', 'ETH/USD'],
     },
 
     'Binance.US': {
-        tier: 2,
-        getUrl: () => 'wss://stream.binance.us:9443/stream',
-        onOpen: (ws) => {
-            ws.send(JSON.stringify({ method: 'SUBSCRIBE', params: [
-                'btcusdt@trade','ethusdt@trade','solusdt@trade',
-                'btcusdt@depth5@1000ms','ethusdt@depth5@1000ms','solusdt@depth5@1000ms'
-            ], id: 1 }));
-        },
-        parseMessage: (msg) => {
-            try {
-                const d = JSON.parse(msg);
-                if (!d.data) return [];
-                const e = d.data;
-                if (e.e === 'trade') {
-                    recordTrade('Binance.US', e.s.toLowerCase(), e.p, e.q, e.m ? 'sell' : 'buy');
-                }
-                if (e.lastUpdateId && e.bids && e.asks) {
-                    const stream = d.stream || '';
-                    const sym = stream.split('@')[0];
-                    recordOrderbook('Binance.US', sym, e.bids, e.asks);
-                }
-                return [];
-            } catch (e) { return []; }
-        }
+        tier: 2, type: 'ccxt-ws',
+        ccxtId: 'binanceus',
+        ccxtSymbols: ['BTC/USDT', 'ETH/USDT', 'SOL/USDT'],
     },
 
     'CEX.IO': {
-        tier: 3,
-        type: 'ccxt-ws',
+        tier: 3, type: 'ccxt-ws',
         ccxtId: 'cex',
         ccxtSymbols: ['BTC/USDT', 'ETH/USDT'],
     },
 
     'CoinEx': {
-        tier: 2,
-        type: 'ccxt-ws',
+        tier: 2, type: 'ccxt-ws',
         ccxtId: 'coinex',
         ccxtSymbols: ['BTC/USDT', 'ETH/USDT', 'SOL/USDT'],
     },
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // ══════════════════ NATIVE WS (ex-CCXT REST) EXCHANGES ══════════════════
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════ CCXT REST EXCHANGES ═════════════════════════════
 
     'DigiFinex': {
-        tier: 3,
-        getUrl: () => 'wss://openapi.digifinex.com/ws/v1/',
-        onOpen: (ws) => {
-            ws.send(JSON.stringify({ id: 1, method: 'trades.subscribe', params: ['BTC_USDT', 'ETH_USDT', 'SOL_USDT'] }));
-            ws.send(JSON.stringify({ id: 2, method: 'depth.subscribe', params: ['BTC_USDT', 5, '0'] }));
-            ws.send(JSON.stringify({ id: 3, method: 'depth.subscribe', params: ['ETH_USDT', 5, '0'] }));
-            ws.send(JSON.stringify({ id: 4, method: 'depth.subscribe', params: ['SOL_USDT', 5, '0'] }));
-        },
-        customPing: (ws) => ws.send(JSON.stringify({ id: 0, method: 'server.ping', params: [] })),
-        customPingInterval: 30000,
-        compression: 'inflate',
-        parseMessage: (msg) => {
-            try {
-                const d = JSON.parse(msg);
-                if (d.method === 'trades.update' && d.params) {
-                    const clean = d.params[0]; // boolean
-                    const sym = d.params[2] || '';
-                    const trades = d.params[1] || [];
-                    for (const t of trades) {
-                        recordTrade('DigiFinex', sym, t.price, t.amount, t.type, t.time ? new Date(t.time * 1000).toISOString() : null);
-                    }
-                }
-                if (d.method === 'depth.update' && d.params) {
-                    const clean = d.params[0]; // boolean
-                    const depth = d.params[1] || {};
-                    const sym = d.params[2] || '';
-                    if (depth.bids || depth.asks) {
-                        recordOrderbook('DigiFinex', sym, (depth.bids || []).slice(0, 5), (depth.asks || []).slice(0, 5));
-                    }
-                }
-                return [];
-            } catch (e) { return []; }
-        }
+        tier: 3, type: 'ccxt-rest',
+        ccxtId: 'digifinex',
+        ccxtSymbols: ['BTC/USDT', 'ETH/USDT', 'SOL/USDT'],
     },
 
     'BigONE': {
-        tier: 3,
-        type: 'ccxt-rest',
+        tier: 3, type: 'ccxt-rest',
         ccxtId: 'bigone',
-        ccxtSymbols: ['BTC/USDT','ETH/USDT','SOL/USDT']
+        ccxtSymbols: ['BTC/USDT', 'ETH/USDT', 'SOL/USDT'],
     },
 
     'EXMO': {
-        tier: 3,
-        getUrl: () => 'wss://ws-api.exmo.com/v1/public',
-        onOpen: (ws) => {
-            ws.send(JSON.stringify({ method: 'subscribe', topics: [
-                'spot/trades:BTC_USDT', 'spot/trades:ETH_USDT', 'spot/trades:SOL_USDT', 'spot/trades:BTC_DAI',
-                'spot/order_book_snapshots:BTC_USDT', 'spot/order_book_snapshots:ETH_USDT',
-                'spot/order_book_snapshots:SOL_USDT', 'spot/order_book_snapshots:BTC_DAI',
-            ] }));
-        },
-        parseMessage: (msg) => {
-            try {
-                const d = JSON.parse(msg);
-                if (d.event === 'update' || d.event === 'snapshot') {
-                    const topic = d.topic || '';
-                    const data = d.data || {};
-                    if (topic.includes('trades')) {
-                        const sym = topic.split(':')[1] || '';
-                        // EXMO trades can be array directly or inside data.trades
-                        const trades = Array.isArray(data) ? data : (data.trades || []);
-                        for (const t of trades) {
-                            recordTrade('EXMO', sym, t.price, t.quantity || t.amount, t.type || t.side, t.date ? new Date(t.date * 1000).toISOString() : null);
-                        }
-                    }
-                    if (topic.includes('order_book') && (data.bid || data.ask)) {
-                        const sym = topic.split(':')[1] || '';
-                        recordOrderbook('EXMO', sym, (data.bid || []).slice(0, 5).map(b => [b[0], b[1]]), (data.ask || []).slice(0, 5).map(a => [a[0], a[1]]));
-                    }
-                }
-                return [];
-            } catch (e) { return []; }
-        }
+        tier: 3, type: 'ccxt-rest',
+        ccxtId: 'exmo',
+        ccxtSymbols: ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BTC/DAI'],
     },
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // ═════════════════════ CCXT REST (kept) EXCHANGE ═════════════════════════
-    // ═══════════════════════════════════════════════════════════════════════════
 
     'LATOKEN': {
         tier: 3, type: 'ccxt-rest',
@@ -1704,7 +1403,6 @@ process.on('unhandledRejection', (reason) => {
 
 // Graceful shutdown
 let shuttingDown = false;
-let stopFlag = false;
 const activeWsList = new Set();
 
 function registerWs(ws) { activeWsList.add(ws); }
@@ -1713,11 +1411,7 @@ function unregisterWs(ws) { activeWsList.delete(ws); }
 async function gracefulShutdown(conn) {
     if (shuttingDown) return;
     shuttingDown = true;
-    stopFlag = true;
     console.log(`\n  [${ts()}] 🛑 Graceful shutdown initiated...`);
-
-    // Wait briefly for exchanges to notice stopFlag
-    await new Promise(r => setTimeout(r, 3000));
 
     // Close all active WebSockets
     for (const ws of activeWsList) {
@@ -1739,77 +1433,45 @@ async function gracefulShutdown(conn) {
     process.exit(0);
 }
 
-// ======================== WS STREAMING ENGINE (Long-Running with Auto-Reconnect) ========================
+// ======================== TEST ENGINE ========================
 
-async function startWSExchange(name) {
+async function testExchange(name, retries = 2) {
     const exDef = EXCHANGES[name];
     initStats(name);
-    let reconnects = 0;
+    console.log(`  [${ts()}] 🔌 ${name} — Connecting...`);
 
-    while (!stopFlag && reconnects <= MAX_RECONNECTS) {
-        const dataBefore = (stats[name].trades || 0) + (stats[name].orderbook || 0);
-        try {
-            await runWSConnection(name, exDef);
-        } catch (e) {
-            if (!stopFlag) stats[name].errors.push(shortErr(e.message));
+    let wsUrl, kucoinPing;
+    try {
+        const urlResult = await exDef.getUrl();
+        if (typeof urlResult === 'object') { wsUrl = urlResult.url; kucoinPing = urlResult.pingInterval; }
+        else { wsUrl = urlResult; }
+    } catch (e) {
+        console.log(`  [${ts()}] ❌ ${name} — URL failed: ${e.message}`);
+        if (retries > 0) {
+            console.log(`  [${ts()}] 🔄 ${name} — Retrying in 3s (${retries} left)...`);
+            await new Promise(r => setTimeout(r, 3000));
+            return testExchange(name, retries - 1);
         }
-        if (stopFlag) break;
-        const dataAfter = (stats[name].trades || 0) + (stats[name].orderbook || 0);
-        if (dataAfter > dataBefore) {
-            reconnects = 0; // productive connection — reset counter
-        } else {
-            reconnects++;
-        }
-        if (reconnects > MAX_RECONNECTS) {
-            console.log(`  [${ts()}] ❌ ${name} — Max reconnects (${MAX_RECONNECTS}) reached`);
-            break;
-        }
-        const delay = Math.min(3000 + 2000 * reconnects, 30000);
-        console.log(`  [${ts()}] 🔄 ${name} — Reconnecting in ${Math.round(delay/1000)}s (${reconnects}/${MAX_RECONNECTS})...`);
-        emitReconnect(name, reconnects);
-        await new Promise(r => setTimeout(r, delay));
+        stats[name].errors.push(e.message); stats[name].status = 'error'; return;
     }
 
-    const s = stats[name];
-    if (!s.status || s.status === 'pending')
-        s.status = (s.trades + s.orderbook) > 0 ? 'ok' : 'no_data';
-}
-
-function runWSConnection(name, exDef) {
-    return new Promise(async (resolveConn) => {
-        if (stopFlag) { resolveConn(); return; }
+    return new Promise((resolve) => {
         const ctx = {};
-        let wsUrl, kucoinPing;
-        try {
-            const urlResult = await exDef.getUrl();
-            if (typeof urlResult === 'object') { wsUrl = urlResult.url; kucoinPing = urlResult.pingInterval; }
-            else { wsUrl = urlResult; }
-        } catch (e) {
-            stats[name].errors.push(`URL: ${e.message}`);
-            resolveConn(); return;
-        }
+        let resolved = false;
+        let connected = false;
+        let retrying = false;
+        const done = () => { if (!resolved) { resolved = true; resolve(); } };
+
+        const timeout = setTimeout(() => {
+            console.log(`  [${ts()}] ⏰ ${name} — Timeout`);
+            ws.terminate();
+            if (ossWs) try { ossWs.terminate(); } catch(e){}
+            for (const ecWs of extraWsList) { try { ecWs.terminate(); } catch(e){} }
+            stats[name].status = 'timeout'; done();
+        }, TEST_TIMEOUT);
 
         let ws, ossWs;
         const extraWsList = [];
-        let pingTimer, customPingTimer, ossPingTimer, stopChecker;
-        let resolved = false;
-
-        function finish() {
-            if (resolved) return;
-            resolved = true;
-            if (pingTimer) clearInterval(pingTimer);
-            if (customPingTimer) clearInterval(customPingTimer);
-            if (ossPingTimer) clearInterval(ossPingTimer);
-            if (stopChecker) clearInterval(stopChecker);
-            try { ws.terminate(); } catch(e){}
-            if (ossWs) try { ossWs.terminate(); } catch(e){}
-            for (const ecWs of extraWsList) try { ecWs.terminate(); } catch(e){}
-            unregisterWs(ws);
-            if (ossWs) unregisterWs(ossWs);
-            for (const ecWs of extraWsList) unregisterWs(ecWs);
-            resolveConn();
-        }
-
         try {
             ws = new WebSocket(wsUrl, {
                 headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
@@ -1818,53 +1480,38 @@ function runWSConnection(name, exDef) {
             });
             registerWs(ws);
         } catch (e) {
-            stats[name].errors.push(e.message);
-            resolveConn(); return;
+            clearTimeout(timeout); stats[name].errors.push(e.message); stats[name].status = 'error'; done(); return;
         }
 
-        // Check for global stop signal
-        stopChecker = setInterval(() => { if (stopFlag) finish(); }, 2000);
+        let pingTimer, customPingTimer, ossPingTimer;
 
-        // OSS secondary WS (for BTSE, Bullish dual-endpoint exchanges)
+        // OSS (dual WS for BTSE)
         if (exDef.ossUrl && exDef.ossOnOpen) {
-            const connectOss = () => {
-                if (stopFlag) return;
-                try {
-                    ossWs = new WebSocket(exDef.ossUrl, {
-                        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }, handshakeTimeout: 15000
-                    });
-                    registerWs(ossWs);
-                    ossWs.on('open', () => {
-                        try { exDef.ossOnOpen(ossWs); } catch(e){}
-                        if (exDef.pingInterval && exDef.pingMessage)
-                            ossPingTimer = setInterval(() => { if (ossWs.readyState === WebSocket.OPEN) ossWs.send(exDef.pingMessage); }, exDef.pingInterval);
-                    });
-                    ossWs.on('message', (data) => {
-                        let str = data.toString();
-                        if (exDef.handlePing) { try { const p = JSON.parse(str); if (exDef.handlePing(p, ossWs)) return; } catch(e){} }
-                        try { exDef.parseMessage(str, ctx); } catch(e){}
-                    });
-                    ossWs.on('error', () => {});
-                    ossWs.on('close', () => {
-                        if (ossPingTimer) { clearInterval(ossPingTimer); ossPingTimer = null; }
-                        unregisterWs(ossWs);
-                        if (!stopFlag) setTimeout(connectOss, 3000); // Auto-reconnect OSS
-                    });
-                } catch(e) { stats[name].errors.push(`OSS: ${e.message}`); if (!stopFlag) setTimeout(connectOss, 5000); }
-            };
-            connectOss();
+            try {
+                ossWs = new WebSocket(exDef.ossUrl, {
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }, handshakeTimeout: 10000 });
+                ossWs.on('open', () => {
+                    try { exDef.ossOnOpen(ossWs); } catch(e){}
+                    if (exDef.pingInterval && exDef.pingMessage)
+                        ossPingTimer = setInterval(() => { if (ossWs.readyState === WebSocket.OPEN) ossWs.send(exDef.pingMessage); }, exDef.pingInterval);
+                });
+                ossWs.on('message', (data) => {
+                    const str = data.toString();
+                    try { exDef.parseMessage(str, ctx); } catch(e){}
+                });
+                ossWs.on('error', ()=>{});
+                ossWs.on('close', () => { if (ossPingTimer) clearInterval(ossPingTimer); });
+            } catch(e) { stats[name].errors.push(`OSS: ${e.message}`); }
         }
 
-        // Extra connections (Biconomy multi-pair)
+        // Extra connections (Biconomy)
         if (exDef.extraConnections) {
             for (const ec of exDef.extraConnections) {
                 try {
                     const ecUrl = typeof ec.getUrl === 'function' ? ec.getUrl() : ec.getUrl;
                     const ecWs = new WebSocket(ecUrl, {
-                        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }, handshakeTimeout: 10000
-                    });
+                        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }, handshakeTimeout: 10000 });
                     extraWsList.push(ecWs);
-                    registerWs(ecWs);
                     ecWs.on('open', () => {
                         try { ec.onOpen(ecWs); } catch(e){}
                         if (exDef.pingInterval && exDef.pingMessage)
@@ -1878,22 +1525,36 @@ function runWSConnection(name, exDef) {
                         if (exDef.handlePing) { try { const p = JSON.parse(str); if (exDef.handlePing(p, ecWs)) return; } catch(e){} }
                         try { exDef.parseMessage(str, ctx); } catch(e){}
                     });
-                    ecWs.on('error', () => {});
-                    ecWs.on('close', () => { if (ecWs._pt) clearInterval(ecWs._pt); unregisterWs(ecWs); });
+                    ecWs.on('error', ()=>{});
+                    ecWs.on('close', () => { if (ecWs._pt) clearInterval(ecWs._pt); });
                 } catch(e){}
             }
         }
 
         ws.on('open', () => {
+            connected = true;
+            clearTimeout(timeout);
             console.log(`  [${ts()}] ✅ ${name} — Connected`);
-            emitConnect(name);
             try { exDef.onOpen(ws); } catch(e) { stats[name].errors.push(e.message); }
+
             const pi = exDef.pingInterval || kucoinPing;
             if (pi && exDef.pingMessage)
                 pingTimer = setInterval(() => { if (ws.readyState === WebSocket.OPEN) ws.send(exDef.pingMessage); }, pi);
             if (exDef.customPingSetup) customPingTimer = exDef.customPingSetup(ws);
-            else if (exDef.customPing && exDef.customPingInterval)
-                customPingTimer = setInterval(() => { if (ws.readyState === WebSocket.OPEN) try { exDef.customPing(ws); } catch(e){} }, exDef.customPingInterval);
+
+            setTimeout(() => {
+                if (pingTimer) clearInterval(pingTimer);
+                if (customPingTimer) clearInterval(customPingTimer);
+                if (ossPingTimer) clearInterval(ossPingTimer);
+                const s = stats[name];
+                const total = s.trades + s.orderbook;
+                s.status = total > 0 ? 'ok' : 'no_data';
+                console.log(`  [${ts()}] 📊 ${name} — TR=${s.trades} OB=${s.orderbook}`);
+                try { ws.close(); } catch(e){}
+                if (ossWs) try { ossWs.close(); } catch(e){}
+                for (const ecWs of extraWsList) { try { ecWs.close(); } catch(e){} }
+                setTimeout(done, 500);
+            }, DATA_WAIT);
         });
 
         ws.on('message', (data) => {
@@ -1912,77 +1573,87 @@ function runWSConnection(name, exDef) {
         });
 
         ws.on('error', (err) => {
-            if (!stopFlag) {
-                console.log(`  [${ts()}] ❌ ${name} — ${shortErr(err.message)}`);
-                stats[name].errors.push(shortErr(err.message));
+            console.log(`  [${ts()}] ❌ ${name} — ${err.message}`);
+            stats[name].errors.push(err.message);
+            unregisterWs(ws);
+            if (!connected && !retrying && retries > 0) {
+                retrying = true;
+                console.log(`  [${ts()}] 🔄 ${name} — Retrying (${retries} left)...`);
+                clearTimeout(timeout);
+                try { ws.terminate(); } catch(e){}
+                if (ossWs) try { ossWs.terminate(); } catch(e){}
+                for (const ecWs of extraWsList) { try { ecWs.terminate(); } catch(e){} }
+                setTimeout(() => { resolve(testExchange(name, retries - 1)); }, 2000);
             }
         });
-
         ws.on('close', () => {
-            if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
-            if (customPingTimer) { clearInterval(customPingTimer); customPingTimer = null; }
+            if (pingTimer) clearInterval(pingTimer);
+            if (customPingTimer) clearInterval(customPingTimer);
             unregisterWs(ws);
-            if (!stopFlag && !resolved) {
-                // Will reconnect via the while loop in startWSExchange
-                finish();
+            if (!connected && !retrying && retries > 0) {
+                retrying = true;
+                console.log(`  [${ts()}] 🔄 ${name} — Closed before open, retrying (${retries} left)...`);
+                clearTimeout(timeout);
+                setTimeout(() => { resolve(testExchange(name, retries - 1)); }, 2000);
             }
         });
     });
 }
 
-// ======================== REST POLLING ENGINE (Long-Running) ========================
+// ======================== REST POLLING ENGINE ========================
 
-async function startRESTExchange(name) {
+async function testRESTExchange(name) {
     const exDef = EXCHANGES[name];
     initStats(name);
-    console.log(`  [${ts()}] 🌐 ${name} — Starting REST polling...`);
+    console.log(`  [${ts()}] 🌐 ${name} — Polling REST API...`);
 
     const symbols = exDef.symbols;
-    let round = 0;
+    const pollRounds = 4;           // Poll 4 rounds
+    const pollDelay = 5000;         // 5s between rounds
 
-    while (!stopFlag) {
+    for (let round = 0; round < pollRounds; round++) {
         for (const sym of symbols) {
-            if (stopFlag) break;
+            // Trades
             if (exDef.endpoints.trades) {
                 try {
                     const resp = await httpsRequest(exDef.endpoints.trades(sym));
                     exDef.parseTrades(resp, sym);
                 } catch (e) {
                     if (round === 0) {
-                        stats[name].errors.push(shortErr(`trades(${sym}): ${e.message}`));
-                        console.log(`  [${ts()}] ⚠️  ${name} — trades(${sym}) failed: ${shortErr(e.message)}`);
+                        stats[name].errors.push(`trades(${sym}): ${e.message}`);
+                        console.log(`  [${ts()}] ⚠️  ${name} — trades(${sym}) failed: ${e.message}`);
                     }
                 }
             }
-            if (stopFlag) break;
+            // Orderbook
             if (exDef.endpoints.orderbook) {
                 try {
                     const resp = await httpsRequest(exDef.endpoints.orderbook(sym));
                     exDef.parseOrderbook(resp, sym);
                 } catch (e) {
                     if (round === 0) {
-                        stats[name].errors.push(shortErr(`orderbook(${sym}): ${e.message}`));
-                        console.log(`  [${ts()}] ⚠️  ${name} — orderbook(${sym}) failed: ${shortErr(e.message)}`);
+                        stats[name].errors.push(`orderbook(${sym}): ${e.message}`);
+                        console.log(`  [${ts()}] ⚠️  ${name} — orderbook(${sym}) failed: ${e.message}`);
                     }
                 }
             }
         }
-        round++;
-        if (!stopFlag) await new Promise(r => setTimeout(r, REST_POLL_DELAY));
+        if (round < pollRounds - 1) await new Promise(r => setTimeout(r, pollDelay));
     }
 
     const s = stats[name];
-    s.status = (s.trades + s.orderbook) > 0 ? 'ok' : 'no_data';
-    console.log(`  [${ts()}] 📊 ${name} — TR=${s.trades} OB=${s.orderbook} (REST, ${round} rounds)`);
+    const total = s.trades + s.orderbook;
+    s.status = total > 0 ? 'ok' : 'no_data';
+    console.log(`  [${ts()}] 📊 ${name} — TR=${s.trades} OB=${s.orderbook} (REST)`);
 }
 
-// ======================== CCXT WS ENGINE (Long-Running) ========================
+// ======================== CCXT WS ENGINE ========================
 
-async function startCCXTExchange(name) {
+async function testCCXTExchange(name) {
     const exDef = EXCHANGES[name];
     initStats(name);
     const symbols = exDef.ccxtSymbols;
-    console.log(`  [${ts()}] 🔌 ${name} — Starting CCXT WS (${exDef.ccxtId})...`);
+    console.log(`  [${ts()}] 🔌 ${name} — Connecting via CCXT WS (${exDef.ccxtId})...`);
 
     let exchange;
     try {
@@ -1995,67 +1666,68 @@ async function startCCXTExchange(name) {
     }
 
     let connected = false;
+    let done = false;
 
     // Start parallel watch loops for trades + orderbook per symbol
     const loops = [];
     for (const sym of symbols) {
         // Trade watcher
         loops.push((async () => {
-            while (!stopFlag) {
+            while (!done) {
                 try {
                     const trades = await exchange.watchTrades(sym);
-                    if (!connected) { connected = true; console.log(`  [${ts()}] ✅ ${name} — Connected`); emitConnect(name); }
+                    if (!connected) { connected = true; console.log(`  [${ts()}] ✅ ${name} — Connected`); }
                     for (const t of trades) {
                         recordTrade(name, sym, t.price, t.amount, t.side, t.datetime || null);
                     }
                 } catch (e) {
-                    if (stopFlag) break;
+                    if (done) break;
                     if (!connected) stats[name].errors.push(`watchTrades(${sym}): ${e.message}`);
-                    await new Promise(r => setTimeout(r, 3000));
+                    await new Promise(r => setTimeout(r, 2000));
                 }
             }
         })());
 
         // Orderbook watcher
         loops.push((async () => {
-            while (!stopFlag) {
+            while (!done) {
                 try {
                     const ob = await exchange.watchOrderBook(sym, 5);
-                    if (!connected) { connected = true; console.log(`  [${ts()}] ✅ ${name} — Connected`); emitConnect(name); }
+                    if (!connected) { connected = true; console.log(`  [${ts()}] ✅ ${name} — Connected`); }
                     recordOrderbook(name, sym, ob.bids.slice(0, 5), ob.asks.slice(0, 5));
                 } catch (e) {
-                    if (stopFlag) break;
+                    if (done) break;
                     if (!connected) stats[name].errors.push(`watchOB(${sym}): ${e.message}`);
-                    await new Promise(r => setTimeout(r, 3000));
+                    await new Promise(r => setTimeout(r, 2000));
                 }
             }
         })());
     }
 
-    // Wait for stop signal
-    await new Promise(r => {
-        const check = setInterval(() => { if (stopFlag) { clearInterval(check); r(); } }, 2000);
-    });
-
+    // Run for DATA_WAIT then stop
+    await new Promise(r => setTimeout(r, DATA_WAIT));
+    done = true;
     try { await exchange.close(); } catch (e) {}
 
+    // Give loops a moment to finish after close
     await Promise.race([
         Promise.allSettled(loops),
         new Promise(r => setTimeout(r, 5000))
     ]);
 
     const s = stats[name];
-    s.status = (s.trades + s.orderbook) > 0 ? 'ok' : 'no_data';
+    const total = s.trades + s.orderbook;
+    s.status = total > 0 ? 'ok' : 'no_data';
     console.log(`  [${ts()}] 📊 ${name} — TR=${s.trades} OB=${s.orderbook} (CCXT WS)`);
 }
 
-// ======================== CCXT REST ENGINE (Long-Running) ========================
+// ======================== CCXT REST ENGINE ========================
 
-async function startCCXTRestExchange(name) {
+async function testCCXTRestExchange(name) {
     const exDef = EXCHANGES[name];
     initStats(name);
     const symbols = exDef.ccxtSymbols;
-    console.log(`  [${ts()}] 🌐 ${name} — Starting CCXT REST polling (${exDef.ccxtId})...`);
+    console.log(`  [${ts()}] 🌐 ${name} — Polling via CCXT REST (${exDef.ccxtId})...`);
 
     let exchange;
     try {
@@ -2070,15 +1742,16 @@ async function startCCXTRestExchange(name) {
     try {
         await exchange.loadMarkets();
     } catch (e) {
-        console.log(`  [${ts()}] ⚠️  ${name} — loadMarkets failed: ${shortErr(e.message)}`);
-        stats[name].errors.push(`loadMarkets: ${shortErr(e.message)}`);
+        console.log(`  [${ts()}] ⚠️  ${name} — loadMarkets failed: ${e.message}`);
+        stats[name].errors.push(`loadMarkets: ${e.message}`);
     }
 
-    let round = 0;
+    const pollRounds = 4;
+    const pollDelay = 5000;
 
-    while (!stopFlag) {
+    for (let round = 0; round < pollRounds; round++) {
         for (const sym of symbols) {
-            if (stopFlag) break;
+            // Trades
             try {
                 const trades = await exchange.fetchTrades(sym, undefined, 5);
                 for (const t of trades) {
@@ -2086,28 +1759,28 @@ async function startCCXTRestExchange(name) {
                 }
             } catch (e) {
                 if (round === 0) {
-                    stats[name].errors.push(shortErr(`trades(${sym}): ${e.message}`));
-                    console.log(`  [${ts()}] ⚠️  ${name} — trades(${sym}) failed: ${shortErr(e.message)}`);
+                    stats[name].errors.push(`trades(${sym}): ${e.message}`);
+                    console.log(`  [${ts()}] ⚠️  ${name} — trades(${sym}) failed: ${e.message}`);
                 }
             }
-            if (stopFlag) break;
+            // Orderbook
             try {
                 const ob = await exchange.fetchOrderBook(sym, 5);
                 recordOrderbook(name, sym, ob.bids.slice(0, 5), ob.asks.slice(0, 5));
             } catch (e) {
                 if (round === 0) {
-                    stats[name].errors.push(shortErr(`ob(${sym}): ${e.message}`));
-                    console.log(`  [${ts()}] ⚠️  ${name} — ob(${sym}) failed: ${shortErr(e.message)}`);
+                    stats[name].errors.push(`ob(${sym}): ${e.message}`);
+                    console.log(`  [${ts()}] ⚠️  ${name} — ob(${sym}) failed: ${e.message}`);
                 }
             }
         }
-        round++;
-        if (!stopFlag) await new Promise(r => setTimeout(r, REST_POLL_DELAY));
+        if (round < pollRounds - 1) await new Promise(r => setTimeout(r, pollDelay));
     }
 
     const s = stats[name];
-    s.status = (s.trades + s.orderbook) > 0 ? 'ok' : 'no_data';
-    console.log(`  [${ts()}] 📊 ${name} — TR=${s.trades} OB=${s.orderbook} (CCXT REST, ${round} rounds)`);
+    const total = s.trades + s.orderbook;
+    s.status = total > 0 ? 'ok' : 'no_data';
+    console.log(`  [${ts()}] 📊 ${name} — TR=${s.trades} OB=${s.orderbook} (CCXT REST)`);
 }
 
 // ======================== DUCKDB FLUSH ========================
@@ -2118,49 +1791,31 @@ function esc(v) {
     return `'${String(v).replace(/'/g, "''")}'`;
 }
 
-let flushing = false;
-
 async function flushToDuckDB(conn) {
-    if (flushing) return 0;
-    flushing = true;
-
-    // Swap buffers atomically so new data goes to fresh arrays
-    const tradesToFlush = tradeBuffer;
-    const obToFlush = obBuffer;
-    tradeBuffer = [];
-    obBuffer = [];
-
     let totalRows = 0;
 
     // Flush trades in batches of 500
-    for (let i = 0; i < tradesToFlush.length; i += 500) {
-        const batch = tradesToFlush.slice(i, i + 500);
+    for (let i = 0; i < tradeBuffer.length; i += 500) {
+        const batch = tradeBuffer.slice(i, i + 500);
         const values = batch.map(t =>
             `(${esc(t.ts)}, ${esc(t.exchange)}, ${esc(t.canonical_pair)}, ${t.price || 0}, ${t.qty || 0}, ${esc(t.side)})`
         ).join(',\n');
-        try {
-            await conn.run(`INSERT INTO trades VALUES ${values}`);
-            totalRows += batch.length;
-        } catch (e) {
-            console.error(`  [${ts()}] ⚠️  Trade flush error: ${e.message}`);
-        }
+        await conn.run(`INSERT INTO trades VALUES ${values}`);
+        totalRows += batch.length;
     }
+    tradeBuffer = [];
 
-    // Flush orderbook in batches of 500
-    for (let i = 0; i < obToFlush.length; i += 500) {
-        const batch = obToFlush.slice(i, i + 500);
+    // Flush orderbook
+    for (let i = 0; i < obBuffer.length; i += 500) {
+        const batch = obBuffer.slice(i, i + 500);
         const values = batch.map(o =>
             `(${esc(o.ts)}, ${esc(o.exchange)}, ${esc(o.canonical_pair)}, ${esc(o.bids)}, ${esc(o.asks)})`
         ).join(',\n');
-        try {
-            await conn.run(`INSERT INTO orderbook VALUES ${values}`);
-            totalRows += batch.length;
-        } catch (e) {
-            console.error(`  [${ts()}] ⚠️  OB flush error: ${e.message}`);
-        }
+        await conn.run(`INSERT INTO orderbook VALUES ${values}`);
+        totalRows += batch.length;
     }
+    obBuffer = [];
 
-    flushing = false;
     return totalRows;
 }
 
@@ -2334,9 +1989,9 @@ async function printReport(conn) {
 
 async function main() {
     console.log('\n╔' + '═'.repeat(78) + '╗');
-    console.log('║  NORMALIZED STREAM TESTER — 30-MIN DEEP TEST (Native WS Upgrade)            ║');
-    console.log('║  47 Exchanges × BTC/ETH/SOL × USD/USDT/USDC/DAI                              ║');
-    console.log('║  All streams running simultaneously → DuckDB                                  ║');
+    console.log('║  NORMALIZED STREAM TESTER — Canonical Pair System                            ║');
+    console.log('║  48 Exchanges × BTC/ETH/SOL × USD/USDT/USDC/DAI                              ║');
+    console.log('║  All data normalized → DuckDB (streaming.duckdb)                             ║');
     console.log('╚' + '═'.repeat(78) + '╝\n');
 
     // Build symbol map
@@ -2355,14 +2010,10 @@ async function main() {
         process.exit(1);
     }
 
-    // Clear ALL previous data
+    // Clear previous test data
     await conn.run('DELETE FROM trades');
     await conn.run('DELETE FROM orderbook');
-    console.log('  🗑️  Cleared all previous data from DuckDB\n');
-
-    // Start dashboard server
-    dashboardStartTime = Date.now();
-    const dashServer = startDashboardServer(conn);
+    console.log('  🗑️  Cleared previous test data\n');
 
     // Setup graceful shutdown
     process.on('SIGINT', () => gracefulShutdown(conn));
@@ -2373,113 +2024,56 @@ async function main() {
     const restExchanges = exchangeNames.filter(n => EXCHANGES[n].type === 'rest');
     const ccxtWsExchanges = exchangeNames.filter(n => EXCHANGES[n].type === 'ccxt-ws');
     const ccxtRestExchanges = exchangeNames.filter(n => EXCHANGES[n].type === 'ccxt-rest');
+    const totalWs = wsExchanges.length + ccxtWsExchanges.length;
+    const totalRest = restExchanges.length + ccxtRestExchanges.length;
+    console.log(`  🚀 Starting ${exchangeNames.length} exchanges (${totalWs} WS + ${totalRest} REST)...\n`);
 
-    console.log(`  🚀 Launching ALL ${exchangeNames.length} exchanges simultaneously...`);
-    console.log(`     WS: ${wsExchanges.length} | CCXT WS: ${ccxtWsExchanges.length} | REST: ${restExchanges.length} | CCXT REST: ${ccxtRestExchanges.length}`);
-    console.log(`  ⏱️  Run duration: ${RUN_DURATION / 60000} minutes`);
-    console.log(`  💾 Auto-flush every ${FLUSH_INTERVAL / 1000}s | Status every ${STATUS_INTERVAL / 60000}min\n`);
-
-    const startTime = Date.now();
-
-    // Launch ALL exchanges in parallel with stagger to avoid network spike
-    const allPromises = [];
-
-    // WS exchanges — stagger by STAGGER_DELAY
-    for (let i = 0; i < wsExchanges.length; i++) {
-        const name = wsExchanges[i];
-        allPromises.push(
-            new Promise(r => setTimeout(r, i * STAGGER_DELAY))
-                .then(() => startWSExchange(name))
-                .catch(e => { console.log(`  [${ts()}] ❌ ${name} — Fatal: ${e.message}`); })
+    // Run WebSocket exchanges in batches
+    for (let i = 0; i < wsExchanges.length; i += MAX_CONCURRENT) {
+        const batch = wsExchanges.slice(i, i + MAX_CONCURRENT);
+        console.log(`\n  ── WS Batch ${Math.floor(i/MAX_CONCURRENT)+1}: ${batch.join(', ')} ──\n`);
+        const promises = batch.map((name, idx) =>
+            new Promise(r => setTimeout(r, idx * STAGGER_DELAY)).then(() => testExchange(name))
         );
+        await Promise.all(promises);
+        console.log(`\n  ⏳ Waiting 2s...\n`);
+        await new Promise(r => setTimeout(r, 2000));
     }
 
-    // CCXT WS — stagger after WS exchanges
-    const ccxtWsOffset = wsExchanges.length * STAGGER_DELAY + 2000;
-    for (let i = 0; i < ccxtWsExchanges.length; i++) {
-        const name = ccxtWsExchanges[i];
-        allPromises.push(
-            new Promise(r => setTimeout(r, ccxtWsOffset + i * 1000))
-                .then(() => startCCXTExchange(name))
-                .catch(e => { console.log(`  [${ts()}] ❌ ${name} — Fatal: ${e.message}`); })
-        );
-    }
-
-    // REST exchanges — start after a brief delay
-    const restOffset = ccxtWsOffset + ccxtWsExchanges.length * 1000 + 2000;
-    for (let i = 0; i < restExchanges.length; i++) {
-        const name = restExchanges[i];
-        allPromises.push(
-            new Promise(r => setTimeout(r, restOffset + i * 500))
-                .then(() => startRESTExchange(name))
-                .catch(e => { console.log(`  [${ts()}] ❌ ${name} — Fatal: ${e.message}`); })
-        );
-    }
-
-    // CCXT REST — start after REST exchanges
-    const ccxtRestOffset = restOffset + restExchanges.length * 500 + 1000;
-    for (let i = 0; i < ccxtRestExchanges.length; i++) {
-        const name = ccxtRestExchanges[i];
-        allPromises.push(
-            new Promise(r => setTimeout(r, ccxtRestOffset + i * 500))
-                .then(() => startCCXTRestExchange(name))
-                .catch(e => { console.log(`  [${ts()}] ❌ ${name} — Fatal: ${e.message}`); })
-        );
-    }
-
-    // Periodic flush to DuckDB every FLUSH_INTERVAL
-    const flushTimer = setInterval(async () => {
-        try {
-            const rows = await flushToDuckDB(conn);
-            if (rows > 0) { console.log(`  [${ts()}] 💾 Periodic flush: ${rows} rows saved`); emitFlush(rows); }
-        } catch (e) {
-            console.error(`  [${ts()}] ⚠️  Flush error: ${e.message}`);
+    // Run CCXT WS exchanges in batches of 3 (heavier per instance)
+    if (ccxtWsExchanges.length > 0) {
+        for (let i = 0; i < ccxtWsExchanges.length; i += 3) {
+            const batch = ccxtWsExchanges.slice(i, i + 3);
+            console.log(`\n  ── CCXT WS Batch: ${batch.join(', ')} ──\n`);
+            await Promise.all(batch.map(name => testCCXTExchange(name)));
+            if (i + 3 < ccxtWsExchanges.length || restExchanges.length > 0 || ccxtRestExchanges.length > 0) {
+                console.log(`\n  ⏳ Waiting 2s...\n`);
+                await new Promise(r => setTimeout(r, 2000));
+            }
         }
-    }, FLUSH_INTERVAL);
+    }
 
-    // Periodic status report every STATUS_INTERVAL
-    const statusTimer = setInterval(() => {
-        const elapsed = Math.round((Date.now() - startTime) / 60000);
-        const remaining = Math.max(0, Math.round((RUN_DURATION - (Date.now() - startTime)) / 60000));
-        let activeCount = 0, totalTrades = 0, totalOB = 0;
-        for (const name of exchangeNames) {
-            const s = stats[name];
-            if (s && (s.trades > 0 || s.orderbook > 0)) activeCount++;
-            if (s) { totalTrades += s.trades; totalOB += s.orderbook; }
-        }
-        console.log(`\n  [${ts()}] ═══ STATUS ═══ ${elapsed}min elapsed, ${remaining}min remaining`);
-        console.log(`           Active: ${activeCount}/${exchangeNames.length} exchanges | Trades: ${totalTrades.toLocaleString()} | OB: ${totalOB.toLocaleString()}`);
-        console.log(`           Buffered: T=${tradeBuffer.length} OB=${obBuffer.length}\n`);
-    }, STATUS_INTERVAL);
+    // Run REST exchanges in parallel
+    if (restExchanges.length > 0) {
+        console.log(`\n  ── REST Batch: ${restExchanges.join(', ')} ──\n`);
+        await Promise.all(restExchanges.map(name => testRESTExchange(name)));
+    }
 
-    // Wait for RUN_DURATION then signal stop
-    await new Promise(r => setTimeout(r, RUN_DURATION));
+    // Run CCXT REST exchanges
+    if (ccxtRestExchanges.length > 0) {
+        console.log(`\n  ── CCXT REST Batch: ${ccxtRestExchanges.join(', ')} ──\n`);
+        await Promise.all(ccxtRestExchanges.map(name => testCCXTRestExchange(name)));
+    }
 
-    console.log(`\n  [${ts()}] ⏰ Run complete (${RUN_DURATION / 60000} minutes). Stopping all exchanges...`);
-    stopFlag = true;
-
-    // Wait for all exchanges to finish (max 30s)
-    await Promise.race([
-        Promise.allSettled(allPromises),
-        new Promise(r => setTimeout(r, 30000))
-    ]);
-
-    clearInterval(flushTimer);
-    clearInterval(statusTimer);
-
-    // Final flush
-    console.log('\n  💾 Final flush to DuckDB...');
-    flushing = false; // Reset guard for final flush
+    // Flush all buffered data to DuckDB
+    console.log('\n  💾 Flushing data to DuckDB...');
     const totalRows = await flushToDuckDB(conn);
-    console.log(`  💾 Final flush: ${totalRows} rows\n`);
+    console.log(`  💾 Flushed ${totalRows} total rows\n`);
 
     // Print report
     await printReport(conn);
 
-    const totalElapsed = Math.round((Date.now() - startTime) / 60000);
-    console.log(`\n  ⏱️  Total runtime: ${totalElapsed} minutes`);
-    console.log(`  ✅ Deep test complete\n`);
-    process.exit(0);
+    // conn disposed by GC
 }
 
 main().catch(err => { console.error('Fatal:', err); process.exit(1); });

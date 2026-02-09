@@ -954,7 +954,14 @@ const EXCHANGES = {
         getConfig: () => ({
             url: 'wss://wss.woox.io/ws/stream/OqdphuyIYbng-t001',
             pingInterval: 9000,
-            pingMessage: JSON.stringify({ event: 'ping' }),
+            pingMessage: JSON.stringify({ event: 'pong' }),
+            handlePing: (parsed, ws) => {
+                if (parsed.event === 'ping') {
+                    ws.send(JSON.stringify({ event: 'pong' }));
+                    return true;
+                }
+                return false;
+            },
             onOpen: (ws) => {
                 ws.send(JSON.stringify({ id: 'btc', event: 'subscribe', topic: 'SPOT_BTC_USDT@trade' }));
                 ws.send(JSON.stringify({ id: 'eth', event: 'subscribe', topic: 'SPOT_ETH_USDT@trade' }));

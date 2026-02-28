@@ -2438,6 +2438,14 @@ async function main() {
     console.log(`║  Dashboard: http://localhost:${HTTP_PORT}                                           ║`);
     console.log('╚═══════════════════════════════════════════════════════════════════════════╝');
 
+    server.on('error', (e) => {
+        if (e.code === 'EADDRINUSE') {
+            console.warn(`\n  ⚠️  Port ${HTTP_PORT} already in use — dashboard disabled (another instance running).`);
+            console.warn(`  ⚠️  Data collection continues normally. Kill other node process to free the port.\n`);
+        } else {
+            console.error('Server error:', e.message);
+        }
+    });
     server.listen(HTTP_PORT, () => {
         console.log(`\n  🌐 Dashboard: http://localhost:${HTTP_PORT}`);
         console.log(`  📊 API: http://localhost:${HTTP_PORT}/api/stats`);

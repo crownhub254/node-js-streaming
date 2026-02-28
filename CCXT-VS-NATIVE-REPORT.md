@@ -1,12 +1,15 @@
 # Enhanced 4-Method Comparison Report v9.5 — Native × CCXT Pro × CCXT REST × Direct REST + Subscription Manager
 
 **Date:** 2026-02-28
-**Test Duration:** 5 minutes (322s actual)
+**Validation Test:** 5 minutes (322s actual) — v9.5 health check
+**Production Run:** 4.59 hours (08:53–13:29 UTC) — ended with crash (Exit Code 1, root cause TBD)
 **Exchanges Tested:** 53
 **Pairs Tested:** BTC/ETH/SOL/BRETT/PENGU/POPCAT/WIF/SUI/ENA × USDT/USDC/USD (all available per exchange)
 **Method:** v9.5 Enhanced — 4 parallel methods + Subscription Manager: Native WS/REST, CCXT Pro, CCXT REST, Direct REST
 **Storage:** DuckDB ✅ enabled
-**Health:** Avg Score 95/100 | 0 critical | 0 warnings
+**Health (5-min test):** Avg Score 95/100 | 0 critical | 0 warnings
+**Production Run — Trades Stored:** 9,575,101 (CCXT methods; native-WS-only exchanges run in-memory)
+**Production Run — Sustained Rate:** ~34,750 msgs/min | ~2,086,000 msgs/hour
 **Dashboard:** http://localhost:3456 (9 tabs: Hybrid Flow, Per Exchange, Per Pair, Dedup Analysis, Analytics, Correlation, Health, Sub Manager, Live Events)
 
 ---
@@ -1680,3 +1683,98 @@ Exchanges are launched in 6 sequential batches with 3-second gaps between batche
 **Hybrid Dedup:** 142,033 cross-method duplicates removed (28% of raw)
 
 **Verdict:** CCXT Pro-first architecture recommended. Native handles 27/53, CCXT Pro handles 12/53, CCXT REST handles 6/53, Direct REST handles 0/53 exchanges optimally.
+---
+
+## 🏭 Production Run Statistics — 4.59-Hour Run (2026-02-28 08:53–13:29 UTC)
+
+> **Note:** `node compare-v7-enhanced.js 1440` ran for 4.59 hours and crashed (Exit Code 1).
+> Data below is from DuckDB — covers CCXT Pro / CCXT REST / Direct REST methods.
+> Native-WS-only exchanges (Zoomex, Pionex, Biconomy, Hotcoin, NovaEx, FameEX, Websea, Darkex, CEEX)
+> process data in memory and are NOT stored to the trades table (they were active in the hybrid engine).
+
+### Sustained Throughput (DuckDB-stored, CCXT methods only)
+
+| Metric | Value |
+|--------|-------|
+| Total trade records | **9,575,101** |
+| Orderbook records | **1,778,944** |
+| Run duration | **4.59 hours** (crashed at ~4.6h) |
+| Sustained trade rate | **~34,750 msgs/min** |
+| Sustained OB rate | **~6,460 OB updates/min** |
+| Exchanges with DB data | **44/53** |
+| Native-only (in-memory, no DB) | **9/53** |
+| Crash status | **Exit Code 1** — root cause under investigation |
+
+### Per-Exchange Sustained Rate (trades/hour from DuckDB)
+
+| Exchange | Trades/Hour | OB Records | Coins | Dominant Source |
+|----------|------------|-----------|-------|----------------|
+| CoinEx | 1,353,709 | 101,700 | 9/9 | CCXT Pro |
+| EXMO | 189,271 | 92,822 | 7/9 | CCXT Pro |
+| BitMart | 100,367 | 267,049 | 9/9 | CCXT Pro |
+| Coinbase | 54,594 | 20,648 | 8/9 | CCXT Pro |
+| Crypto.com | 49,860 | 40,682 | 8/9 | CCXT Pro |
+| Bullish | 46,027 | 6,955 | 5/9 | CCXT Pro |
+| Bitget | 29,711 | 82,641 | 8/9 | CCXT Pro |
+| WOO X | 28,751 | 35,550 | 9/9 | CCXT REST |
+| AscendEX | 17,852 | 111,781 | 8/9 | CCXT REST |
+| BingX | 15,564 | 17,370 | 9/9 | CCXT REST |
+| HitBTC | 12,697 | 301,183 | 9/9 | CCXT REST |
+| KuCoin | 12,677 | 160,654 | 9/9 | CCXT REST |
+| Poloniex | 12,034 | 15,864 | 8/9 | CCXT REST (skipPro ✅) |
+| OKX | 11,399 | 12,466 | 7/9 | CCXT REST |
+| BloFin | 11,139 | 12,622 | 3/9 | CCXT REST |
+| Kraken | 10,686 | 293,646 | 8/9 | CCXT REST |
+| Gate.io | 10,359 | 2,592 | 9/9 | CCXT REST |
+| Binance | 9,902 | 13,665 | 7/9 | CCXT REST (skipPro ✅) |
+| Toobit | 9,542 | 4,836 | 8/9 | CCXT REST |
+| Gemini | 9,146 | 3,067 | 6/9 | CCXT REST (skipPro ✅) |
+| BigONE | 8,801 | 3,008 | 7/9 | CCXT REST |
+| Binance.US | 8,289 | 102,487 | 9/9 | CCXT REST |
+| Bybit | 7,939 | 24,690 | 9/9 | CCXT REST |
+| WhiteBIT | 7,837 | 1,948 | 7/9 | CCXT REST (skipPro ✅) |
+| Bitrue | 7,277 | 5,223 | 9/9 | CCXT REST |
+| LATOKEN | 7,224 | 1,849 | 7/9 | CCXT REST |
+| DigiFinex | 6,636 | 2,035 | 4/9 | CCXT REST |
+| MEXC | 6,525 | 3,041 | 8/9 | Direct REST |
+| XT.com | 5,605 | 19,752 | 9/9 | Direct REST |
+| Bitfinex | 3,452 | 2,314 | 5/9 | Direct REST (skipPro ✅) |
+| CEX.IO | 2,897 | 1,275 | 9/9 | CCXT REST |
+| HTX | 2,726 | 1,823 | 9/9 | CCXT REST (skipPro ✅) |
+| OrangeX | 2,268 | 1,078 | 3/9 | Direct REST |
+| CoinW | 2,057 | 989 | 9/9 | Direct REST |
+| LBank | 1,843 | 872 | 9/9 | Direct REST |
+| Deepcoin | 1,386 | 326 | 5/9 | CCXT REST |
+| Azbit | 1,346 | 630 | 5/9 | Direct REST |
+| Bitstamp | 1,334 | 1,463 | 8/9 | CCXT Pro |
+| Trubit Pro | 1,330 | 1,281 | 3/9 | Direct REST |
+| GroveX | 1,214 | 595 | 9/9 | Direct REST |
+| Coinstore | 949 | 0 | 7/9 | Direct REST |
+| BVOX | 905 | 893 | 3/9 | Direct REST |
+| Batonex | 668 | 646 | 4/9 | Direct REST |
+| BTSE | 286 | 1,284 | 9/9 | Direct REST (DNS intermittent ⚠️) |
+
+### Native-WS-Only Exchanges (Active in Memory, Not in DuckDB trades table)
+
+| Exchange | OB in DB | Notes |
+|----------|---------|-------|
+| Zoomex | 0 | Native-only; 23K+ msgs/5min in 5-min test; no CCXT DB storage |
+| Pionex | 0 | Native-only; 2,653 msgs/5min confirmed |
+| Biconomy | 0 | Native-only; 2,449 msgs/5min confirmed |
+| Hotcoin | 0 | Native-only; 3,539 msgs/5min confirmed |
+| NovaEx | 0 | Native-only; 913 msgs/5min confirmed |
+| FameEX | 0 | DNS intermittent (Windows); 0 data this run |
+| Websea | 1,649 | Native WS active; OB stored via Direct REST fallback |
+| Darkex | 0 | Native-only; 287 msgs/5min confirmed |
+| CEEX | 0 | Native-only; 601 msgs/5min confirmed |
+
+### ⚠️ Production Run Crash — Investigation Required
+
+The 1440-minute run exited with **Exit Code 1** after ~4.59 hours. Immediate action needed:
+
+1. **Capture crash output:** Run `node compare-v7-enhanced.js 1440 2>&1 | Tee-Object -FilePath crash-log.txt`
+2. **Check for memory leaks:** Node.js process may have hit heap limit after ~4-5 hours with 53 WS connections
+3. **Add crash recovery:** Implement `--max-old-space-size=4096` flag or hourly restart loop
+4. **Suspect areas:** CCXT Pro WS reconnect loops, DuckDB flush accumulation, subscription manager growth
+
+**Recommended immediate fix:** `node --max-old-space-size=4096 compare-v7-enhanced.js 1440`

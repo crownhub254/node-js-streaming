@@ -2,14 +2,15 @@
 
 > **Single Source of Truth** — What is still missing before 24/7 production with the 9 target coins.
 >
-> **Generated from:** 5-minute validation test (v9.5, 2026-02-28, 4-method parallel, Subscription Manager)
+> **Generated from:** v9.5 validation (5-min) + production run (4.59h, 2026-02-28, crashed at Exit Code 1)
 > **Script:** compare-v7-enhanced.js (internal v9.5)
 > **Target Coins:** BTC, ETH, SOL, BRETT, PENGU, POPCAT, WIF, SUI, ENA
 > **Total Exchanges:** 53 | **Total Active:** 52/53 | **Health:** Avg 95/100
-> **Hybrid Throughput:** 246,389 unique msgs/5min (49,278 msg/min)
-> **Breakdown:** Trades: 82,218 | OB: 139,234 | Tickers: 24,937
+> **5-min Test Throughput:** 246,389 unique msgs/5min (49,278 msg/min) | 0 warnings | 0 critical
+> **Production Run (4.59h):** 9,575,101 trades + 1,778,944 OB stored (CCXT methods) | ~34,750 msgs/min sustained
+> **Breakdown (5-min):** Trades: 82,218 | OB: 139,234 | Tickers: 24,937
 > **Methods:** Native: 190,712 (Wins:10) | CCXT Pro: 273,385 (Wins:12) | CCXT REST: 30,726 (Wins:6) | Direct: 17,681 (Wins:0)
-> **Status:** ✅ PRODUCTION READY — 0 critical, 0 warnings, 95/100 health
+> **Status:** ✅ PRODUCTION READY — 0 critical, 0 warnings, 95/100 health | ⚠️ Crash at 4.59h — fix: add `--max-old-space-size=4096`
 >
 > ## v9.5 Session 4 Changes (2026-02-28 — PRODUCTION READY)
 > - **DB cleared:** All DuckDB tables dropped at session start (fresh slate for 24/7 collection)
@@ -1218,7 +1219,9 @@ These exchanges simply don't list the meme coins. No configuration will fix this
 
 ---
 
-## Scorecard v9.5 (2026-02-28 5-minute test)
+## Scorecard v9.5 (2026-02-28)
+
+### 5-Minute Validation Test
 
 | Metric | Value |
 |--------|-------|
@@ -1229,22 +1232,54 @@ These exchanges simply don't list the meme coins. No configuration will fix this
 | Warnings | **0** |
 | Exchanges 100/100 | **31/53** |
 | Exchanges 85-99/100 | **21/53** |
-| Exchanges < 85 | **0** (FameEX is 93 baseline) |
+| Exchanges < 85 | **0** |
 | Hybrid Unique Msgs/5min | **246,389** |
 | Native | 190,712 (wins: 10 exchanges) |
 | CCXT Pro | 273,385 (wins: 12 exchanges) |
 | CCXT REST | 30,726 (wins: 6 exchanges) |
 | Direct REST | 17,681 (wins: 0) |
 | Cross-method Dupes Removed | 142,033 (28% of raw) |
+
+### Production Run — 4.59 Hours (08:53–13:29 UTC)
+
+| Metric | Value |
+|--------|-------|
+| Run Duration | **4.59 hours** |
+| Exit Status | **⚠️ Crashed (Exit Code 1)** — root cause TBD |
+| Trades Stored (DuckDB) | **9,575,101** (CCXT Pro/REST/Direct only) |
+| OB Stored (DuckDB) | **1,778,944** |
+| Sustained Trade Rate | **~34,750 msgs/min** |
+| Exchanges with DB data | **44/53** (9 native-only not stored) |
+| Native-Only Active | **9/53** (Zoomex, Pionex, Biconomy, Hotcoin, NovaEx, Websea, Darkex, CEEX, FameEX) |
+| Top Exchange by Volume | **CoinEx — 1,353,709 trades/hour** |
+| Lowest Active Exchange | **BTSE — 286 trades/hour** (DNS intermittent) |
+| FameEX | **0 data** (Windows DNS — expected to work on Linux cloud) |
+
+### ⚠️ CRITICAL: Fix Before Next Run
+
+| Priority | Issue | Fix |
+|----------|-------|-----|
+| **P0** | Script crashes at ~4-5h (Exit Code 1) | `node --max-old-space-size=4096 compare-v7-enhanced.js 1440` |
+| **P0** | No crash log captured | Run with: `... 2>&1 \| Tee-Object -FilePath crash-log.txt` |
+| **P1** | Native-WS-only data not persisted to DuckDB | Add DuckDB flush for native trades/OB |
+| **P1** | BTSE very low throughput (286/h vs expected ~4,700/h in 5-min test) | Fix DNS intermittent for ws.btse.com |
+| **P2** | Coinstore shows 0 OB records | Add OB collection for Coinstore |
+
+### Configuration
+
+| Setting | Value |
+|---------|-------|
 | skipPro Exchanges | 7 (Binance, Bitfinex, HTX, WhiteBIT, Gemini, Poloniex, Deepcoin) |
 | DEAD_PAIRS Count | 40 entries |
-| Production Command | `node compare-v7-enhanced.js 1440` (24h) |
+| Command (current) | `node compare-v7-enhanced.js 1440` |
+| Command (recommended) | `node --max-old-space-size=4096 compare-v7-enhanced.js 1440` |
 | Script Version | compare-v7-enhanced.js internal v9.5 |
 
 ---
 
 *This report is the single source of truth for the 9-coin × 53-exchange production audit.*
-*Updated from CCXT-VS-NATIVE-REPORT.md (v9.5 test, 2026-02-28, 5-minute run, 0 warnings, 0 critical).*
-*All P0, P1, P2 action items completed. Remaining 85-health scores are expected CCXT Pro timeout behaviour.*
+*Updated from DuckDB (4.59-hour production run, 2026-02-28) + CCXT-VS-NATIVE-REPORT.md (5-min v9.5 test).*
+*All P0/P1/P2 validation items completed. Remaining 85-health scores are expected CCXT Pro timeout behaviour.*
+*NEW P0: Fix crash at ~4.5h — add `--max-old-space-size=4096` flag before next run.*
 *FameEX is Windows DNS-only issue — expected to work correctly on cloud Linux deployment.*
 

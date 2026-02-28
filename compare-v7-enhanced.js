@@ -1,6 +1,6 @@
 /**
  * ╔═══════════════════════════════════════════════════════════════════════════╗
- * ║  ENHANCED 4-METHOD v9.5 — Native × CCXT Pro × CCXT REST × Direct REST  ║
+ * ║  ENHANCED 4-METHOD v9.6 — Native × CCXT Pro × CCXT REST × Direct REST  ║
  * ║  ALL 53 × ALL Pairs (USDT/USDC/USD) × Ticker + Trade + OB Streaming    ║
  * ║  + Health Metrics + OB ID Correlation + Error Classification            ║
  * ║  + Fix Recommendations + Connection Stability Hardening                 ║
@@ -268,8 +268,8 @@ function sleep(ms) { return new Promise(ok => setTimeout(ok, Math.max(0, ms))); 
 const EXCHANGE_WS_LIMITS = {
     // ─── GROUP A: Reduce subscriptions per connection ───
     'Binance':      { officialMax: 1024, safeMax: 180, maxConns: 5,  batchSize: 20, batchDelay: 200, pingInt: 20000, staleTimeout: 45000, group: 'A' },  // batchSize 30→20, delay 150→200 (v9.4: reduce connection closures on WIF/USDC, BTC/USDC)
-    'Coinbase':     { officialMax: 300,  safeMax: 6,   maxConns: 10, batchSize: 6,  batchDelay: 250, pingInt: 30000, staleTimeout: 45000, group: 'A' },  // batchSize 4→6, delay 300→250 (match safeMax for single-batch subscribe)
-    'Kraken':       { officialMax: 500,  safeMax: 200, maxConns: 3,  batchSize: 40, batchDelay: 150, pingInt: 25000, staleTimeout: 60000, group: 'A' },  // batchSize 50→40, delay 200→150 (slightly smaller per batch, faster cadence)
+    'Coinbase':     { officialMax: 300,  safeMax: 8,   maxConns: 15, batchSize: 8,  batchDelay: 300, pingInt: 30000, staleTimeout: 45000, group: 'A' },  // v9.6: safeMax 6→8, maxConns 10→15, delay 250→300 (spread subs across more conns to reduce timeouts)
+    'Kraken':       { officialMax: 500,  safeMax: 200, maxConns: 5,  batchSize: 40, batchDelay: 200, pingInt: 25000, staleTimeout: 60000, group: 'A' },  // v9.6: maxConns 3→5, delay 150→200 (more parallel conns, less subscription pressure per conn)
     'KuCoin':       { officialMax: 300,  safeMax: 120, maxConns: 7,  batchSize: 20, batchDelay: 120, pingInt: 18000, staleTimeout: 45000, group: 'A' },  // batchSize 15→20, delay 150→120 (40% of limit, comfortably safe)
     'Bybit':        { officialMax: 200,  safeMax: 100, maxConns: 5,  batchSize: 20, batchDelay: 150, pingInt: 20000, staleTimeout: 45000, group: 'A' },  // batchSize 15→20, delay 200→150 (50% of limit)
     'Bitfinex':     { officialMax: 30,   safeMax: 15,  maxConns: 25, batchSize: 5,  batchDelay: 350, pingInt: 25000, staleTimeout: 60000, group: 'A' },  // batchSize 4→5, delay 400→350 (50% of limit per conn)
@@ -292,7 +292,7 @@ const EXCHANGE_WS_LIMITS = {
     'Toobit':       { officialMax: 200,  safeMax: 100, maxConns: 3,  batchSize: 14, batchDelay: 200, pingInt: 15000, staleTimeout: 45000, group: 'B' },  // batchSize 20→14 (reduce conn load, Health 70 warning)
     'XT.com':       { officialMax: 200,  safeMax: 70,  maxConns: 4,  batchSize: 15, batchDelay: 250, pingInt: 15000, staleTimeout: 45000, group: 'B' },
     'Gemini':       { officialMax: 200,  safeMax: 100, maxConns: 3,  batchSize: 20, batchDelay: 200, pingInt: 30000, staleTimeout: 60000, group: 'B' },
-    'EXMO':         { officialMax: 200,  safeMax: 100, maxConns: 3,  batchSize: 20, batchDelay: 200, pingInt: 20000, staleTimeout: 45000, group: 'B' },
+    'EXMO':         { officialMax: 200,  safeMax: 100, maxConns: 5,  batchSize: 20, batchDelay: 250, pingInt: 20000, staleTimeout: 45000, group: 'B' },  // v9.6: maxConns 3→5, delay 200→250 (reduce timeout pressure, EXMO had high timeout rate)
     // ─── GROUP C: Green / near-perfect — cap at safe limits ───
     'BingX':        { officialMax: 300,  safeMax: 150, maxConns: 3,  batchSize: 20, batchDelay: 100, pingInt: 5000,  staleTimeout: 45000, group: 'C' },
     'Crypto.com':   { officialMax: 300,  safeMax: 150, maxConns: 3,  batchSize: 20, batchDelay: 200, pingInt: 25000, staleTimeout: 45000, group: 'C' },
@@ -627,6 +627,11 @@ function addN(name, sym, tr, ob, tradeId) {
     s.lastMsg = Date.now();
     lastMsgTimes[name] = Date.now();
     enrichStats.normalized++;
+    // ─── Persist native data to DuckDB (v9.6 — native-only exchange persistence) ───
+    if (duckEnabled) {
+        if (tr > 0) duckBuffers.trades.push([Date.now(), name, p, 'native', 0, 0, '', tradeId || '']);
+        if (ob > 0) duckBuffers.orderbook.push([Date.now(), name, p, 'native', 0, 0, 0, 0, 0]);
+    }
     // Native = highest priority — update tracker
     hybridSourceTracker[`${name}:${p}`] = { method: 'native', priority: 0, lastTime: Date.now() };
     if (tr > 0) addHybridTrade(name, p, tr, tradeId);
@@ -1757,7 +1762,10 @@ const EXCHANGES = [
     urls:['wss://ws.btse.com/ws/spot'],  // removed ws.btse.io (DNS ENOTFOUND)
     pingMsg:'ping', pingInt:30000,
     onOpen:ws=>ws.send(JSON.stringify({op:'subscribe',args:['tradeHistoryApi:BTC-USD','tradeHistoryApi:ETH-USD','tradeHistoryApi:SOL-USD','tradeHistoryApi:BTC-USDT','tradeHistoryApi:ETH-USDT','tradeHistoryApi:SOL-USDT','tradeHistoryApi:BTC-USDC','tradeHistoryApi:ETH-USDC','tradeHistoryApi:SOL-USDC','tradeHistoryApi:BRETT-USDT','tradeHistoryApi:PENGU-USDT','tradeHistoryApi:PENGU-USD','tradeHistoryApi:PENGU-USDC','tradeHistoryApi:POPCAT-USDT','tradeHistoryApi:POPCAT-USD','tradeHistoryApi:POPCAT-USDC','tradeHistoryApi:WIF-USDT','tradeHistoryApi:WIF-USD','tradeHistoryApi:WIF-USDC','tradeHistoryApi:SUI-USDT','tradeHistoryApi:SUI-USD','tradeHistoryApi:SUI-USDC','tradeHistoryApi:ENA-USDT','tradeHistoryApi:ENA-USD','tradeHistoryApi:ENA-USDC']})),  // +10 meme USD/USDC pairs (audit 2026-02-28)
+    // v9.6: REST polling fallback — BTSE ws.btse.com DNS is intermittent over long runs (286 trades/h vs 4711 expected)
+    restPoll:(name)=>{const poll=async()=>{if(stopFlag)return;for(const s of['BTC-USD','ETH-USD','SOL-USD','BTC-USDT','ETH-USDT','SOL-USDT','BRETT-USDT','PENGU-USDT','WIF-USDT','SUI-USDT','ENA-USDT']){try{const r=await httpsReq(`https://api.btse.com/spot/api/v3.2/trades?symbol=${s}&count=5`);if(Array.isArray(r)&&r.length)addN('BTSE',s,r.length,0);}catch{}}if(!stopFlag)setTimeout(poll,30000);};poll();},
     onMsg:(msg)=>{if(msg==='pong')return;const d=JSON.parse(msg);if(d.topic?.startsWith('tradeHistoryApi')&&d.data)addN('BTSE',d.topic.replace('tradeHistoryApi:',''),d.data.length,0);if(d.topic?.startsWith('update:')&&d.data)addN('BTSE',d.topic.replace('update:','').replace('_0',''),0,1);},
+
     extra:[{url:'wss://ws.btse.com/ws/oss/spot',onOpen:ws=>ws.send(JSON.stringify({op:'subscribe',args:['update:BTC-USD_0','update:ETH-USD_0','update:SOL-USD_0','update:BTC-USDT_0','update:ETH-USDT_0','update:SOL-USDT_0','update:BTC-USDC_0','update:ETH-USDC_0','update:SOL-USDC_0','update:BRETT-USDT_0','update:PENGU-USDT_0','update:PENGU-USD_0','update:PENGU-USDC_0','update:POPCAT-USDT_0','update:POPCAT-USD_0','update:POPCAT-USDC_0','update:WIF-USDT_0','update:WIF-USD_0','update:WIF-USDC_0','update:SUI-USDT_0','update:SUI-USD_0','update:SUI-USDC_0','update:ENA-USDT_0','update:ENA-USD_0','update:ENA-USDC_0']}))}]
   })},
 
@@ -1797,6 +1805,8 @@ const EXCHANGES = [
   startNative:()=>connectWS({ name:'FameEX',
     urls:['wss://wsapi.fameex.com/v1/ws/stream/public'],
     onOpen:ws=>{for(const s of['btcusdt','ethusdt','solusdt','btcusdc','ethusdc','solusdc','wifusdt']){ws.send(JSON.stringify({event:'sub',params:{channel:`market_${s}_trade_detail`}}));ws.send(JSON.stringify({event:'sub',params:{channel:`market_${s}_depth_step0`}}));}},
+    // v9.6: REST polling fallback — wsapi.fameex.com DNS intermittent on Windows; REST via api.fameex.com is more stable
+    restPoll:(name)=>{const poll=async()=>{if(stopFlag)return;for(const s of['BTC-USDT','ETH-USDT','SOL-USDT','WIF-USDT']){try{const r=await httpsReq(`https://api.fameex.com/v2/spot/fills?symbol=${s}&size=5`);if(r?.data&&Array.isArray(r.data)&&r.data.length)addN('FameEX',s,r.data.length,0);}catch{}}if(!stopFlag)setTimeout(poll,30000);};poll();},
     onMsg:(msg,ws)=>{const d=JSON.parse(msg);if(d.ping){ws.send(JSON.stringify({pong:d.ping}));return;}const ch=d.channel||'';if(!ch)return;if(ch.includes('_trade')&&Array.isArray(d.data)){const sym=ch.replace('market_','').replace(/_trade.*$/,'').toUpperCase();addN('FameEX',sym,d.data.length,0);}if(ch.includes('_depth')&&d.tick){const sym=(d.tick.pair||ch.replace('market_','').replace(/_depth.*$/,'')).toUpperCase();addN('FameEX',sym,0,1);}}
   })},
 
@@ -1811,7 +1821,7 @@ const EXCHANGES = [
   startNative:()=>connectWS({ name:'Bullish',
     urls:['wss://api.exchange.bullish.com/trading-api/v1/market-data/trades'],
     onOpen:ws=>{for(const sym of['BTCUSDC','ETHUSDC','SOLUSDC','BTCUSDT','ETHUSDT','SOLUSDT','BTCUSD','ETHUSD','SOLUSD','PENGUUSDT','PENGUUSDC','WIFUSDC','SUIUSDC'])ws.send(JSON.stringify({jsonrpc:'2.0',type:'command',method:'subscribe',params:{topic:'anonymousTrades',symbol:sym},id:sym+'_t'}));},
-    restPoll:(name)=>{const poll=async()=>{if(stopFlag)return;for(const s of['BTCUSDC','ETHUSDC','SOLUSDC','BTCUSDT','ETHUSDT','SOLUSDT','BTCUSD','ETHUSD','SOLUSD','PENGUUSDT','PENGUUSDC','WIFUSDC','SUIUSDC']){try{const r=await httpsReq(`https://api.exchange.bullish.com/trading-api/v1/markets/${s}/orderbook/hybrid`);if(r?.bids?.length||r?.asks?.length)addN('Bullish',s,0,1);}catch{}}if(!stopFlag)setTimeout(poll,35000);};poll();},  // poll interval 20s→35s (reduce rate limit pressure)
+    restPoll:(name)=>{const poll=async()=>{if(stopFlag)return;for(const s of['BTCUSDC','ETHUSDC','SOLUSDC','BTCUSDT','ETHUSDT','SOLUSDT','BTCUSD','ETHUSD','SOLUSD','PENGUUSDT','PENGUUSDC','WIFUSDC','SUIUSDC']){try{const r=await httpsReq(`https://api.exchange.bullish.com/trading-api/v1/markets/${s}/orderbook/hybrid`);if(r?.bids?.length||r?.asks?.length)addN('Bullish',s,0,1);}catch{}}if(!stopFlag)setTimeout(poll,45000);};poll();},  // poll interval 20s→35s→45s (v9.6: reduce 429 rate-limit pressure on Bullish)
     onMsg:(msg,ws)=>{const d=JSON.parse(msg);if(d.type==='ping'){ws.send(JSON.stringify({type:'pong',id:d.id||'pong'}));return;}if(d.data?.trades&&d.data.symbol)addN('Bullish',d.data.symbol,d.data.trades.length,0);}
   })},
 
@@ -2432,7 +2442,7 @@ function generateReport() {
 // ═══════════════════ MAIN (v9 — Subscription Manager Launch) ═══════════════════
 async function main() {
     console.log('╔═══════════════════════════════════════════════════════════════════════════╗');
-    console.log(`║  ENHANCED 4-METHOD v9.5 — ${MINUTES}-MINUTE Test + Subscription Manager              ║`);
+    console.log(`║  ENHANCED 4-METHOD v9.6 — ${MINUTES}-MINUTE Test + Subscription Manager              ║`);
     console.log('║  All 53 exchanges × 4 methods × Trades + OrderBook + Tickers              ║');
     console.log('║  Subscription Manager: Batched subs, stale monitor, connection pools       ║');
     console.log(`║  Dashboard: http://localhost:${HTTP_PORT}                                           ║`);
@@ -2492,6 +2502,11 @@ async function main() {
     // DuckDB flush timer
     const duckFlushTimer = duckEnabled ? setInterval(flushDuckDB, 10000) : null;
 
+    // 5-minute summary logging counter (every 30 ticks × 10s = 5 minutes)
+    let _fiveMinTick = 0;
+    const _fiveMinTradeSnap = {};
+    for (const n of Object.keys(stats)) _fiveMinTradeSnap[n] = 0;
+
     const ticker = setInterval(() => {
         const elapsed = Math.floor((Date.now()-startTime)/1000);
         const mins=Math.floor(elapsed/60), secs=elapsed%60;
@@ -2512,6 +2527,28 @@ async function main() {
         const hT=Object.values(hybridStats).reduce((a,h)=>a+h.trades+h.orderbook+h.tickers,0);
         const hD=Object.values(hybridStats).reduce((a,h)=>a+h.deduped,0);
         process.stdout.write(`\r  ⏱ ${mins}m${secs}s / ${MINUTES}m | Rem: ${remMin}m${remSec}s | Active: ${active}/${EXCHANGES.length} | N:${totalN.toLocaleString()} P:${totalP.toLocaleString()} R:${totalR.toLocaleString()} D:${totalD.toLocaleString()} | Hybrid:${hT.toLocaleString()} (-${hD}) | H:${avgH}   `);
+        // ─── 5-minute per-exchange rate summary ───
+        _fiveMinTick++;
+        if (_fiveMinTick % 30 === 0) {
+            const elapsed = Math.max(1, (Date.now() - startTime) / 60000);
+            const lines = Object.entries(stats)
+                .map(([n, s]) => {
+                    const prev = _fiveMinTradeSnap[n] || 0;
+                    const cur = s.native.trades + s.ccxtPro.trades + s.ccxtRest.trades + (s.directRest?.trades||0);
+                    const delta = cur - prev;
+                    _fiveMinTradeSnap[n] = cur;
+                    return [n, delta, Math.round(delta / 5)];
+                })
+                .filter(([,d]) => d > 0)
+                .sort(([,a],[,b]) => b - a);
+            process.stdout.write('\n\n');
+            console.log(`  ═══ 5-MIN RATE SNAPSHOT (${mins}m elapsed) — top exchanges by last-5min trades ═══`);
+            for (const [n, delta, perMin] of lines.slice(0, 20)) {
+                console.log(`  ${n.padEnd(16)} ${String(delta).padStart(8)} trades/5min | ${String(perMin).padStart(7)} /min`);
+            }
+            if (lines.length > 20) console.log(`  ... and ${lines.length - 20} more active exchanges`);
+            console.log('');
+        }
     }, 10000);
 
     await sleep(TEST_DURATION);

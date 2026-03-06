@@ -818,29 +818,26 @@ function connectWS(cfg) {
         agent: new https.Agent({ keepAlive: true, keepAliveMsecs: 30000 }),
     };
 
+    // v9.9: Per-connection fragment buffer for compressed streams split across multiple WS messages
     function decompress(data) {
-        if (Buffer.isBuffer(data)) {
+        if (Buffer.isBuffer(data) && cfg.compression) {
+            const buf = _fragBuf ? Buffer.concat([_fragBuf, data]) : data;
+            const tryDec = (fn) => { try { const r = fn(buf).toString(); _fragBuf = null; return r; } catch { return null; } };
+            let result = null;
             if (cfg.compression === 'gzip') {
-                try { return zlib.gunzipSync(data).toString(); } catch {
-                    try { return zlib.inflateSync(data).toString(); } catch {
-                        try { return zlib.inflateRawSync(data).toString(); } catch { return data.toString(); }
-                    }
-                }
+                result = tryDec(zlib.gunzipSync) || tryDec(zlib.inflateSync) || tryDec(zlib.inflateRawSync);
+            } else if (cfg.compression === 'inflate') {
+                result = tryDec(zlib.inflateSync) || tryDec(zlib.inflateRawSync) || tryDec(zlib.gunzipSync);
+            } else if (cfg.compression === 'deflate') {
+                result = tryDec(zlib.inflateRawSync) || tryDec(zlib.inflateSync);
             }
-            if (cfg.compression === 'inflate') {
-                try { return zlib.inflateSync(data).toString(); } catch {
-                    try { return zlib.inflateRawSync(data).toString(); } catch {
-                        try { return zlib.gunzipSync(data).toString(); } catch { return data.toString(); }
-                    }
-                }
-            }
-            if (cfg.compression === 'deflate') {
-                try { return zlib.inflateRawSync(data).toString(); } catch {
-                    try { return zlib.inflateSync(data).toString(); } catch { return data.toString(); }
-                }
-            }
-            return data.toString();
+            if (result !== null) return result;
+            // Accumulate incomplete fragment; 1MB safety cap to prevent memory leak
+            _fragBuf = (buf.length < 1048576) ? buf : null;
+            return null; // caller skips null (incomplete fragment)
         }
+        if (Buffer.isBuffer(data)) return data.toString();
+        _fragBuf = null;
         return String(data);
     }
 
@@ -868,8 +865,10 @@ function connectWS(cfg) {
             return;
         }
         let lastMsgAt = Date.now();
+        let lastPongAt = Date.now(); // v9.9: track server pong for liveness detection
         let restFallbackTimer = null;
         let staleMonitorTimer = null;
+        let _fragBuf = null; // v9.9: fragment buffer for exchanges that split compressed data across WS messages
 
         // Track in connection pool
         mgr.connections.push(ws);
@@ -904,6 +903,7 @@ function connectWS(cfg) {
                 if (ws.readyState === 1) try { cfg.customPing(ws); } catch {}
             }, cfg.customPingInt || limits.pingInt || 30000);
             ws.on('ping', () => { try { ws.pong(); } catch {} });
+            ws.on('pong', () => { lastPongAt = Date.now(); }); // v9.9: track server pong for liveness
 
             // ─── REST FALLBACK (silent >10s → poll REST) ───
             if (cfg.restFallbackUrls) {
@@ -933,6 +933,17 @@ function connectWS(cfg) {
                     addHealthEvent(name, 'native', 'TIMEOUT', `Stale force-reconnect \u2192 endpoint ${(urlIdx%urls.length)+1}/${urls.length} after ${Math.round(silentMs/1000)}s`);
                     emitEvent('stale-reconnect', name, 'native', `Force reconnect (${Math.round(silentMs/1000)}s stale \u2192 endpoint ${(urlIdx%urls.length)+1}/${urls.length})`);
                     try { ws.terminate(); } catch {}
+                    return;
+                }
+                // v9.9: pong-timeout check — force reconnect if server stops responding to pings (2.5×pingInt)
+                if (cfg.pingMsg && ws.readyState === 1) {
+                    const pongAge = Date.now() - lastPongAt;
+                    if (pongAge > effectivePingInt * 2.5) {
+                        mgr.staleReconnects++;
+                        addHealthEvent(name, 'native', 'PONG_TIMEOUT', `No pong in ${Math.round(pongAge/1000)}s (pingInt=${Math.round(effectivePingInt/1000)}s)`);
+                        emitEvent('stale-reconnect', name, 'native', `Pong timeout (${Math.round(pongAge/1000)}s)`);
+                        try { ws.terminate(); } catch {}
+                    }
                 }
             }, Math.max(staleTimeout / 2, 15000));  // Check at half the stale timeout, minimum every 15s
 
@@ -940,9 +951,12 @@ function connectWS(cfg) {
         });
         ws.on('message', data => {
             lastMsgAt = Date.now();
+            lastPongAt = Date.now(); // any data resets pong timer too
             lastMsgTimes[name] = Date.now();
             mgr.lastActivity = Date.now();
-            try { cfg.onMsg(decompress(data), ws); } catch {}
+            const msg = decompress(data);
+            if (msg === null) return; // incomplete compressed fragment — buffering
+            try { cfg.onMsg(msg, ws); } catch {}
         });
         ws.on('error', e => {
             addErr(name, 'native', e.message?.slice(0,60));
@@ -1453,7 +1467,7 @@ const EXCHANGES = [
     urls:['wss://stream.binance.com:9443/stream','wss://stream.binance.com:443/stream','wss://data-stream.binance.vision/stream'],
     restFallbackUrls: ['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC','PENGUUSDT','PENGUUSDC','WIFUSDT','WIFUSDC','SUIUSDT','SUIUSDC','ENAUSDT','ENAUSDC'].map(s=>({url:`https://api.binance.com/api/v3/trades?symbol=${s}&limit=5`,parse:r=>{if(Array.isArray(r))addN('Binance',s,r.length,0);}})),
     onOpen:ws=>ws.send(JSON.stringify({method:'SUBSCRIBE',params:['btcusdt@trade','ethusdt@trade','solusdt@trade','btcusdc@trade','ethusdc@trade','solusdc@trade','btcusdt@depth5@100ms','ethusdt@depth5@100ms','solusdt@depth5@100ms','btcusdc@depth5@100ms','ethusdc@depth5@100ms','solusdc@depth5@100ms','penguusdt@trade','penguusdc@trade','wifusdt@trade','wifusdc@trade','suiusdt@trade','suiusdc@trade','enausdt@trade','enausdc@trade','penguusdt@depth5@100ms','penguusdc@depth5@100ms','wifusdt@depth5@100ms','wifusdc@depth5@100ms','suiusdt@depth5@100ms','suiusdc@depth5@100ms','enausdt@depth5@100ms','enausdc@depth5@100ms'],id:1})),
-    onMsg:(msg)=>{const d=JSON.parse(msg);if(!d.data)return;
+    onMsg:(msg)=>{const d=JSON.parse(msg);if(d.error){addErr('Binance','native',`WS:${JSON.stringify(d.error).slice(0,80)}`);return;}if(!d.data)return;
       if(d.data.e==='trade') addN('Binance',d.data.s,1,0,String(d.data.t));
       if(d.data.lastUpdateId&&d.data.bids) addNWithOBValidation('Binance',(d.stream||'').split('@')[0].toUpperCase(),1,d.data.lastUpdateId);}
   })},
@@ -1640,7 +1654,7 @@ const EXCHANGES = [
     onOpen:ws=>{const reqId=Date.now();
       ['BTCUSDT','ETHUSDT','SOLUSDT','PENGUUSDT','WIFUSDT'].forEach((s,i)=>ws.send(JSON.stringify({SendTopicAction:{Action:'1',FilterValue:`DeepCoin_${s}`,LocalNo:reqId+i,ResumeNo:-2,TopicID:'2'}})));},
     staleTimeout:45000,
-    restPoll:(name)=>{const poll=async()=>{if(stopFlag)return;for(const sym of['BTC-USDT','ETH-USDT','SOL-USDT','BTC-USD','PENGU-USDT','WIF-USDT']){try{const r=await httpsReq(`https://api.deepcoin.com/deepcoin/market/books?instId=${sym}&sz=5`);if(r?.code==='0'&&r.data)addN('Deepcoin',sym,0,1);}catch{}}if(!stopFlag)setTimeout(poll,10000);};poll();},  // removed USDC pairs (delisted)
+    restPoll:(name)=>{const poll=async()=>{if(stopFlag)return;for(const sym of['BTC-USDT','ETH-USDT','SOL-USDT','BTC-USD','PENGU-USDT','WIF-USDT']){try{const r=await httpsReq(`https://api.deepcoin.com/deepcoin/market/books?instId=${sym}&sz=5`);if(r?.code==='0'&&r.data)addN('Deepcoin',sym,0,1);}catch{}}if(!stopFlag)setTimeout(poll,5000);};poll();},  // v9.9: 5s OB refresh; removed USDC pairs (delisted)
     onMsg:(msg)=>{if(msg==='pong')return;const d=JSON.parse(msg);if(d.a==='PMT'&&d.r&&Array.isArray(d.r))for(const row of d.r){const inst=row.d?.I||'';addN('Deepcoin',inst.replace('DeepCoin_',''),1,0);}}
   })},
 
@@ -1795,9 +1809,9 @@ const EXCHANGES = [
 { name:'Hotcoin', tier:3, batch:4, nativeType:'ws+rest', ccxtId:null, ccxtPairs:[],
   startNative:()=>{
     runREST('Hotcoin',['btc_usdt','eth_usdt','sol_usdt','brett_usdt','pengu_usdt','popcat_usdt','wif_usdt','sui_usdt','ena_usdt','btc_usdc','eth_usdc','sol_usdc'].flatMap(s=>[
-      {url:`https://api.hotcoinfin.com/v1/market/trade?symbol=${s}&size=10`,parse:r=>{if(r?.data?.length)addN('Hotcoin',s,r.data.length,0);else if(r?.data?.data?.length)addN('Hotcoin',s,r.data.data.length,0);}},
-      {url:`https://api.hotcoinfin.com/v1/market/depth?symbol=${s}&type=step0`,parse:r=>{if(r?.data?.bids?.length)addN('Hotcoin',s,0,1);}}
-    ]),10000);
+      {url:`https://api.hotcoinfin.com/v1/market/trade?symbol=${s}&size=10`,parse:r=>{if(Date.now()-(lastMsgTimes['Hotcoin']||0)<15000)return;if(r?.data?.length)addN('Hotcoin',s,r.data.length,0);else if(r?.data?.data?.length)addN('Hotcoin',s,r.data.data.length,0);}},
+      {url:`https://api.hotcoinfin.com/v1/market/depth?symbol=${s}&type=step0`,parse:r=>{if(Date.now()-(lastMsgTimes['Hotcoin']||0)<15000)return;if(r?.data?.bids?.length)addN('Hotcoin',s,0,1);}}
+    ]),10000);  // v9.9: skip REST poll when WS received data in last 15s
     connectWS({ name:'Hotcoin',
       urls:['wss://wss.hotcoinfin.com/trade/multiple'],
       compression:'gzip',
@@ -1835,7 +1849,7 @@ const EXCHANGES = [
   startNative:()=>connectWS({ name:'Bullish',
     urls:['wss://api.exchange.bullish.com/trading-api/v1/market-data/trades'],
     onOpen:ws=>{for(const sym of['BTCUSDC','ETHUSDC','SOLUSDC','BTCUSDT','ETHUSDT','SOLUSDT','BTCUSD','ETHUSD','SOLUSD','PENGUUSDT','PENGUUSDC','SUIUSDC'])ws.send(JSON.stringify({jsonrpc:'2.0',type:'command',method:'subscribe',params:{topic:'anonymousTrades',symbol:sym},id:sym+'_t'}));},
-    restPoll:(name)=>{const poll=async()=>{if(stopFlag)return;for(const s of['BTCUSDC','ETHUSDC','SOLUSDC','BTCUSDT','ETHUSDT','SOLUSDT','BTCUSD','ETHUSD','SOLUSD','PENGUUSDT','PENGUUSDC','SUIUSDC']){try{const r=await httpsReq(`https://api.exchange.bullish.com/trading-api/v1/markets/${s}/orderbook/hybrid`);if(r?.bids?.length||r?.asks?.length)addN('Bullish',s,0,1);}catch{}}if(!stopFlag)setTimeout(poll,45000);};poll();},  // poll interval 20s→35s→45s (v9.6: reduce 429 rate-limit pressure on Bullish)
+    restPoll:(name)=>{let _bInt=20000;let _bFail=0;const poll=async()=>{if(stopFlag)return;let _ok=0;for(const s of['BTCUSDC','ETHUSDC','SOLUSDC','BTCUSDT','ETHUSDT','SOLUSDT','BTCUSD','ETHUSD','SOLUSD','PENGUUSDT','PENGUUSDC','SUIUSDC']){try{const r=await httpsReq(`https://api.exchange.bullish.com/trading-api/v1/markets/${s}/orderbook/hybrid`);if(r?.bids?.length||r?.asks?.length){addN('Bullish',s,0,1);_ok++;}}catch{_bFail++;}}if(_ok>0){_bFail=0;_bInt=Math.max(20000,_bInt-5000);}else if(_bFail>0){_bInt=Math.min(60000,_bInt+5000);}if(!stopFlag)setTimeout(poll,_bInt);};poll();},  // v9.9: adaptive OB poll 20-60s (was fixed 45s), backs off on errors
     onMsg:(msg,ws)=>{const d=JSON.parse(msg);if(d.type==='ping'){ws.send(JSON.stringify({type:'pong',id:d.id||'pong'}));return;}if(d.data?.trades&&d.data.symbol)addN('Bullish',d.data.symbol,d.data.trades.length,0);}
   })},
 
@@ -1853,7 +1867,7 @@ const EXCHANGES = [
     urls:['wss://ws.bitrue.com/market/ws','wss://wsapi.bitrue.com/kline-api/ws'],
     compression:'gzip',
     onOpen:ws=>{for(const sym of['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC','BRETTUSDT','PENGUUSDT','POPCATUSDT','WIFUSDT','SUIUSDT','ENAUSDT'])ws.send(JSON.stringify({event:'sub',params:{cb_id:sym,channel:`market_${sym}_depth_step0`}}));},
-    restPoll:(name)=>{const poll=async()=>{if(stopFlag)return;for(const s of['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC','BRETTUSDT','PENGUUSDT','POPCATUSDT','WIFUSDT','SUIUSDT','ENAUSDT']){try{const r=await httpsReq(`https://openapi.bitrue.com/api/v1/trades?symbol=${s}&limit=5`);if(Array.isArray(r))addN('Bitrue',s,r.length,0);}catch{}}if(!stopFlag)setTimeout(poll,10000);};poll();},
+    restPoll:(name)=>{const poll=async()=>{if(stopFlag)return;for(const s of['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC','BRETTUSDT','PENGUUSDT','POPCATUSDT','WIFUSDT','SUIUSDT','ENAUSDT']){try{const r=await httpsReq(`https://openapi.bitrue.com/api/v1/trades?symbol=${s}&limit=5`);if(Array.isArray(r))addN('Bitrue',s,r.length,0);}catch{}}if(!stopFlag)setTimeout(poll,5000);};poll();},  // v9.9: 5s trade poll
     onMsg:(msg,ws)=>{const d=JSON.parse(msg);if(d.event==='ping'){ws.send(JSON.stringify({event:'pong'}));return;}if(d.channel?.includes('depth')&&d.tick){const sym=d.channel.replace('market_','').replace('_depth_step0','');addN('Bitrue',sym,0,1);}}
   })},
 
@@ -1886,10 +1900,16 @@ const EXCHANGES = [
   })},
 
 { name:'CEX.IO', tier:3, batch:5, nativeType:'rest', ccxtId:'cex', skipPro:true, ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC','BTC/USD','ETH/USD','SOL/USD','BRETT/USDT','BRETT/USDC','BRETT/USD','PENGU/USDT','PENGU/USD','POPCAT/USDT','POPCAT/USD','WIF/USDT','WIF/USDC','WIF/USD','SUI/USDT','SUI/USDC','SUI/USD','ENA/USDT','ENA/USDC','ENA/USD'],
-  startNative:()=>runREST('CEX.IO',[['BTC','USDT'],['ETH','USDT'],['SOL','USDT'],['BTC','USDC'],['ETH','USDC'],['SOL','USDC'],['BTC','USD'],['ETH','USD'],['SOL','USD'],['BRETT','USDT'],['BRETT','USDC'],['BRETT','USD'],['PENGU','USDT'],['PENGU','USD'],['POPCAT','USDT'],['POPCAT','USD'],['WIF','USDT'],['WIF','USDC'],['WIF','USD'],['SUI','USDT'],['SUI','USDC'],['SUI','USD'],['ENA','USDT'],['ENA','USDC'],['ENA','USD']].flatMap(([b,q])=>[
-    {url:`https://cex.io/api/trade_history/${b}/${q}/`,parse:r=>{if(Array.isArray(r))addN('CEX.IO',`${b}_${q}`,Math.min(r.length,20),0);}},
-    {url:`https://cex.io/api/order_book/${b}/${q}/?depth=5`,parse:r=>{if(r?.bids?.length)addN('CEX.IO',`${b}_${q}`,0,1);}}
-  ]))},
+  startNative:()=>{
+    // v9.9: throttled polling — CEX.IO rate limit ~10 req/s; 50 URLs × 100ms stagger = 5s round, fits 8s cycle
+    const _cexPairs=[['BTC','USDT'],['ETH','USDT'],['SOL','USDT'],['BTC','USDC'],['ETH','USDC'],['SOL','USDC'],['BTC','USD'],['ETH','USD'],['SOL','USD'],['BRETT','USDT'],['BRETT','USDC'],['BRETT','USD'],['PENGU','USDT'],['PENGU','USD'],['POPCAT','USDT'],['POPCAT','USD'],['WIF','USDT'],['WIF','USDC'],['WIF','USD'],['SUI','USDT'],['SUI','USDC'],['SUI','USD'],['ENA','USDT'],['ENA','USDC'],['ENA','USD']];
+    const _cexFetches=_cexPairs.flatMap(([b,q])=>[
+      {url:`https://cex.io/api/trade_history/${b}/${q}/`,parse:r=>{if(Array.isArray(r))addN('CEX.IO',`${b}_${q}`,Math.min(r.length,20),0);}},
+      {url:`https://cex.io/api/order_book/${b}/${q}/?depth=5`,parse:r=>{if(r?.bids?.length)addN('CEX.IO',`${b}_${q}`,0,1);}}
+    ]);
+    const poll=async()=>{if(stopFlag)return;for(const f of _cexFetches){try{const r=await httpsReq(f.url).catch(()=>null);if(r)f.parse(r);}catch{}await sleep(100);}if(!stopFlag)setTimeout(poll,8000);};
+    poll();
+  }},
 
 { name:'OrangeX', tier:3, batch:5, nativeType:'rest', ccxtId:null, ccxtPairs:[],
   startNative:()=>runREST('OrangeX',['BTC-USDT','ETH-USDT','SOL-USDT','BTC-USDC','ETH-USDC'].flatMap(sym=>[

@@ -818,6 +818,8 @@ function connectWS(cfg) {
         agent: new https.Agent({ keepAlive: true, keepAliveMsecs: 30000 }),
     };
 
+    let _fragBuf = null; // v9.9: fragment buffer for compressed streams split across WS messages
+
     // v9.9: Per-connection fragment buffer for compressed streams split across multiple WS messages
     function decompress(data) {
         if (Buffer.isBuffer(data) && cfg.compression) {
@@ -864,11 +866,11 @@ function connectWS(cfg) {
             if (!stopFlag) setTimeout(doConnect, getBackoff());
             return;
         }
+        _fragBuf = null; // reset fragment buffer for each fresh connection
         let lastMsgAt = Date.now();
         let lastPongAt = Date.now(); // v9.9: track server pong for liveness detection
         let restFallbackTimer = null;
         let staleMonitorTimer = null;
-        let _fragBuf = null; // v9.9: fragment buffer for exchanges that split compressed data across WS messages
 
         // Track in connection pool
         mgr.connections.push(ws);

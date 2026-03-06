@@ -1,6 +1,6 @@
 /**
  * ╔═══════════════════════════════════════════════════════════════════════════╗
- * ║  ENHANCED 4-METHOD v9.6 — Native × CCXT Pro × CCXT REST × Direct REST  ║
+ * ║  ENHANCED 4-METHOD v9.7 — Native × CCXT Pro × CCXT REST × Direct REST  ║
  * ║  ALL 53 × ALL Pairs (USDT/USDC/USD) × Ticker + Trade + OB Streaming    ║
  * ║  + Health Metrics + OB ID Correlation + Error Classification            ║
  * ║  + Fix Recommendations + Connection Stability Hardening                 ║
@@ -98,6 +98,7 @@ const sseClients = [];
 // ═══════════════════ DATA ENRICHMENT LAYER ═══════════════════
 const tradeIdCache = {};
 const obSeqCache = {};
+const ccxtProTradeCache = {};  // v9.7: per-exchange:pair trade ID set — prevents CoinEx/EXMO CCXT Pro DuckDB inflation
 const lastMsgTimes = {};
 const enrichStats = { deduped: 0, validated: 0, staleOB: 0, restFallbacks: 0, normalized: 0 };
 
@@ -301,7 +302,7 @@ const EXCHANGE_WS_LIMITS = {
     'Darkex':       { officialMax: 200,  safeMax: 100, maxConns: 3,  batchSize: 20, batchDelay: 200, pingInt: 20000, staleTimeout: 45000, group: 'C' },
     'Bitrue':       { officialMax: 200,  safeMax: 100, maxConns: 3,  batchSize: 20, batchDelay: 200, pingInt: 20000, staleTimeout: 45000, group: 'C' },
     'WOO X':        { officialMax: 300,  safeMax: 150, maxConns: 3,  batchSize: 20, batchDelay: 200, pingInt: 9000,  staleTimeout: 45000, group: 'C' },
-    'Binance.US':   { officialMax: 1024, safeMax: 200, maxConns: 5,  batchSize: 20, batchDelay: 200, pingInt: 20000, staleTimeout: 45000, group: 'C' },
+    'Binance.US':   { officialMax: 1024, safeMax: 200, maxConns: 7,  batchSize: 20, batchDelay: 350, pingInt: 20000, staleTimeout: 45000, group: 'C' },  // v9.7: maxConns 5→7, batchDelay 200→350ms (native was 85 records — too slow subscription)
     'BTSE':         { officialMax: 200,  safeMax: 100, maxConns: 3,  batchSize: 20, batchDelay: 200, pingInt: 30000, staleTimeout: 45000, group: 'C' },
     'Pionex':       { officialMax: 200,  safeMax: 100, maxConns: 3,  batchSize: 20, batchDelay: 200, pingInt: 20000, staleTimeout: 45000, group: 'C' },
     'Biconomy':     { officialMax: 200,  safeMax: 100, maxConns: 3,  batchSize: 20, batchDelay: 200, pingInt: 30000, staleTimeout: 45000, group: 'C' },
@@ -1058,7 +1059,7 @@ function runREST(name, fetches, interval = 8000) {
 }
 
 // ═══════════════════ CCXT PRO ENGINE (watch* streaming + watchTicker) — HARDENED ═══════════════════
-async function startCCXTPro(name, ccxtId, pairs) {
+async function startCCXTPro(name, ccxtId, pairs, skipTicker=false) {
     try {
         // Use pre-loaded instance if available, otherwise create fresh
         let ex = preloadedPro[name];
@@ -1084,11 +1085,17 @@ async function startCCXTPro(name, ccxtId, pairs) {
         const workers = validPairs.flatMap(pair => [
             // watchTrades worker — HARDENED
             (async () => { let f=0; while(!stopFlag && f<50) { try { const t=await ex.watchTrades(pair);
+                // v9.7: per-(exchange,pair) dedup — prevents CoinEx/EXMO 10-30x DuckDB inflation (watchTrades returns rolling array not just new trades)
+                const _ck=`${name}:${pair}`; if(!ccxtProTradeCache[_ck])ccxtProTradeCache[_ck]=new Set();
                 for (const tr of t) {
-                    addCPro(name, pair, 1, 0, String(tr.id||''));
-                    if (tr.id) trackTradeId(name, 'ccxtPro', String(tr.id), toCanonical(pair) || pair);
-                    if (duckEnabled) { duckBuffers.trades.push([Date.now(),name,pair,'ccxtPro',tr.price||0,tr.amount||0,tr.side||'',tr.id||'']); }
+                    const _tid=String(tr.id||'');
+                    if(_tid&&ccxtProTradeCache[_ck].has(_tid))continue; // skip already-seen trade
+                    if(_tid)ccxtProTradeCache[_ck].add(_tid);
+                    addCPro(name, pair, 1, 0, _tid);
+                    if (tr.id) trackTradeId(name, 'ccxtPro', _tid, toCanonical(pair) || pair);
+                    if (duckEnabled) { duckBuffers.trades.push([Date.now(),name,pair,'ccxtPro',tr.price||0,tr.amount||0,tr.side||'',_tid]); }
                 }
+                if(ccxtProTradeCache[_ck].size>20000){const _a=[...ccxtProTradeCache[_ck]];ccxtProTradeCache[_ck]=new Set(_a.slice(-1000));}
                 f=0; } catch(e) {
                 const em = e.message||''; const eCat = classifyError(em);
                 addHealthEvent(name, 'ccxtPro', 'watchTradesErr', em);
@@ -1115,7 +1122,8 @@ async function startCCXTPro(name, ccxtId, pairs) {
                 if (em.includes('timed out')||em.includes('timeout')||em.includes('ETIMEDOUT')) { f++; await sleep(Math.min(5000*f,60000)); continue; }
                 f++; if(f<=2) addErr(name,'ccxtPro',`${pair}:ob:${em.slice(0,40)}`); await sleep(Math.min(3000*f,60000)); } } })(),
             // watchTicker worker — HARDENED with fallback
-            (async () => { let f=0; while(!stopFlag && f<10) { try { const tk=await ex.watchTicker(pair); addCProTicker(name,pair);
+            (async () => { if(skipTicker) return; // v9.7: skipTicker flag (e.g. Gemini watchTicker:notSupported)
+            let f=0; while(!stopFlag && f<10) { try { const tk=await ex.watchTicker(pair); addCProTicker(name,pair);
                 // DuckDB: store ticker
                 if (duckEnabled) { duckBuffers.tickers.push([Date.now(),name,pair,'ccxtPro',tk.last||0,tk.bid||0,tk.ask||0,tk.high||0,tk.low||0,tk.baseVolume||0,tk.quoteVolume||0,tk.percentage||0]); }
                 f=0; } catch(e) {
@@ -1573,7 +1581,8 @@ const EXCHANGES = [
     subscriptions:['btcusd','ethusd','solusd','btcusdt','ethusdt','btcusdc','ethusdc','solusdc','penguusd','popcatusd','wifusd','suiusd','enausd'].flatMap(s=>[JSON.stringify({event:'bts:subscribe',data:{channel:`live_trades_${s}`}}),JSON.stringify({event:'bts:subscribe',data:{channel:`order_book_${s}`}})]),
     onOpen:ws=>{for(const s of['btcusd','ethusd','solusd','btcusdt','ethusdt','btcusdc','ethusdc','solusdc','penguusd','popcatusd','wifusd','suiusd','enausd']){ws.send(JSON.stringify({event:'bts:subscribe',data:{channel:`live_trades_${s}`}}));ws.send(JSON.stringify({event:'bts:subscribe',data:{channel:`order_book_${s}`}}));}},  // -solusdt (not on Bitstamp)
     onMsg:(msg)=>{const d=JSON.parse(msg);if(!d.channel)return;
-      if(d.channel.startsWith('live_trades_')&&d.event==='trade'&&d.data){const sym=d.channel.replace('live_trades_','');addN('Bitstamp',sym,1,0,String(d.data.id));}
+      // v9.7: accept both 'trade' (v1 WS) and 'data' (v2 WS) — Bitstamp API v2 uses event:'data' for live_trades
+      if(d.channel.startsWith('live_trades_')&&(d.event==='trade'||d.event==='data')&&d.data){const sym=d.channel.replace('live_trades_','');addN('Bitstamp',sym,1,0,String(d.data.id||''));}
       if(d.channel.startsWith('order_book_')&&d.data?.bids)addN('Bitstamp',d.channel.replace('order_book_',''),0,1);}
   })},
 
@@ -1683,7 +1692,7 @@ const EXCHANGES = [
   })},
 
 // ═══ BATCH 3: TIER 2 CONT + TIER 3 ═══
-{ name:'Gemini', tier:2, batch:3, nativeType:'ws', ccxtId:'gemini', skipPro:true, ccxtPairs:['BTC/USD','ETH/USD','SOL/USD','BTC/USDT','ETH/USDT','BTC/USDC','ETH/USDC','SOL/USDC','PENGU/USDC','PENGU/USD','POPCAT/USDC','POPCAT/USD','WIF/USDC','WIF/USD'],  // skipPro: watchTicker notSupported (v9.4)
+{ name:'Gemini', tier:2, batch:3, nativeType:'ws', ccxtId:'gemini', skipTicker:true, ccxtPairs:['BTC/USD','ETH/USD','SOL/USD','BTC/USDT','ETH/USDT','BTC/USDC','ETH/USDC','SOL/USDC','PENGU/USDC','PENGU/USD','POPCAT/USDC','POPCAT/USD','WIF/USDC','WIF/USD'],  // v9.7: removed skipPro:true, added skipTicker:true — watchTicker notSupported but watchTrades+watchOrderBook work fine (+68K/min)
   startNative:()=>connectWS({ name:'Gemini',
     urls:['wss://api.gemini.com/v2/marketdata'],
     wsHeaders:{'Origin':'https://exchange.gemini.com'},  // Origin required for Gemini WS handshake (v9.4)
@@ -1753,7 +1762,8 @@ const EXCHANGES = [
     urls:['wss://api.hitbtc.com/api/3/ws/public'],
     pingMsg:{method:'server.ping',params:{},id:99}, pingInt:20000,
     onOpen:ws=>{ws.send(JSON.stringify({ch:'trades',method:'subscribe',params:{symbols:['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC','BRETTUSDT','PENGUUSDT','POPCATUSDT','WIFUSDT','SUIUSDT','ENAUSDT']},id:1}));ws.send(JSON.stringify({ch:'orderbook/full',method:'subscribe',params:{symbols:['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC','BRETTUSDT','PENGUUSDT','POPCATUSDT','WIFUSDT','SUIUSDT','ENAUSDT'],limit:5},id:2}));},
-    onMsg:(msg)=>{const d=JSON.parse(msg);if(!d.ch)return;if(d.ch==='trades'&&d.update)for(const[sym,trades]of Object.entries(d.update))addN('HitBTC',sym,trades.length,0);if(d.ch==='orderbook/full'){const p=d.snapshot||d.update||{};for(const sym of Object.keys(p))addN('HitBTC',sym,0,1);}}
+    // v9.7: added d.snapshot handling for trades (HitBTC sends initial snapshot then updates)
+    onMsg:(msg)=>{const d=JSON.parse(msg);if(!d.ch)return;if(d.ch==='trades'){if(d.update)for(const[sym,trades]of Object.entries(d.update))addN('HitBTC',sym,trades.length,0);if(d.snapshot)for(const[sym,trades]of Object.entries(d.snapshot))addN('HitBTC',sym,trades.length,0);}if(d.ch==='orderbook/full'){const p=d.snapshot||d.update||{};for(const sym of Object.keys(p))addN('HitBTC',sym,0,1);}}
   })},
 
 // ═══ BATCH 4: TIER 3 WS ═══
@@ -1805,8 +1815,7 @@ const EXCHANGES = [
   startNative:()=>connectWS({ name:'FameEX',
     urls:['wss://wsapi.fameex.com/v1/ws/stream/public'],
     onOpen:ws=>{for(const s of['btcusdt','ethusdt','solusdt','btcusdc','ethusdc','solusdc','wifusdt']){ws.send(JSON.stringify({event:'sub',params:{channel:`market_${s}_trade_detail`}}));ws.send(JSON.stringify({event:'sub',params:{channel:`market_${s}_depth_step0`}}));}},
-    // v9.6: REST polling fallback — wsapi.fameex.com DNS intermittent on Windows; REST via api.fameex.com is more stable
-    restPoll:(name)=>{const poll=async()=>{if(stopFlag)return;for(const s of['BTC-USDT','ETH-USDT','SOL-USDT','WIF-USDT']){try{const r=await httpsReq(`https://api.fameex.com/v2/spot/fills?symbol=${s}&size=5`);if(r?.data&&Array.isArray(r.data)&&r.data.length)addN('FameEX',s,r.data.length,0);}catch{}}if(!stopFlag)setTimeout(poll,30000);};poll();},
+    // v9.7: REST poll DISABLED — api.fameex.com returns 404 on all endpoints (API deprecated/moved); relying on WS only
     onMsg:(msg,ws)=>{const d=JSON.parse(msg);if(d.ping){ws.send(JSON.stringify({pong:d.ping}));return;}const ch=d.channel||'';if(!ch)return;if(ch.includes('_trade')&&Array.isArray(d.data)){const sym=ch.replace('market_','').replace(/_trade.*$/,'').toUpperCase();addN('FameEX',sym,d.data.length,0);}if(ch.includes('_depth')&&d.tick){const sym=(d.tick.pair||ch.replace('market_','').replace(/_depth.*$/,'')).toUpperCase();addN('FameEX',sym,0,1);}}
   })},
 
@@ -2482,7 +2491,7 @@ async function main() {
             try { await Promise.resolve(ex.startNative()); } catch(e) { addErr(ex.name,'native',e.message); }
             // Method 2: CCXT Pro (watch* streaming) — skip if Pro broken for this exchange
             if (ex.ccxtId && ccxt.pro?.[ex.ccxtId] && !ex.skipPro) {
-                startCCXTPro(ex.name, ex.ccxtId, ex.ccxtPairs).catch(()=>{});
+                startCCXTPro(ex.name, ex.ccxtId, ex.ccxtPairs, ex.skipTicker||false).catch(()=>{});  // v9.7: pass skipTicker flag
             }
             // Method 3: CCXT REST (fetch* polling) — markets already pre-loaded
             if (ex.ccxtId && ex.ccxtPairs?.length) {

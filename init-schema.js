@@ -80,7 +80,6 @@ async function main() {
         ['Binance', 'BTCUSDC', 'BTC', 'USDC'],
         ['Binance', 'ETHUSDC', 'ETH', 'USDC'],
         ['Binance', 'SOLUSDC', 'SOL', 'USDC'],
-        ['Binance', 'BTCUSD',  'BTC', 'USD'],
 
         // ─────────── Coinbase ───────────
         ['Coinbase', 'BTC-USD',  'BTC', 'USD'],
@@ -92,12 +91,15 @@ async function main() {
 
         // ─────────── Kraken ───────────
         ['Kraken', 'XBT/USDT', 'BTC', 'USDT'],
-        ['Kraken', 'BTC/USDT', 'BTC', 'USDT'],   // V2 API uses BTC not XBT
+        ['Kraken', 'BTC/USDT', 'BTC', 'USDT'],
         ['Kraken', 'ETH/USDT', 'ETH', 'USDT'],
         ['Kraken', 'SOL/USDT', 'SOL', 'USDT'],
         ['Kraken', 'XBT/USDC', 'BTC', 'USDC'],
+        ['Kraken', 'BTC/USDC', 'BTC', 'USDC'],
         ['Kraken', 'ETH/USDC', 'ETH', 'USDC'],
         ['Kraken', 'SOL/USDC', 'SOL', 'USDC'],
+        ['Kraken', 'BTC/USD',  'BTC', 'USD'],
+        ['Kraken', 'ETH/USD',  'ETH', 'USD'],
         ['Kraken', 'SOL/USD',  'SOL', 'USD'],
 
         // ─────────── KuCoin ───────────
@@ -115,9 +117,6 @@ async function main() {
         ['OKX', 'BTC-USDC', 'BTC', 'USDC'],
         ['OKX', 'ETH-USDC', 'ETH', 'USDC'],
         ['OKX', 'SOL-USDC', 'SOL', 'USDC'],
-        ['OKX', 'BTC-USD',  'BTC', 'USD'],
-        ['OKX', 'ETH-USD',  'ETH', 'USD'],
-        ['OKX', 'SOL-USD',  'SOL', 'USD'],
 
         // ─────────── Bybit ───────────
         ['Bybit', 'BTCUSDT', 'BTC', 'USDT'],
@@ -161,6 +160,12 @@ async function main() {
         ['Crypto.com', 'BTC_USDT', 'BTC', 'USDT'],
         ['Crypto.com', 'ETH_USDT', 'ETH', 'USDT'],
         ['Crypto.com', 'SOL_USDT', 'SOL', 'USDT'],
+        ['Crypto.com', 'BTC_USD',  'BTC', 'USD'],
+        ['Crypto.com', 'ETH_USD',  'ETH', 'USD'],
+        ['Crypto.com', 'SOL_USD',  'SOL', 'USD'],
+        ['Crypto.com', 'BTC_USDC', 'BTC', 'USDC'],
+        ['Crypto.com', 'ETH_USDC', 'ETH', 'USDC'],
+        ['Crypto.com', 'SOL_USDC', 'SOL', 'USDC'],
 
         // ─────────── Bitstamp ───────────
         ['Bitstamp', 'btcusd',  'BTC', 'USD'],
@@ -179,17 +184,14 @@ async function main() {
         ['WhiteBIT', 'BTC_USDC', 'BTC', 'USDC'],
         ['WhiteBIT', 'ETH_USDC', 'ETH', 'USDC'],
         ['WhiteBIT', 'SOL_USDC', 'SOL', 'USDC'],
-        ['WhiteBIT', 'BTC_USD',  'BTC', 'USD'],
-        ['WhiteBIT', 'ETH_USD',  'ETH', 'USD'],
-        ['WhiteBIT', 'SOL_USD',  'SOL', 'USD'],
 
         // ─────────── AscendEX ───────────
         ['AscendEX', 'BTC/USDT', 'BTC', 'USDT'],
         ['AscendEX', 'ETH/USDT', 'ETH', 'USDT'],
         ['AscendEX', 'SOL/USDT', 'SOL', 'USDT'],
-        ['AscendEX', 'BTC/USD',  'BTC', 'USD'],
-        ['AscendEX', 'ETH/USD',  'ETH', 'USD'],
-        ['AscendEX', 'SOL/USD',  'SOL', 'USD'],
+        ['AscendEX', 'BTC/USDC', 'BTC', 'USDC'],
+        ['AscendEX', 'ETH/USDC', 'ETH', 'USDC'],
+        ['AscendEX', 'SOL/USDC', 'SOL', 'USDC'],
 
         // ─────────── BingX ───────────
         ['BingX', 'BTC-USDT', 'BTC', 'USDT'],
@@ -257,12 +259,6 @@ async function main() {
         ['BTSE', 'BTC-USD',  'BTC', 'USD'],
         ['BTSE', 'ETH-USD',  'ETH', 'USD'],
         ['BTSE', 'SOL-USD',  'SOL', 'USD'],
-        ['BTSE', 'BTC-USDT', 'BTC', 'USDT'],
-        ['BTSE', 'ETH-USDT', 'ETH', 'USDT'],
-        ['BTSE', 'SOL-USDT', 'SOL', 'USDT'],
-        ['BTSE', 'BTC-USDC', 'BTC', 'USDC'],
-        ['BTSE', 'ETH-USDC', 'ETH', 'USDC'],
-        ['BTSE', 'SOL-USDC', 'SOL', 'USDC'],
 
         // ─────────── HitBTC ───────────
         ['HitBTC', 'BTCUSDT', 'BTC', 'USDT'],
@@ -292,7 +288,7 @@ async function main() {
         ['NovaEx', 'SPOT_ETH_USDT', 'ETH', 'USDT'],
         ['NovaEx', 'SPOT_SOL_USDT', 'SOL', 'USDT'],
 
-        // ─────────── FameEX (REST) ───────────
+        // ─────────── FameEX ───────────
         ['FameEX', 'BTCUSDT', 'BTC', 'USDT'],
         ['FameEX', 'ETHUSDT', 'ETH', 'USDT'],
         ['FameEX', 'SOLUSDT', 'SOL', 'USDT'],
@@ -300,7 +296,7 @@ async function main() {
         ['FameEX', 'ETH_USDT', 'ETH', 'USDT'],
         ['FameEX', 'SOL_USDT', 'SOL', 'USDT'],
 
-        // ─────────── Websea (REST) ───────────
+        // ─────────── Websea ───────────
         ['Websea', 'BTC-USDT', 'BTC', 'USDT'],
         ['Websea', 'ETH-USDT', 'ETH', 'USDT'],
         ['Websea', 'SOL-USDT', 'SOL', 'USDT'],
@@ -318,11 +314,17 @@ async function main() {
         ['Bitrue', 'BTCUSDT', 'BTC', 'USDT'],
         ['Bitrue', 'ETHUSDT', 'ETH', 'USDT'],
         ['Bitrue', 'SOLUSDT', 'SOL', 'USDT'],
+        ['Bitrue', 'BTCUSDC', 'BTC', 'USDC'],
+        ['Bitrue', 'ETHUSDC', 'ETH', 'USDC'],
+        ['Bitrue', 'SOLUSDC', 'SOL', 'USDC'],
 
         // ─────────── BloFin ───────────
         ['BloFin', 'BTC-USDT', 'BTC', 'USDT'],
         ['BloFin', 'ETH-USDT', 'ETH', 'USDT'],
         ['BloFin', 'SOL-USDT', 'SOL', 'USDT'],
+        ['BloFin', 'BTC-USDC', 'BTC', 'USDC'],
+        ['BloFin', 'ETH-USDC', 'ETH', 'USDC'],
+        ['BloFin', 'SOL-USDC', 'SOL', 'USDC'],
 
         // ─────────── OrangeX ───────────
         ['OrangeX', 'BTC-USDT', 'BTC', 'USDT'],
@@ -348,29 +350,59 @@ async function main() {
         ['Bitget', 'BTCUSDT', 'BTC', 'USDT'],
         ['Bitget', 'ETHUSDT', 'ETH', 'USDT'],
         ['Bitget', 'SOLUSDT', 'SOL', 'USDT'],
+        ['Bitget', 'BTCUSDC', 'BTC', 'USDC'],
+        ['Bitget', 'ETHUSDC', 'ETH', 'USDC'],
+        ['Bitget', 'SOLUSDC', 'SOL', 'USDC'],
 
-        // ─────────── Gemini (Native WS, USD pairs) ───────────
-        ['Gemini', 'BTCUSD', 'BTC', 'USD'],
-        ['Gemini', 'ETHUSD', 'ETH', 'USD'],
+        // ─────────── Gemini (Native WS, expanded) ───────────
+        ['Gemini', 'BTCUSD',  'BTC', 'USD'],
+        ['Gemini', 'ETHUSD',  'ETH', 'USD'],
+        ['Gemini', 'SOLUSD',  'SOL', 'USD'],
+        ['Gemini', 'BTCUSDT', 'BTC', 'USDT'],
+        ['Gemini', 'ETHUSDT', 'ETH', 'USDT'],
+        // SOLUSDT does NOT exist on Gemini — removed
+        ['Gemini', 'BTCUSDC', 'BTC', 'USDC'],
+        ['Gemini', 'ETHUSDC', 'ETH', 'USDC'],
+        ['Gemini', 'SOLUSDC', 'SOL', 'USDC'],
 
         // ─────────── Binance.US (Native WS) ───────────
         ['Binance.US', 'btcusdt', 'BTC', 'USDT'],
         ['Binance.US', 'ethusdt', 'ETH', 'USDT'],
         ['Binance.US', 'solusdt', 'SOL', 'USDT'],
 
-        // ─────────── CEX.IO (CCXT WS) ───────────
+        // ─────────── MEXC (REST — WS geo-blocked) ───────────
+        ['MEXC', 'BTCUSDT', 'BTC', 'USDT'],
+        ['MEXC', 'ETHUSDT', 'ETH', 'USDT'],
+        ['MEXC', 'SOLUSDT', 'SOL', 'USDT'],
+        ['MEXC', 'BTCUSDC', 'BTC', 'USDC'],
+        ['MEXC', 'ETHUSDC', 'ETH', 'USDC'],
+        ['MEXC', 'SOLUSDC', 'SOL', 'USDC'],
+
+        // ─────────── CEX.IO (CCXT WS — only verified working pairs) ───────────
         ['CEX.IO', 'BTC/USDT', 'BTC', 'USDT'],
         ['CEX.IO', 'ETH/USDT', 'ETH', 'USDT'],
+        // SOL/USDT does NOT exist on CEX.IO — removed
+        ['CEX.IO', 'BTC/USD',  'BTC', 'USD'],
+        ['CEX.IO', 'ETH/USD',  'ETH', 'USD'],
+        ['CEX.IO', 'SOL/USD',  'SOL', 'USD'],
+        // BTC/USDC and ETH/USDC do NOT exist on CEX.IO — removed
+        ['CEX.IO', 'SOL/USDC', 'SOL', 'USDC'],
 
-        // ─────────── CoinEx (CCXT WS) ───────────
-        ['CoinEx', 'BTC/USDT', 'BTC', 'USDT'],
-        ['CoinEx', 'ETH/USDT', 'ETH', 'USDT'],
-        ['CoinEx', 'SOL/USDT', 'SOL', 'USDT'],
+        // ─────────── CoinEx (Native WS) ───────────
+        ['CoinEx', 'BTCUSDT', 'BTC', 'USDT'],
+        ['CoinEx', 'ETHUSDT', 'ETH', 'USDT'],
+        ['CoinEx', 'SOLUSDT', 'SOL', 'USDT'],
+        ['CoinEx', 'BTCUSDC', 'BTC', 'USDC'],
+        ['CoinEx', 'ETHUSDC', 'ETH', 'USDC'],
+        ['CoinEx', 'SOLUSDC', 'SOL', 'USDC'],
 
         // ─────────── DigiFinex (Native WS) ───────────
         ['DigiFinex', 'BTC_USDT', 'BTC', 'USDT'],
         ['DigiFinex', 'ETH_USDT', 'ETH', 'USDT'],
         ['DigiFinex', 'SOL_USDT', 'SOL', 'USDT'],
+        ['DigiFinex', 'BTC_USDC', 'BTC', 'USDC'],
+        ['DigiFinex', 'ETH_USDC', 'ETH', 'USDC'],
+        ['DigiFinex', 'SOL_USDC', 'SOL', 'USDC'],
 
         // ─────────── BigONE (CCXT REST) ───────────
         ['BigONE', 'BTC/USDT', 'BTC', 'USDT'],

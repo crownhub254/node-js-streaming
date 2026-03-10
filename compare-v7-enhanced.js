@@ -1,11 +1,11 @@
 /**
  * ╔═══════════════════════════════════════════════════════════════════════════╗
- * ║  ENHANCED 4-METHOD v9.7 — Native × CCXT Pro × CCXT REST × Direct REST  ║
- * ║  ALL 53 × ALL Pairs (USDT/USDC/USD) × Ticker + Trade + OB Streaming    ║
+ * ║  ENHANCED 4-METHOD v9.9.22 — Native × CCXT Pro × CCXT REST × Direct REST ║
+ * ║  ALL 53 × BTC/ETH/SOL Pairs (USDT/USDC/USD) × Ticker+Trade+OB Streaming ║
  * ║  + Health Metrics + OB ID Correlation + Error Classification            ║
  * ║  + Fix Recommendations + Connection Stability Hardening                 ║
  * ║  Storage: DuckDB (trades, orderbook, tickers) — optional, auto-detected ║
- * ║  Usage: node compare-v7-enhanced.js [minutes]  (default=15)             ║
+ * ║  Usage: node compare-v7-enhanced.js [minutes]  (default=20)             ║
  * ║  Dashboard: http://localhost:3456                                        ║
  * ╚═══════════════════════════════════════════════════════════════════════════╝
  */
@@ -16,6 +16,7 @@ process.on('warning', w => { if (w.name === 'TimeoutNegativeWarning') return; co
 const ccxt = require('ccxt');
 const WebSocket = require('ws');
 const https = require('https');
+const _sharedAgent = new https.Agent({ keepAlive: true, keepAliveMsecs: 30000, maxSockets: 100 }); // v9.9.18: shared agent to prevent leak on reconnect
 const http = require('http');
 const zlib = require('zlib');
 const fs = require('fs');
@@ -23,6 +24,26 @@ const path = require('path');
 const dns = require('dns');
 dns.setServers(['1.1.1.1', '8.8.8.8']);
 dns.setDefaultResultOrder('verbatim');
+
+// v9.9.20: Valkey — env-driven, auto-reconnect, portable across any server/device
+const Valkey = require('iovalkey');
+const VK_HOST = process.env.VALKEY_HOST || process.env.REDIS_HOST || '127.0.0.1';
+const VK_PORT = parseInt(process.env.VALKEY_PORT || process.env.REDIS_PORT || '6379', 10);
+const VK_ENABLED = (process.env.VALKEY_ENABLED || 'true').toLowerCase() !== 'false';
+let vkReady = false;
+let vk;
+if (VK_ENABLED) {
+    vk = new Valkey({ port: VK_PORT, host: VK_HOST, lazyConnect: true, enableOfflineQueue: false, maxRetriesPerRequest: 1,
+        retryStrategy(times) { if (times > 20) return null; return Math.min(times * 1000, 30000); } });
+    vk.on('error', () => {});
+    vk.on('connect', () => { vkReady = true; });
+    vk.on('close', () => { vkReady = false; });
+    vk.connect().catch(() => {});
+} else {
+    const _noop = () => Promise.resolve();
+    const _pipe = { sadd:()=>_pipe, expire:()=>_pipe, exec:_noop };
+    vk = { pipeline:()=>_pipe, hincrby:_noop, sadd:_noop };
+}
 
 // ═══════════════════ DUCKDB STORAGE LAYER ═══════════════════
 let duckdb, duckDB, duckConn, duckEnabled = false;
@@ -56,43 +77,51 @@ function escSQL(v) {
     if (typeof v === 'number') return isFinite(v) ? String(v) : 'NULL';
     return "'" + String(v).replace(/'/g, "''").slice(0, 200) + "'";
 }
+let _duckFlushPending = false;
 function flushDuckDB() {
-    if (!duckEnabled || !duckConn) return;
-    try {
-        // Flush trades
-        const trades = duckBuffers.trades.splice(0, 50000);
-        if (trades.length > 0) {
-            const vals = trades.map(r =>
-                `(${r[0]},${escSQL(r[1])},${escSQL(r[2])},${escSQL(r[3])},${r[4]||0},${r[5]||0},${escSQL(r[6])},${escSQL(r[7])})`
-            ).join(',');
-            duckConn.run(`INSERT INTO trades VALUES ${vals}`);
-        }
-        // Flush orderbook
-        const obs = duckBuffers.orderbook.splice(0, 50000);
-        if (obs.length > 0) {
-            const vals = obs.map(r =>
-                `(${r[0]},${escSQL(r[1])},${escSQL(r[2])},${escSQL(r[3])},${r[4]||0},${r[5]||0},${r[6]||0},${r[7]||0},${r[8]||0})`
-            ).join(',');
-            duckConn.run(`INSERT INTO orderbook VALUES ${vals}`);
-        }
-        // Flush tickers
-        const tks = duckBuffers.tickers.splice(0, 50000);
-        if (tks.length > 0) {
-            const vals = tks.map(r =>
-                `(${r[0]},${escSQL(r[1])},${escSQL(r[2])},${escSQL(r[3])},${r[4]||0},${r[5]||0},${r[6]||0},${r[7]||0},${r[8]||0},${r[9]||0},${r[10]||0},${r[11]||0})`
-            ).join(',');
-            duckConn.run(`INSERT INTO tickers VALUES ${vals}`);
-        }
-    } catch(e) { /* silently handle flush errors */ }
+    if (!duckEnabled || !duckConn || _duckFlushPending) return;
+    // v9.9.2: use callback form of duckConn.run() so DuckDB executes async (worker thread),
+    // preventing synchronous blocking of the Node.js event loop during large batch inserts.
+    const trades = duckBuffers.trades.splice(0, 50000);
+    const obs = duckBuffers.orderbook.splice(0, 50000);
+    const tks = duckBuffers.tickers.splice(0, 50000);
+    _duckFlushPending = true;
+    let pending = 0;
+    const done = () => { if (--pending === 0) { _duckFlushPending = false; try { duckConn.run('CHECKPOINT', ()=>{}); } catch(e) {} } };
+    if (trades.length > 0) {
+        pending++;
+        const vals = trades.map(r =>
+            `(${r[0]},${escSQL(r[1])},${escSQL(r[2])},${escSQL(r[3])},${r[4]||0},${r[5]||0},${escSQL(r[6])},${escSQL(r[7])})`
+        ).join(',');
+        duckConn.run(`INSERT INTO trades VALUES ${vals}`, done);
+    }
+    if (obs.length > 0) {
+        pending++;
+        const vals = obs.map(r =>
+            `(${r[0]},${escSQL(r[1])},${escSQL(r[2])},${escSQL(r[3])},${r[4]||0},${r[5]||0},${r[6]||0},${r[7]||0},${r[8]||0})`
+        ).join(',');
+        duckConn.run(`INSERT INTO orderbook VALUES ${vals}`, done);
+    }
+    if (tks.length > 0) {
+        pending++;
+        const vals = tks.map(r =>
+            `(${r[0]},${escSQL(r[1])},${escSQL(r[2])},${escSQL(r[3])},${r[4]||0},${r[5]||0},${r[6]||0},${r[7]||0},${r[8]||0},${r[9]||0},${r[10]||0},${r[11]||0})`
+        ).join(',');
+        duckConn.run(`INSERT INTO tickers VALUES ${vals}`, done);
+    }
+    if (pending === 0) _duckFlushPending = false; // nothing to flush
 }
 
-const MINUTES = parseInt(process.argv[2]) || 15;
-const TEST_DURATION = MINUTES * 60 * 1000;
+const MINUTES = parseInt(process.argv[2]) || 20;
+const TEST_DURATION = Math.min(MINUTES * 60 * 1000, 2147483647); // v9.9.16: cap at 32-bit max to prevent setTimeout overflow
 const HTTP_PORT = 3456;
 const REPORT_FILE = 'CCXT-VS-NATIVE-REPORT.md';
 let startTime = Date.now();
 let stopFlag = false;
 const stats = {};
+// ─── Circuit breaker state (per-exchange, module-level so it persists across reconnects) ───
+const _cbFailCounts = {};   // name -> consecutive WS close count
+const _cbPausedUntil = {};  // name -> timestamp when circuit pause expires
 const sseClients = [];
 
 // ═══════════════════ DATA ENRICHMENT LAYER ═══════════════════
@@ -104,6 +133,8 @@ const enrichStats = { deduped: 0, validated: 0, staleOB: 0, restFallbacks: 0, no
 
 // ═══ HYBRID COMBINED STREAM (cross-method dedup) ═══
 const hybridTradeDedup = {};  // `name:pair` → Set<tradeId>
+const hybridTradeLastProTime = {}; // v9.9.17: tracks last CCXT Pro trade time per name:pair — suppresses bulk-native double-counting
+const hybridOBLastTime = {}; // v9.9.19: `name:pair` → { time, source } — source-aware cross-method OB dedup
 const hybridStats = {};       // name → { trades, orderbook, tickers, deduped, pairs:{} }
 
 // ═══ TRADE ID CORRELATION TRACKING ═══
@@ -242,7 +273,23 @@ function getFixRecommendation(name) {
 }
 
 process.on('uncaughtException', e => { if (!e.message?.includes('EPIPE')) console.error('UE:', e.message?.slice(0,80)); });
-process.on('unhandledRejection', () => {});
+process.on('unhandledRejection', (reason) => { const msg = reason?.message || String(reason); if (!msg.includes('EPIPE') && !msg.includes('ECONNRESET') && !msg.includes('ENOTFOUND') && !msg.includes('ETIMEDOUT')) console.error('UR:', msg.slice(0,120)); });
+
+// v9.9.18: Graceful shutdown — flush DuckDB, close CCXT instances, close WS connections
+const _shutdownOnce = { done: false };
+async function gracefulShutdown(signal) {
+    if (_shutdownOnce.done) return; _shutdownOnce.done = true;
+    console.log(`\n  🛑 ${signal} received — graceful shutdown...`);
+    try { if (typeof flushDuckDB === 'function') flushDuckDB(); } catch {}
+    try { if (typeof duckDB !== 'undefined' && duckDB) { await new Promise(r => setTimeout(r, 2000)); duckDB.close(); } } catch {}
+    for (const ex of (typeof EXCHANGES !== 'undefined' ? EXCHANGES : [])) {
+        try { if (ex._ws && ex._ws.readyState <= 1) ex._ws.close(); } catch {}
+    }
+    console.log('  🛑 Shutdown complete');
+    process.exit(0);
+}
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // ═══════════════════ UTILITIES ═══════════════════
 function httpsReq(url, opts = {}) {
@@ -270,25 +317,25 @@ const EXCHANGE_WS_LIMITS = {
     // ─── GROUP A: Reduce subscriptions per connection ───
     'Binance':      { officialMax: 1024, safeMax: 180, maxConns: 5,  batchSize: 20, batchDelay: 200, pingInt: 20000, staleTimeout: 45000, group: 'A' },  // batchSize 30→20, delay 150→200 (v9.4: reduce connection closures on WIF/USDC, BTC/USDC)
     'Coinbase':     { officialMax: 300,  safeMax: 8,   maxConns: 15, batchSize: 8,  batchDelay: 300, pingInt: 30000, staleTimeout: 30000, group: 'A' },  // v9.8: staleTimeout 45→30s (detect 55-min WS drop sooner); v9.6: safeMax 6→8, maxConns 10→15
-    'Kraken':       { officialMax: 500,  safeMax: 200, maxConns: 7,  batchSize: 40, batchDelay: 200, pingInt: 25000, staleTimeout: 60000, group: 'A' },  // v9.8: maxConns 5→7 (reduce timeout errors); v9.6: maxConns 3→5, delay 150→200
+    'Kraken':       { officialMax: 500,  safeMax: 200, maxConns: 7,  batchSize: 40, batchDelay: 350, pingInt: 25000, staleTimeout: 60000, group: 'A' },  // v9.9.5: batchDelay 200→350ms (reduce 951 timeout errors)
     'KuCoin':       { officialMax: 300,  safeMax: 120, maxConns: 7,  batchSize: 20, batchDelay: 120, pingInt: 18000, staleTimeout: 45000, group: 'A' },  // batchSize 15→20, delay 150→120 (40% of limit, comfortably safe)
-    'Bybit':        { officialMax: 200,  safeMax: 100, maxConns: 5,  batchSize: 20, batchDelay: 150, pingInt: 20000, staleTimeout: 45000, group: 'A' },  // batchSize 15→20, delay 200→150 (50% of limit)
+    'Bybit':        { officialMax: 200,  safeMax: 100, maxConns: 5,  batchSize: 20, batchDelay: 250, pingInt: 20000, staleTimeout: 45000, group: 'A' },  // v9.9.5: batchDelay 150→250ms (reduce 528 timeout errors)
     'Bitfinex':     { officialMax: 30,   safeMax: 15,  maxConns: 25, batchSize: 5,  batchDelay: 350, pingInt: 25000, staleTimeout: 60000, group: 'A' },  // batchSize 4→5, delay 400→350 (50% of limit per conn)
     'Gate.io':      { officialMax: 200,  safeMax: 80,  maxConns: 5,  batchSize: 20, batchDelay: 150, pingInt: 15000, staleTimeout: 45000, group: 'A' },  // batchSize 15→20, delay 200→150 (40% of limit)
     'WhiteBIT':     { officialMax: 300,  safeMax: 80,  maxConns: 4,  batchSize: 10, batchDelay: 300, pingInt: 25000, staleTimeout: 60000, group: 'A' },  // batchSize 15→10, staleTimeout 60s (reduce conn load + false reconnects)
     'AscendEX':     { officialMax: 200,  safeMax: 80,  maxConns: 3,  batchSize: 15, batchDelay: 200, pingInt: 15000, staleTimeout: 45000, group: 'A' },
     'Bitstamp':     { officialMax: 300,  safeMax: 100, maxConns: 3,  batchSize: 20, batchDelay: 200, pingInt: 20000, staleTimeout: 45000, group: 'A' },
-    'Bitget':       { officialMax: 240,  safeMax: 80,  maxConns: 3,  batchSize: 20, batchDelay: 180, pingInt: 30000, staleTimeout: 45000, group: 'A' },  // batchSize 15→20, delay 200→180 (33% of limit)
+    'Bitget':       { officialMax: 240,  safeMax: 80,  maxConns: 3,  batchSize: 20, batchDelay: 250, pingInt: 30000, staleTimeout: 45000, group: 'A' },  // v9.9.5: batchDelay 180→250ms (reduce 239 timeout errors)
     'Bullish':      { officialMax: 200,  safeMax: 80,  maxConns: 3,  batchSize: 15, batchDelay: 200, pingInt: 30000, staleTimeout: 60000, group: 'A' },
     'BloFin':       { officialMax: 200,  safeMax: 60,  maxConns: 5,  batchSize: 8,  batchDelay: 250, pingInt: 25000, staleTimeout: 50000, group: 'A' },  // batchSize 12→8 (reduce conn load, Health 70 warning)
-    'MEXC':         { officialMax: 30,   safeMax: 20,  maxConns: 5,  batchSize: 5,  batchDelay: 300, pingInt: 20000, staleTimeout: 45000, group: 'A' },
+    'MEXC':         { officialMax: 30,   safeMax: 20,  maxConns: 5,  batchSize: 5,  batchDelay: 500, pingInt: 20000, staleTimeout: 45000, group: 'A' },  // v9.9.5: batchDelay 300→500ms (reduce 745 timeout errors)
     'CoinEx':       { officialMax: 200,  safeMax: 100, maxConns: 3,  batchSize: 20, batchDelay: 200, pingInt: 15000, staleTimeout: 45000, group: 'A' },
     'LBank':        { officialMax: 100,  safeMax: 30,  maxConns: 8,  batchSize: 6,  batchDelay: 300, pingInt: 20000, staleTimeout: 60000, group: 'A' },  // staleTimeout 50→60s (altcoins have lower data frequency)
     'BitMart':      { officialMax: 100,  safeMax: 50,  maxConns: 5,  batchSize: 10, batchDelay: 200, pingInt: 10000, staleTimeout: 45000, group: 'A' },
     'Poloniex':     { officialMax: 100,  safeMax: 40,  maxConns: 4,  batchSize: 9,  batchDelay: 250, pingInt: 20000, staleTimeout: 45000, group: 'A' },
-    'HitBTC':       { officialMax: 100,  safeMax: 50,  maxConns: 3,  batchSize: 10, batchDelay: 200, pingInt: 20000, staleTimeout: 45000, group: 'A' },
+    'HitBTC':       { officialMax: 100,  safeMax: 50,  maxConns: 3,  batchSize: 10, batchDelay: 300, pingInt: 20000, staleTimeout: 45000, group: 'A' },  // v9.9.5: batchDelay 200→300ms (reduce 505 timeout errors)
     // ─── GROUP B: Add failover URLs ───
-    'OKX':          { officialMax: 480,  safeMax: 180, maxConns: 4,  batchSize: 20, batchDelay: 200, pingInt: 25000, staleTimeout: 45000, group: 'B' },  // batchSize 30→20 (reverted — remote server closes at 30 per conn)
+    'OKX':          { officialMax: 480,  safeMax: 180, maxConns: 4,  batchSize: 20, batchDelay: 250, pingInt: 25000, staleTimeout: 45000, group: 'B' },  // v9.9.5: batchDelay 200→250ms (reduce 468 timeout errors)
     'HTX':          { officialMax: 200,  safeMax: 60,  maxConns: 5,  batchSize: 10, batchDelay: 250, pingInt: 20000, staleTimeout: 45000, group: 'B' },  // batchSize 15→10 (reduce conn load, CCXT Pro closing)
     'Toobit':       { officialMax: 200,  safeMax: 100, maxConns: 3,  batchSize: 14, batchDelay: 200, pingInt: 15000, staleTimeout: 45000, group: 'B' },  // batchSize 20→14 (reduce conn load, Health 70 warning)
     'XT.com':       { officialMax: 200,  safeMax: 70,  maxConns: 4,  batchSize: 15, batchDelay: 250, pingInt: 15000, staleTimeout: 45000, group: 'B' },
@@ -301,7 +348,7 @@ const EXCHANGE_WS_LIMITS = {
     'Deepcoin':     { officialMax: 200,  safeMax: 100, maxConns: 3,  batchSize: 20, batchDelay: 200, pingInt: 15000, staleTimeout: 45000, group: 'C' },
     'Darkex':       { officialMax: 200,  safeMax: 100, maxConns: 3,  batchSize: 20, batchDelay: 200, pingInt: 20000, staleTimeout: 45000, group: 'C' },
     'Bitrue':       { officialMax: 200,  safeMax: 100, maxConns: 3,  batchSize: 20, batchDelay: 200, pingInt: 20000, staleTimeout: 45000, group: 'C' },
-    'WOO X':        { officialMax: 300,  safeMax: 150, maxConns: 3,  batchSize: 20, batchDelay: 200, pingInt: 9000,  staleTimeout: 45000, group: 'C' },
+    'WOO X':        { officialMax: 300,  safeMax: 150, maxConns: 3,  batchSize: 20, batchDelay: 300, pingInt: 9000,  staleTimeout: 45000, group: 'C' },  // v9.9.5: batchDelay 200→300ms (reduce 557 timeout errors)
     'Binance.US':   { officialMax: 1024, safeMax: 200, maxConns: 7,  batchSize: 20, batchDelay: 350, pingInt: 20000, staleTimeout: 45000, group: 'C' },  // v9.7: maxConns 5→7, batchDelay 200→350ms (native was 85 records — too slow subscription)
     'BTSE':         { officialMax: 200,  safeMax: 100, maxConns: 3,  batchSize: 20, batchDelay: 200, pingInt: 30000, staleTimeout: 45000, group: 'C' },
     'Pionex':       { officialMax: 200,  safeMax: 100, maxConns: 3,  batchSize: 20, batchDelay: 200, pingInt: 20000, staleTimeout: 45000, group: 'C' },
@@ -309,7 +356,7 @@ const EXCHANGE_WS_LIMITS = {
     'DigiFinex':    { officialMax: 100,  safeMax: 50,  maxConns: 5,  batchSize: 10, batchDelay: 200, pingInt: 30000, staleTimeout: 60000, group: 'C' },  // staleTimeout 45→60s (high stale reconnect count)
     'Hotcoin':      { officialMax: 200,  safeMax: 100, maxConns: 3,  batchSize: 20, batchDelay: 200, pingInt: 20000, staleTimeout: 45000, group: 'C' },
     'NovaEx':       { officialMax: 300,  safeMax: 150, maxConns: 3,  batchSize: 20, batchDelay: 200, pingInt: 9000,  staleTimeout: 45000, group: 'C' },
-    'FameEX':       { officialMax: 200,  safeMax: 100, maxConns: 3,  batchSize: 20, batchDelay: 200, pingInt: 20000, staleTimeout: 45000, group: 'C' },
+    'FameEX':       { officialMax: 200,  safeMax: 100, maxConns: 3,  batchSize: 20, batchDelay: 200, pingInt: 20000, staleTimeout: 120000, group: 'C' },  // v9.9.10: staleTimeout 45s→120s (FameEX sends ping every ~30s; 45s was triggering false restarts → circuit breaker)
     'Websea':       { officialMax: 200,  safeMax: 100, maxConns: 3,  batchSize: 20, batchDelay: 200, pingInt: 20000, staleTimeout: 45000, group: 'C' },
     'Coinstore':    { officialMax: 200,  safeMax: 100, maxConns: 3,  batchSize: 20, batchDelay: 200, pingInt: 20000, staleTimeout: 45000, group: 'C' },
     'GroveX':       { officialMax: 200,  safeMax: 100, maxConns: 3,  batchSize: 20, batchDelay: 200, pingInt: 20000, staleTimeout: 45000, group: 'C' },
@@ -328,7 +375,7 @@ const FAILOVER_URLS = {
     'binance':   ['wss://stream.binance.com:9443/stream', 'wss://stream.binance.com:443/stream', 'wss://data-stream.binance.vision/stream'],
     'binanceus': ['wss://stream.binance.us:9443/stream', 'wss://stream.binance.us:443/stream'],
     'gemini':    ['wss://api.gemini.com/v2/marketdata', 'wss://api.gemini.com/v1/marketdata/BTCUSD'],
-    'xt':        ['wss://stream.xt.com/public', 'wss://stream2.xt.com/public', 'wss://stream3.xt.com/public'],
+    'xt':        ['wss://stream.xt.com/public'],  // v9.9.6: removed stream2/stream3 (DNS ENOTFOUND on all platforms)
     'toobit':    ['wss://stream.toobit.com/quote/ws/v1', 'wss://stream.toobit.com/quote/ws/v2'],
     'lbank':     ['wss://www.lbkex.net/ws/V2/', 'wss://www.lbkex.com/ws/V2/', 'wss://api.lbank.info/ws/V2/'],
     'blofin':    ['wss://openapi.blofin.com/ws/public'],
@@ -344,6 +391,7 @@ const FAILOVER_URLS = {
     'bitrue':    ['wss://ws.bitrue.com/kline-api/ws'],
     'cryptocom': ['wss://stream.crypto.com/exchange/v1/market', 'wss://stream.crypto.com/v2/market'],
     'coinstore': ['wss://ws.coinstore.com/s/ws'],
+    'ascendex':  ['wss://ascendex.com/1/api/pro/v1/stream', 'wss://ascendex.com/api/pro/v1/stream'],  // v9.9.5
     'default':   [],
 };
 
@@ -352,7 +400,7 @@ const FAILOVER_KEY_MAP = {
     'Gemini':'gemini', 'XT.com':'xt', 'Toobit':'toobit', 'LBank':'lbank', 'BloFin':'blofin',
     'EXMO':'exmo', 'Binance.US':'binanceus', 'KuCoin':'kucoin', 'Poloniex':'poloniex', 'Bitfinex':'bitfinex',
     'WhiteBIT':'whitebit', 'FameEX':'fameex', 'CoinEx':'coinex', 'BitMart':'bitmart', 'Bitrue':'bitrue',
-    'Crypto.com':'cryptocom', 'Coinstore':'coinstore',
+    'Crypto.com':'cryptocom', 'Coinstore':'coinstore', 'AscendEX':'ascendex',  // v9.9.5
 };
 function getFailoverKey(name) { return FAILOVER_KEY_MAP[name] || 'default'; }
 function getFailoverUrls(name) { return FAILOVER_URLS[getFailoverKey(name)] || []; }
@@ -429,9 +477,10 @@ const preloadedRest = {};  // name -> ccxt exchange instance (markets pre-loaded
 function buildCCXTOpts(ccxtId) {
     const opts = { enableRateLimit: true, timeout: 60000, newUpdates: false, defaultType: 'spot' };
     if (ccxtId === 'bitfinex') { opts.options = { ...(opts.options||{}), precisionMode: 1, handleAllTickers: false }; }
-    const spotFilterExchanges = ['gateio','mexc','bitmart','binance','bybit','bingx','bitrue','deepcoin','bitget','xt','kucoin','okx'];
+    const spotFilterExchanges = ['gateio','mexc','bitmart','binance','bybit','bingx','bitrue','deepcoin','bitget','xt','kucoin','okx','lbank'];  // v9.9.6: +lbank (prevents perp market load from lbkperp.lbank.com)
     if (spotFilterExchanges.includes(ccxtId)) { opts.options = { ...(opts.options||{}), defaultType: 'spot', fetchMarkets: ['spot'] }; }
     if (ccxtId === 'blofin') { opts.defaultType = 'swap'; delete opts.options?.fetchMarkets; }
+    if (ccxtId === 'bitget') { opts.options = { ...(opts.options||{}), checksum: false }; }  // v9.9.6: disable OB checksum validation (prevents 'orderbook data checksum' disconnects)
     return opts;
 }
 
@@ -500,7 +549,7 @@ function toCanonical(sym) {
         'BTCUSD':'BTC_USD','btcusd':'BTC_USD','BTC_USD':'BTC_USD','BTC-USD':'BTC_USD','BTC/USD':'BTC_USD',
         'ETHUSD':'ETH_USD','ethusd':'ETH_USD','ETH_USD':'ETH_USD','ETH-USD':'ETH_USD','ETH/USD':'ETH_USD',
         'SOLUSD':'SOL_USD','solusd':'SOL_USD','SOL_USD':'SOL_USD','SOL-USD':'SOL_USD','SOL/USD':'SOL_USD',
-        'BTC_DAI':'BTC_DAI','BTC/DAI':'BTC_DAI',
+        
         'tBTCUSD':'BTC_USD','tETHUSD':'ETH_USD','tSOLUSD':'SOL_USD',
         'tBTCUST':'BTC_USDT','tETHUST':'ETH_USDT','tSOLUST':'SOL_USDT',
         'SPOT_BTC_USDT':'BTC_USDT','SPOT_ETH_USDT':'ETH_USDT','SPOT_SOL_USDT':'SOL_USDT',
@@ -535,7 +584,7 @@ function toCanonical(sym) {
     // Try separator-based split: / - _
     const sepMatch = work.match(/^([A-Z0-9]+)[\/\-_]([A-Z0-9]+)$/);
     if (sepMatch) {
-        const [, coin, quote] = sepMatch;
+        const [ coin, quote] = sepMatch;
         if (['USDT','USDC','USD','DAI','EUR','BUSD'].includes(quote)) {
             return `${coin}_${quote}`;
         }
@@ -571,43 +620,10 @@ function initStats(name, tier, nativeType, ccxtId, hasRestEndpoint) {
 }
 
 // ═══ DEAD / SILENT PAIRS BLACKLIST (P4 + expanded) ═══
-const DEAD_PAIRS = new Set([
-    // NOTE: All entries use underscore format (e.g. BTC_USDT) to match toCanonical() output — v9.4 fix
-    // --- Original dead pairs ---
-    'Bullish:WIF_USDC',
-    'Azbit:BRETT_USDT', 'Azbit:ENA_USDT', 'Azbit:POPCAT_USDT', 'Azbit:SUI_USDT',
-    'Coinbase:ENA_USDC', 'Coinbase:PENGU_USDC', 'Coinbase:POPCAT_USDC', 'Coinbase:SUI_USDC', 'Coinbase:WIF_USDC',
-    // --- Deepcoin silent pairs ---
-    'Deepcoin:BRETT_USDT', 'Deepcoin:POPCAT_USDT', 'Deepcoin:SUI_USDT', 'Deepcoin:ENA_USDT',
-    // --- FameEX silent pairs (these 5 coins not listed on FameEX) ---
-    'FameEX:BRETT_USDT', 'FameEX:PENGU_USDT', 'FameEX:POPCAT_USDT', 'FameEX:SUI_USDT', 'FameEX:ENA_USDT',
-    // --- Darkex silent pairs ---
-    'Darkex:SOL_USDT', 'Darkex:BRETT_USDT', 'Darkex:PENGU_USDT', 'Darkex:ENA_USDT',
-    // --- CEEX silent pairs ---
-    'CEEX:BRETT_USDT', 'CEEX:PENGU_USDT', 'CEEX:POPCAT_USDT', 'CEEX:ENA_USDT',
-    // --- Coinstore silent pairs ---
-    'Coinstore:BRETT_USDT', 'Coinstore:POPCAT_USDT',
-    // --- Websea silent pairs ---
-    'Websea:BRETT_USDT', 'Websea:POPCAT_USDT',
-    // --- BigONE silent pairs ---
-    'BigONE:BRETT_USDT', 'BigONE:POPCAT_USDT',
-    // --- LATOKEN silent pairs (verified NOT_LISTED via CCXT loadMarkets) ---
-    'LATOKEN:WIF_USDT', 'LATOKEN:SUI_USDT',
-    // --- MEXC / Bitget silent pairs ---
-    'MEXC:BRETT_USDT', 'Bitget:POPCAT_USDT',
-    // --- Poloniex silent pairs (verified NOT_LISTED via API 2026-02-27) ---
-    'Poloniex:PENGU_USDT',
-    // --- CEX.IO ENA: listed but 0 trades (verified 2026-02-27) ---
-    'CEX.IO:ENA_USDT', 'CEX.IO:ENA_USDC', 'CEX.IO:ENA_USD',
-    // --- Audit 2026-02-28: confirmed delisted/not found via CCXT loadMarkets ---
-    'Toobit:BRETT_USDT',                                   // not in Toobit spot markets (audit scanner)
-    'HTX:SOL_USDC',                                        // delisted from HTX (11 pairs found, no solusdc)
-    'WOO X:SOL_USDC',                                      // delisted from WOO X (11 pairs found, no sol_usdc)
-    'Bitstamp:SOL_USDT',                                   // not on Bitstamp (only SOL/USD + SOL/USDC listed)
-    'Deepcoin:BTC_USDC', 'Deepcoin:ETH_USDC', 'Deepcoin:SOL_USDC', // only USDT pairs remain on Deepcoin
-    // --- Audit v9.4: BloFin ETH/USDC not in CCXT markets (native ETH-USDC works) ---
-    'BloFin:ETH_USDC',                                     // CCXT can't resolve ETH/USDC:USDC on BloFin perp
-]);
+const DEAD_PAIRS = new Set([]);
+
+// v9.9.21: per-symbol OB throttle for hyper-active native WS streams (Kraken ~150:1, Bitfinex ~53:1, HitBTC ~350:1 OB/Trade)
+const _nativeOBThrottle = {};
 
 // ═══ Native data methods (unchanged) ═══
 function addN(name, sym, tr, ob, tradeId) {
@@ -619,6 +635,7 @@ function addN(name, sym, tr, ob, tradeId) {
         if (!tradeIdCache[key]) tradeIdCache[key] = new Set();
         if (tradeIdCache[key].has(tradeId)) { s.deduped++; enrichStats.deduped++; return; }
         tradeIdCache[key].add(tradeId);
+        if (vkReady) vk.pipeline().sadd(`dedup:n:${key}`, tradeId).expire(`dedup:n:${key}`, 300).exec().catch(()=>{}); // v9.9.16: L2 Valkey dedup
         if (tradeIdCache[key].size > 5000) { const a=[...tradeIdCache[key]]; tradeIdCache[key] = new Set(a.slice(-2500)); }
         trackTradeId(name, 'native', String(tradeId), p);
     }
@@ -633,10 +650,9 @@ function addN(name, sym, tr, ob, tradeId) {
         if (tr > 0) duckBuffers.trades.push([Date.now(), name, p, 'native', 0, 0, '', tradeId || '']);
         if (ob > 0) duckBuffers.orderbook.push([Date.now(), name, p, 'native', 0, 0, 0, 0, 0]);
     }
-    // Native = highest priority — update tracker
-    hybridSourceTracker[`${name}:${p}`] = { method: 'native', priority: 0, lastTime: Date.now() };
-    if (tr > 0) addHybridTrade(name, p, tr, tradeId);
-    if (ob > 0) addHybridOB(name, p, ob);
+    // v9.9.17: trades use tradeId dedup, OB uses time-window dedup — all streams contribute to hybrid
+    if (tr > 0) { addHybridTrade(name, p, tr, tradeId); }
+    if (ob > 0) { addHybridOB(name, p, ob, 'native'); }
 }
 
 function addNWithOBValidation(name, sym, ob, updateId) {
@@ -650,6 +666,19 @@ function addNWithOBValidation(name, sym, ob, updateId) {
     addN(name, sym, 0, ob);
 }
 
+// v9.9.4: native ticker counter — tracks ticker events from native WS/REST streams for ccxtId:null exchanges
+function addNTicker(name, sym) {
+    const p = toCanonical(sym); if (!p || !stats[name]) return;
+    const s = stats[name].native;
+    if (!s.pairs[p]) s.pairs[p] = { trades: 0, ob: 0, tickers: 0 };
+    s.pairs[p].tickers = (s.pairs[p].tickers || 0) + 1;
+    s.tickers = (s.tickers || 0) + 1;
+    s.lastMsg = Date.now();
+    lastMsgTimes[name] = Date.now();
+    if (duckEnabled) { duckBuffers.tickers.push([Date.now(), name, p, 'native', 0, 0, 0, 0, 0, 0, 0, 0]); }
+    addHybridTicker(name, p);
+}
+
 // ═══ CCXT Pro data (watch* streaming) ═══
 function addCPro(name, sym, tr, ob, tradeId) {
     const p = toCanonical(sym); if (!p || !stats[name]) return;
@@ -659,10 +688,8 @@ function addCPro(name, sym, tr, ob, tradeId) {
     s.pairs[p].trades += (tr || 0); s.pairs[p].ob += (ob || 0);
     s.trades += (tr || 0); s.orderbook += (ob || 0);
     s.lastMsg = Date.now();
-    if (shouldEmit(name, p, 'ccxtPro')) {
-        if (tr > 0) addHybridTrade(name, p, tr, tradeId);
-        if (ob > 0) addHybridOB(name, p, ob);
-    }
+    if (tr > 0) { addHybridTrade(name, p, tr, tradeId); hybridTradeLastProTime[`${name}:${p}`] = Date.now(); } // v9.9.17: no shouldEmit — tradeId dedup; mark Pro active
+    if (ob > 0) addHybridOB(name, p, ob, 'ccxtPro'); // v9.9.19: source-aware dedup
 }
 function addCProTicker(name, sym) {
     const p = toCanonical(sym); if (!p || !stats[name]) return;
@@ -683,9 +710,7 @@ function addCRest(name, sym, tr, ob, tradeId) {
     s.pairs[p].trades += (tr || 0); s.pairs[p].ob += (ob || 0);
     s.trades += (tr || 0); s.orderbook += (ob || 0);
     s.lastMsg = Date.now();
-    if (shouldEmit(name, p, 'ccxtRest')) {
-        if (ob > 0) addHybridOB(name, p, ob);
-    }
+    if (ob > 0) addHybridOB(name, p, ob, 'ccxtRest'); // v9.9.19: source-aware dedup
 }
 function addCRestTicker(name, sym) {
     const p = toCanonical(sym); if (!p || !stats[name]) return;
@@ -716,10 +741,8 @@ function addDirectRest(name, sym, tr, ob, tradeId) {
     s.trades += (tr || 0); s.orderbook += (ob || 0);
     s.lastMsg = Date.now();
     if (tradeId) trackTradeId(name, 'directRest', String(tradeId), p);
-    if (shouldEmit(name, p, 'directRest')) {
-        if (tr > 0) addHybridTrade(name, p, tr, tradeId);
-        if (ob > 0) addHybridOB(name, p, ob);
-    }
+    if (tr > 0) addHybridTrade(name, p, tr, tradeId); // v9.9.17: no shouldEmit — tradeId dedup handles it
+    if (ob > 0) addHybridOB(name, p, ob, 'directRest'); // v9.9.19: source-aware dedup
 }
 function addDirectRestTicker(name, sym) {
     const p = toCanonical(sym); if (!p || !stats[name]) return;
@@ -735,16 +758,19 @@ function addDirectRestErr(name, msg) { addErr(name, 'directRest', msg); }
 // ═══ HYBRID EMIT PRIORITY ═══
 // Priority: Native(0) > CCXT Pro(1) > CCXT REST(2) > Direct REST(3)
 const METHOD_PRIORITY = { native: 0, ccxtPro: 1, ccxtRest: 2, directRest: 3 };
-const hybridSourceTracker = {}; // "name:pair" -> { method, priority, lastTime }
+const hybridTradeTracker = {}; // "name:pair" -> { method, priority, lastTime } — trade stream
+const hybridOBTracker    = {}; // "name:pair" -> { method, priority, lastTime } — OB stream
 
-function shouldEmit(name, pair, method) {
+// v9.9.14: split shouldEmit by dataType ('trade'|'ob') — prevents OB-only native ticks from blocking CCXT Pro trades
+function shouldEmit(name, pair, method, dataType = 'trade') {
+    const tmap = dataType === 'ob' ? hybridOBTracker : hybridTradeTracker;
     const key = `${name}:${pair}`;
     const myPriority = METHOD_PRIORITY[method] ?? 3;
-    if (!hybridSourceTracker[key]) {
-        hybridSourceTracker[key] = { method, priority: myPriority, lastTime: Date.now() };
+    if (!tmap[key]) {
+        tmap[key] = { method, priority: myPriority, lastTime: Date.now() };
         return true;
     }
-    const tracker = hybridSourceTracker[key];
+    const tracker = tmap[key];
     if (method === tracker.method) { tracker.lastTime = Date.now(); return true; }
     if (myPriority < tracker.priority) {
         tracker.method = method; tracker.priority = myPriority; tracker.lastTime = Date.now();
@@ -768,15 +794,28 @@ function addHybridTrade(name, pair, count, tradeId) {
         if (hybridTradeDedup[key].has(tradeId)) { hybridStats[name].deduped++; return; }
         hybridTradeDedup[key].add(tradeId);
         if (hybridTradeDedup[key].size > 10000) { const a=[...hybridTradeDedup[key]]; hybridTradeDedup[key] = new Set(a.slice(-8000)); }
+    } else {
+        // v9.9.17: no tradeId = bulk/unknown — suppress if CCXT Pro recently active on this pair (prevents double-counting)
+        const _htKey = `${name}:${pair}`;
+        const _lastPro = hybridTradeLastProTime[_htKey] || 0;
+        if (Date.now() - _lastPro < 5000) { hybridStats[name].deduped++; return; }
     }
     hybridStats[name].trades += (count || 1);
     hybridStats[name].pairs[pair].trades += (count || 1);
+    if (vkReady) vk.hincrby(`hstats:${name}`, 'trades', count||1).catch(()=>{}); // v9.9.16: persist hybrid trade stats to Valkey
 }
-function addHybridOB(name, pair, count) {
+function addHybridOB(name, pair, count, source) {
     if (!hybridStats[name]) return;
     if (!hybridStats[name].pairs[pair]) hybridStats[name].pairs[pair] = { trades: 0, ob: 0, tickers: 0 };
+    // v9.9.19: source-aware cross-method dedup — same source always allowed, different source within 50ms deduped
+    const _obKey = `${name}:${pair}`;
+    const _now = Date.now();
+    const _last = hybridOBLastTime[_obKey];
+    if (_last && source !== _last.source && _now - _last.time < 50) { hybridStats[name].deduped++; return; }
+    hybridOBLastTime[_obKey] = { time: _now, source: source || 'unknown' };
     hybridStats[name].orderbook += (count || 1);
     hybridStats[name].pairs[pair].ob += (count || 1);
+    if (vkReady) vk.hincrby(`hstats:${name}`, 'orderbook', count||1).catch(()=>{}); // v9.9.16: persist hybrid OB stats to Valkey
 }
 function addHybridTicker(name, pair) {
     if (!hybridStats[name]) return;
@@ -815,7 +854,7 @@ function connectWS(cfg) {
         handshakeTimeout: 60000,
         perMessageDeflate: cfg.compression ? false : undefined,
         maxPayload: 50 * 1024 * 1024,
-        agent: new https.Agent({ keepAlive: true, keepAliveMsecs: 30000 }),
+        agent: _sharedAgent,
     };
 
     let _fragBuf = null; // v9.9: fragment buffer for compressed streams split across WS messages
@@ -854,9 +893,18 @@ function connectWS(cfg) {
     // Ping interval from limits if not explicitly set in cfg
     const effectivePingInt = cfg.pingInt || limits.pingInt || 20000;
 
-    function doConnect() {
+    async function doConnect() {
         if (stopFlag) return;
-        const currentUrl = urls[urlIdx % urls.length];
+        // Circuit breaker: pause exchange for 30min after 10 consecutive failures
+        if (_cbPausedUntil[name] && Date.now() < _cbPausedUntil[name]) {
+            const remMin = Math.ceil((_cbPausedUntil[name] - Date.now()) / 60000);
+            addHealthEvent(name, 'native', 'CIRCUIT_BREAKER', `Paused ${remMin}min remaining`);
+            if (!stopFlag) setTimeout(doConnect, 60000);
+            return;
+        }
+        // Dynamic URL: re-fetch on each connect (e.g. KuCoin token refresh)
+        const currentUrl = cfg.getUrl ? (await cfg.getUrl().catch(() => urls[urlIdx % urls.length])) : urls[urlIdx % urls.length];
+        if (!currentUrl) { attempt++; if (!stopFlag) setTimeout(doConnect, getBackoff()); return; }
         let ws;
         try { ws = new WebSocket(currentUrl, wsOpts); } catch (e) {
             addErr(name, 'native', `conn:${e.message?.slice(0,40)}`);
@@ -876,8 +924,12 @@ function connectWS(cfg) {
         mgr.connections.push(ws);
         mgr.connectionPool = mgr.connections.filter(w => w.readyState <= 1).length;
 
+        const _wsOpenTime = { t: 0 };  // v9.9.6: track open time to prevent quick-flap circuit breaker reset
         ws.on('open', () => {
             attempt = 0;
+            _wsOpenTime.t = Date.now();  // record when connection opened
+            // Defer circuit breaker reset — only reset if connection stays stable ≥5s (blocks FameEX-style rapid flap)
+            setTimeout(() => { if (_wsOpenTime.t > 0) { _cbFailCounts[name] = 0; _cbPausedUntil[name] = 0; } }, 5000);
             mgr.failoverRotationsPerMinute = 0; // Reset rate limit on successful connect
             stats[name].native.connected = true;
             lastMsgAt = Date.now();
@@ -955,6 +1007,7 @@ function connectWS(cfg) {
             lastMsgAt = Date.now();
             lastPongAt = Date.now(); // any data resets pong timer too
             lastMsgTimes[name] = Date.now();
+            if (_cbFailCounts[name]) _cbFailCounts[name] = 0;  // v9.9.7: receiving data negates circuit breaker fast-fail counter
             mgr.lastActivity = Date.now();
             const msg = decompress(data);
             if (msg === null) return; // incomplete compressed fragment — buffering
@@ -998,6 +1051,16 @@ function connectWS(cfg) {
                 }
                 addHealthEvent(name, 'native', 'CONNECTION_CLOSED', `Reconnecting attempt ${attempt}, endpoint ${(urlIdx%urls.length)+1}`);
                 emitEvent('reconnect', name, 'native', `Reconnecting (attempt ${attempt}, endpoint ${(urlIdx%urls.length)+1})`);
+                // Circuit breaker: v9.9.7 — trip after 25 quick-fails (no data) → pause 5min (was 10 fails→30min)
+                // Counter also resets in ws.on('message') whenever data flows, so only truly dead exchanges trip
+                _wsOpenTime.t = 0;  // v9.9.6: cancel deferred reset on close
+                _cbFailCounts[name] = (_cbFailCounts[name] || 0) + 1;
+                if (_cbFailCounts[name] >= 25) {
+                    _cbPausedUntil[name] = Date.now() + 5 * 60 * 1000;  // 5min pause (was 30min)
+                    _cbFailCounts[name] = 0;
+                    addHealthEvent(name, 'native', 'CIRCUIT_BREAKER', 'Tripped after 25 consecutive no-data failures — pausing 5min');
+                    console.log(`\n  🔴 Circuit breaker: ${name} paused 5min after 25 consecutive no-data failures`);
+                }
                 setTimeout(doConnect, getBackoff());
             }
         });
@@ -1075,14 +1138,26 @@ function runREST(name, fetches, interval = 8000) {
 }
 
 // ═══════════════════ CCXT PRO ENGINE (watch* streaming + watchTicker) — HARDENED ═══════════════════
-async function startCCXTPro(name, ccxtId, pairs, skipTicker=false) {
+async function startCCXTPro(name, ccxtId, pairs, skipTicker=false, chunkIdx=0) {
+    // v9.9.8: chunkIdx>0 = split connection — uses separate CCXT instance per chunk to reduce timeouts
+    const _pKey = chunkIdx > 0 ? `${name}_c${chunkIdx}` : name;
     try {
-        // Use pre-loaded instance if available, otherwise create fresh
-        let ex = preloadedPro[name];
+        // Use pre-loaded instance if available (chunk>0 will create fresh on first call)
+        let ex = preloadedPro[_pKey];
         if (!ex) {
             const ExClass = ccxt.pro?.[ccxtId];
             if (!ExClass) { addErr(name,'ccxtPro','No CCXT Pro class for '+ccxtId); return; }
             const opts = buildCCXTOpts(ccxtId);
+            opts.newUpdates = true;  // v9.9.13: CCXT v4 streaming mode
+            if (!opts.options) opts.options = {};
+            opts.options.watchOrderBook = { maxDepth: 10 };  // v9.9.13: prevent unbounded OB RAM
+            if (ccxtId === 'gateio') opts.options.watchOrderBook = { method: 'spot.order_book_update' };
+            if (ccxtId === 'bitget') opts.options.defaultType = 'spot';
+            // v9.9.15: limit internal CCXT Pro message queues to prevent RAM accumulation
+            opts.options.tradesLimit    = 50;   // was default 1000
+            opts.options.OHLCVLimit     = 50;   // OHLCV ring-buffer
+            opts.options.ordersLimit    = 50;   // orders ring-buffer
+            opts.options.myTradesLimit  = 50;   // my-trades ring-buffer
             ex = new ExClass(opts);
             let mkLoaded = false;
             for (let mkAttempt = 0; mkAttempt < 3 && !mkLoaded; mkAttempt++) {
@@ -1092,17 +1167,16 @@ async function startCCXTPro(name, ccxtId, pairs, skipTicker=false) {
                 }
             }
             if (!mkLoaded) return;
+            preloadedPro[_pKey] = ex;  // v9.9.8: cache chunk instance for auto-recovery
         }
         stats[name].ccxtPro.connected = true;
-        emitEvent('connect', name, 'ccxtPro', `Pro connected (${pairs.length} pairs)`);
+        emitEvent('connect', name, 'ccxtPro', `Pro connected (${pairs.length} pairs chunk${chunkIdx})`);
         const validPairs = pairs.filter(p => { if(ex.markets[p]) return true; addErr(name,'ccxtPro',`${p}:not found`); return false; });
         if (!validPairs.length) return;
 
         const workers = validPairs.flatMap(pair => [
             // watchTrades worker — HARDENED
             (async () => { let f=0; while(!stopFlag && f<50) { try { const t=await ex.watchTrades(pair);
-                // v9.8 debug: Gemini watchTrades t.length trace (diagnose DuckDB writes=0)
-                if (name === 'Gemini' && t && t.length > 0) { console.log(`[DEBUG Gemini] watchTrades t.length=${t.length} pair=${pair} first_id=${t[0]?.id}`); }
                 // v9.8: per-(exchange,pair) dedup — composite key fallback when tr.id undefined (fixes CoinEx/EXMO 7.3M DuckDB inflation)
                 const _ck=`${name}:${pair}`; if(!ccxtProTradeCache[_ck])ccxtProTradeCache[_ck]=new Set();
                 for (const tr of t) {
@@ -1113,31 +1187,31 @@ async function startCCXTPro(name, ccxtId, pairs, skipTicker=false) {
                     trackTradeId(name, 'ccxtPro', _tid, toCanonical(pair) || pair);
                     if (duckEnabled) { duckBuffers.trades.push([Date.now(),name,pair,'ccxtPro',tr.price||0,tr.amount||0,tr.side||'',_tid]); }
                 }
-                if(ccxtProTradeCache[_ck].size>20000){const _a=[...ccxtProTradeCache[_ck]];ccxtProTradeCache[_ck]=new Set(_a.slice(-1000));}
+                if(ccxtProTradeCache[_ck].size>5000){const _a=[...ccxtProTradeCache[_ck]];ccxtProTradeCache[_ck]=new Set(_a.slice(-1000));}
                 f=0; } catch(e) {
                 const em = e.message||''; const eCat = classifyError(em);
                 addHealthEvent(name, 'ccxtPro', 'watchTradesErr', em);
                 if (em.includes('RateLimitExceeded')||em.includes('429')) { addErr(name,'ccxtPro',`${pair}:rateLimit`); await sleep(15000); continue; }
                 if (em.includes('NotSupported')||em.includes('not supported')) { addErr(name,'ccxtPro',`${pair}:tr:notSupported`); break; }
                 if (em.includes('TypeError')||em.includes('BigInt')||em.includes('cannot read')||em.includes('Cannot convert')) { addErr(name,'ccxtPro',`${pair}:tr:typeErr`); f++; await sleep(5000); continue; }
-                if (em.includes('Connection') && (em.includes('close')||em.includes('reset'))) { f++; await sleep(Math.min(2000*f,30000)); continue; }
-                if (em.includes('timed out')||em.includes('timeout')||em.includes('ETIMEDOUT')) { f++; await sleep(Math.min(5000*f,60000)); continue; }
+                if (em.includes('Connection') && (em.includes('close')||em.includes('reset'))) { f++; await sleep(Math.min(5000+3000*f,60000)); continue; }  // v9.9.6: min 5s initial backoff (was 2000*f)
+                if (em.includes('timed out')||em.includes('timeout')||em.includes('ETIMEDOUT')||em.includes('Request Timeout')||em.includes('RequestTimeout')) { f++; await sleep(Math.min(5000*f,60000)); continue; }
                 f++; if(f<=2) addErr(name,'ccxtPro',`${pair}:tr:${em.slice(0,40)}`); await sleep(Math.min(3000*f,60000)); } } })(),
             // watchOrderBook worker — HARDENED
-            (async () => { let f=0; while(!stopFlag && f<50) { try { const ob=await ex.watchOrderBook(pair); if(ob?.bids?.length) { addCPro(name,pair,0,1);
+            (async () => { let f=0; while(!stopFlag && f<50) { try { const ob=await ex.watchOrderBook(pair); if(ob?.bids?.length) { const _cpK='CP:'+name+':'+pair,_cpN=Date.now();if(!_nativeOBThrottle[_cpK]||_cpN-_nativeOBThrottle[_cpK]>=2000){_nativeOBThrottle[_cpK]=_cpN;addCPro(name,pair,0,1);
                 // Track OB sequence IDs for correlation
                 const obSeq = ob.nonce || ob.timestamp || ob.datetime;
                 if (obSeq) trackOBId(name, 'ccxtPro', obSeq, toCanonical(pair) || pair);
                 // DuckDB: store orderbook snapshot
                 if (duckEnabled) { const bb=ob.bids[0]?.[0]||0,ba=ob.asks?.[0]?.[0]||0; duckBuffers.orderbook.push([Date.now(),name,pair,'ccxtPro',bb,ba,ob.bids.length,ob.asks?.length||0,ba>0&&bb>0?ba-bb:0]); }
-                } f=0; } catch(e) {
+                }} f=0; } catch(e) {
                 const em = e.message||'';
                 addHealthEvent(name, 'ccxtPro', 'watchOBErr', em);
                 if (em.includes('RateLimitExceeded')||em.includes('429')) { addErr(name,'ccxtPro',`${pair}:rateLimit`); await sleep(15000); continue; }
                 if (em.includes('NotSupported')||em.includes('not supported')) { addErr(name,'ccxtPro',`${pair}:ob:notSupported`); break; }
                 if (em.includes('TypeError')||em.includes('BigInt')||em.includes('cannot read')||em.includes('Cannot convert')) { addErr(name,'ccxtPro',`${pair}:ob:typeErr`); f++; await sleep(5000); continue; }
-                if (em.includes('Connection') && (em.includes('close')||em.includes('reset'))) { f++; await sleep(Math.min(2000*f,30000)); continue; }
-                if (em.includes('timed out')||em.includes('timeout')||em.includes('ETIMEDOUT')) { f++; await sleep(Math.min(5000*f,60000)); continue; }
+                if (em.includes('Connection') && (em.includes('close')||em.includes('reset'))) { f++; await sleep(Math.min(5000+3000*f,60000)); continue; }  // v9.9.6: min 5s
+                if (em.includes('timed out')||em.includes('timeout')||em.includes('ETIMEDOUT')||em.includes('Request Timeout')||em.includes('RequestTimeout')) { f++; await sleep(Math.min(5000*f,60000)); continue; }
                 f++; if(f<=2) addErr(name,'ccxtPro',`${pair}:ob:${em.slice(0,40)}`); await sleep(Math.min(3000*f,60000)); } } })(),
             // watchTicker worker — HARDENED with fallback
             (async () => { if(skipTicker) return; // v9.7: skipTicker flag (e.g. Gemini watchTicker:notSupported)
@@ -1149,7 +1223,7 @@ async function startCCXTPro(name, ccxtId, pairs, skipTicker=false) {
                 if (em.includes('NotSupported')||em.includes('not supported')||em.includes('not a function')) { addErr(name,'ccxtPro',`${pair}:tk:notSupported`); addHealthEvent(name,'ccxtPro','tickerNotSupported',em); break; }
                 if (em.includes('RateLimitExceeded')||em.includes('429')) { await sleep(15000); continue; }
                 if (em.includes('Connection') && (em.includes('close')||em.includes('reset'))) { f++; await sleep(Math.min(2000*f,30000)); continue; }
-                if (em.includes('timed out')||em.includes('timeout')) { f++; await sleep(Math.min(5000*f,60000)); continue; }
+                if (em.includes('timed out')||em.includes('timeout')||em.includes('Request Timeout')||em.includes('RequestTimeout')) { f++; await sleep(Math.min(5000*f,60000)); continue; }
                 f++; if(f<=1) addErr(name,'ccxtPro',`${pair}:tk:${em.slice(0,40)}`); await sleep(Math.min(5000*f,60000)); } } })()
         ]);
         await Promise.allSettled(workers);
@@ -1201,10 +1275,14 @@ async function startCCXTRest(name, ccxtId, pairs) {
                     const [tr, ob] = results;
                     if (tr.status === 'fulfilled' && tr.value?.length) {
                         addCRest(name, pair, tr.value.length, 0);
-                        // Per-trade hybrid dedup + correlation + DuckDB
+                        // v9.9.17: no shouldEmit gate for trades — tradeId dedup handles cross-method dedup
+                        const _canonPair = toCanonical(pair)||pair;
                         for (const t of tr.value) {
                             const tid = String(t.id||t.timestamp||'');
-                            if (tid) { addHybridTrade(name, toCanonical(pair)||pair, 1, tid); trackTradeId(name, 'ccxtRest', tid, toCanonical(pair)||pair); }
+                            if (tid) {
+                                addHybridTrade(name, _canonPair, 1, tid); // v9.9.17: tradeId dedup is sufficient
+                                trackTradeId(name, 'ccxtRest', tid, _canonPair);
+                            }
                             if (duckEnabled) { duckBuffers.trades.push([Date.now(),name,pair,'ccxtRest',t.price||0,t.amount||0,t.side||'',t.id||'']); }
                         }
                     }
@@ -1237,56 +1315,79 @@ async function startCCXTRest(name, ccxtId, pairs) {
 // ═══════════════════ DIRECT REST ENGINE (4th stream — raw HTTP polling) ═══════════════════
 // REST endpoint URL mappings for all exchanges (raw HTTP without CCXT)
 const REST_ENDPOINTS = {
-    'Binance':      { trades: s => `https://api.binance.com/api/v3/trades?symbol=${s}&limit=10`, ob: s => `https://api.binance.com/api/v3/depth?symbol=${s}&limit=5`, ticker: s => `https://api.binance.com/api/v3/ticker/24hr?symbol=${s}`, pairs: ['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC','PENGUUSDT','PENGUUSDC','WIFUSDT','WIFUSDC','SUIUSDT','SUIUSDC','ENAUSDT','ENAUSDC'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => r?.bids?.length ? r : null, parseTicker: r => r?.lastPrice ? r : null },
-    'Coinbase':     { trades: s => `https://api.exchange.coinbase.com/products/${s}/trades?limit=10`, ob: s => `https://api.exchange.coinbase.com/products/${s}/book?level=1`, ticker: s => `https://api.exchange.coinbase.com/products/${s}/ticker`, pairs: ['BTC-USD','ETH-USD','SOL-USD','BTC-USDT','ETH-USDT','SOL-USDT','PENGU-USD','POPCAT-USD','WIF-USD','SUI-USD','ENA-USD'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => r?.bids?.length ? r : null, parseTicker: r => r?.price ? r : null },  // v9.8: -PENGU/USDC,-POPCAT/USDC,-WIF/USDC,-SUI/USDC,-ENA/USDC (dead pairs)
-    'Kraken':       { trades: s => `https://api.kraken.com/0/public/Trades?pair=${s}&count=10`, ob: s => `https://api.kraken.com/0/public/Depth?pair=${s}&count=5`, ticker: s => `https://api.kraken.com/0/public/Ticker?pair=${s}`, pairs: ['XBTUSDT','ETHUSDT','SOLUSDT','XBTUSD','ETHUSD','SOLUSD','XBTUSDC','ETHUSDC','SOLUSDC','PENGUUSDT','PENGUUSDC','PENGUUSD','POPCATUSD','WIFUSD','SUIUSD','ENAUSD'], parseTrades: r => { const k = Object.keys(r?.result||{}).find(x=>!x.includes('last')); return k ? r.result[k] : []; }, parseOB: r => { const k = Object.keys(r?.result||{})[0]; return k && r.result[k]?.bids?.length ? r.result[k] : null; }, parseTicker: r => { const k = Object.keys(r?.result||{})[0]; return k ? r.result[k] : null; } },
-    'KuCoin':       { trades: s => `https://api.kucoin.com/api/v1/market/histories?symbol=${s}`, ob: s => `https://api.kucoin.com/api/v1/market/orderbook/level2_20?symbol=${s}`, ticker: s => `https://api.kucoin.com/api/v1/market/stats?symbol=${s}`, pairs: ['BTC-USDT','ETH-USDT','SOL-USDT','BTC-USDC','ETH-USDC','SOL-USDC','BRETT-USDT','PENGU-USDT','POPCAT-USDT','WIF-USDT','WIF-USDC','SUI-USDT','SUI-USDC','ENA-USDT','ENA-USDC'], parseTrades: r => r?.data || [], parseOB: r => r?.data?.bids?.length ? r.data : null, parseTicker: r => r?.data ? r.data : null },
-    'OKX':          { trades: s => `https://www.okx.com/api/v5/market/trades?instId=${s}&limit=10`, ob: s => `https://www.okx.com/api/v5/market/books?instId=${s}&sz=5`, ticker: s => `https://www.okx.com/api/v5/market/ticker?instId=${s}`, pairs: ['BTC-USDT','ETH-USDT','SOL-USDT','BTC-USDC','ETH-USDC','SOL-USDC','PENGU-USDT','PENGU-USDC','PENGU-USD','WIF-USDT','WIF-USDC','WIF-USD','SUI-USDT','SUI-USDC','SUI-USD','ENA-USDT','ENA-USDC','ENA-USD'], parseTrades: r => r?.data || [], parseOB: r => r?.data?.[0]?.bids?.length ? r.data[0] : null, parseTicker: r => r?.data?.[0] ? r.data[0] : null },
-    'Bybit':        { trades: s => `https://api.bybit.com/v5/market/recent-trade?category=spot&symbol=${s}&limit=10`, ob: s => `https://api.bybit.com/v5/market/orderbook?category=spot&symbol=${s}&limit=5`, ticker: s => `https://api.bybit.com/v5/market/tickers?category=spot&symbol=${s}`, pairs: ['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC','BRETTUSDT','BRETTUSDC','PENGUUSDT','POPCATUSDT','WIFUSDT','WIFUSDC','SUIUSDT','SUIUSDC','ENAUSDT','ENAUSDC'], parseTrades: r => r?.result?.list || [], parseOB: r => r?.result?.b?.length ? r.result : null, parseTicker: r => r?.result?.list?.[0] ? r.result.list[0] : null },
-    'Bitfinex':     { trades: s => `https://api-pub.bitfinex.com/v2/trades/${s}/hist?limit=10`, ob: s => `https://api-pub.bitfinex.com/v2/book/${s}/P0?len=5`, ticker: s => `https://api-pub.bitfinex.com/v2/ticker/${s}`, pairs: ['tBTCUSD','tETHUSD','tSOLUSD','tBTCUST','tETHUST','tSOLUST','tSUIUST','tSUIUSD','tENAUST','tENAUSD'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => Array.isArray(r) && r.length > 0 ? r : null, parseTicker: r => Array.isArray(r) && r.length >= 6 ? r : null },
-    'Gate.io':      { trades: s => `https://api.gateio.ws/api/v4/spot/trades?currency_pair=${s}&limit=10`, ob: s => `https://api.gateio.ws/api/v4/spot/order_book?currency_pair=${s}&limit=5`, ticker: s => `https://api.gateio.ws/api/v4/spot/tickers?currency_pair=${s}`, pairs: ['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','SOL_USDC','BRETT_USDT','PENGU_USDT','POPCAT_USDT','WIF_USDT','WIF_USDC','SUI_USDT','SUI_USDC','ENA_USDT','ENA_USDC'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => r?.bids?.length ? r : null, parseTicker: r => Array.isArray(r) && r[0] ? r[0] : null },
-    'HTX':          { trades: s => `https://api.huobi.pro/market/history/trade?symbol=${s}&size=10`, ob: s => `https://api.huobi.pro/market/depth?symbol=${s}&type=step0&depth=5`, ticker: s => `https://api.huobi.pro/market/detail/merged?symbol=${s}`, pairs: ['btcusdt','ethusdt','solusdt','btcusdc','ethusdc','solusdc','brettusdt','penguusdt','popcatusdt','wifusdt','suiusdt','enausdt'], parseTrades: r => r?.data?.[0]?.data || [], parseOB: r => r?.tick?.bids?.length ? r.tick : null, parseTicker: r => r?.tick ? r.tick : null },
-    'WOO X':        { trades: s => `https://api.woo.org/v1/public/market_trades?symbol=${s}&limit=10`, ob: s => `https://api.woo.org/v1/public/orderbook/${s}`, ticker: s => `https://api.woo.org/v1/public/token_price?symbol=${s}`, pairs: ['SPOT_BTC_USDT','SPOT_ETH_USDT','SPOT_SOL_USDT','SPOT_BRETT_USDT','SPOT_PENGU_USDT','SPOT_POPCAT_USDT','SPOT_WIF_USDT','SPOT_SUI_USDT','SPOT_ENA_USDT'], parseTrades: r => r?.rows || [], parseOB: r => r?.bids?.length ? r : null, parseTicker: r => r?.success ? r : null },
-    'Crypto.com':   { trades: s => `https://api.crypto.com/exchange/v1/public/get-trades?instrument_name=${s}&count=10`, ob: s => `https://api.crypto.com/exchange/v1/public/get-book?instrument_name=${s}&depth=5`, ticker: s => `https://api.crypto.com/exchange/v1/public/get-ticker?instrument_name=${s}`, pairs: ['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USD','ETH_USD','SOL_USD','PENGU_USDT','PENGU_USD','POPCAT_USD','WIF_USDT','WIF_USD','SUI_USDT','SUI_USD','ENA_USDT','ENA_USD'], parseTrades: r => r?.result?.data || [], parseOB: r => r?.result?.data?.[0]?.bids?.length ? r.result.data[0] : null, parseTicker: r => r?.result?.data?.[0] ? r.result.data[0] : null },
-    'Bitstamp':     { trades: s => `https://www.bitstamp.net/api/v2/transactions/${s}/`, ob: s => `https://www.bitstamp.net/api/v2/order_book/${s}/`, ticker: s => `https://www.bitstamp.net/api/v2/ticker/${s}/`, pairs: ['btcusd','ethusd','solusd','btcusdt','ethusdt','solusdt','btcusdc','ethusdc','solusdc','penguusd','popcatusd','wifusd','suiusd','enausd'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => r?.bids?.length ? r : null, parseTicker: r => r?.last ? r : null },
-    'WhiteBIT':     { trades: s => `https://whitebit.com/api/v4/public/trades/${s}`, ob: s => `https://whitebit.com/api/v4/public/orderbook/${s}?limit=5`, ticker: s => `https://whitebit.com/api/v4/public/ticker`, pairs: ['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','SOL_USDC','PENGU_USDT','PENGU_USDC','WIF_USDT','WIF_USDC','SUI_USDT','SUI_USDC','ENA_USDT','ENA_USDC'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => r?.bids?.length ? r : null, parseTicker: r => r ? r : null },
-    'AscendEX':     { trades: s => `https://ascendex.com/api/pro/v1/trades?symbol=${s}`, ob: s => `https://ascendex.com/api/pro/v1/depth?symbol=${s}&n=5`, pairs: ['BTC/USDT','ETH/USDT','SOL/USDT','BRETT/USDT','PENGU/USDT','WIF/USDT','SUI/USDT','ENA/USDT'], parseTrades: r => r?.data || [], parseOB: r => r?.data?.data?.bids?.length ? r.data.data : null },
-    'BingX':        { trades: s => `https://open-api.bingx.com/openApi/spot/v1/market/trades?symbol=${s}&limit=10`, ob: s => `https://open-api.bingx.com/openApi/spot/v1/market/depth?symbol=${s}&limit=5`, pairs: ['BTC-USDT','ETH-USDT','SOL-USDT','BTC-USDC','ETH-USDC','SOL-USDC','BRETT-USDT','PENGU-USDT','POPCAT-USDT','WIF-USDT','SUI-USDT','SUI-USDC','ENA-USDT'], parseTrades: r => r?.data || [], parseOB: r => r?.data?.bids?.length ? r.data : null },
-    'Toobit':       { trades: s => `https://api.toobit.com/quote/v1/trades?symbol=${s}&limit=10`, ob: s => `https://api.toobit.com/quote/v1/depth?symbol=${s}&limit=5`, pairs: ['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC','BRETTUSDT','PENGUUSDT','POPCATUSDT','WIFUSDT','SUIUSDT','ENAUSDT'], parseTrades: r => r?.result || [], parseOB: r => r?.result?.bids?.length ? r.result : null },
-    'Deepcoin':     { trades: s => `https://api.deepcoin.com/deepcoin/market/trades?instId=${s}&limit=10`, ob: s => `https://api.deepcoin.com/deepcoin/market/books?instId=${s}&sz=5`, pairs: ['BTC-USDT','ETH-USDT','SOL-USDT','BTC-USDC','ETH-USDC','SOL-USDC','PENGU-USDT','WIF-USDT'], parseTrades: r => r?.data || [], parseOB: r => r?.data?.[0]?.bids?.length ? r.data[0] : null },
-    'XT.com':       { trades: s => `https://sapi.xt.com/v4/public/trade/recent?symbol=${s}&limit=10`, ob: s => `https://sapi.xt.com/v4/public/depth?symbol=${s}&limit=5`, pairs: ['btc_usdt','eth_usdt','sol_usdt','btc_usdc','eth_usdc','sol_usdc','brett_usdt','pengu_usdt','popcat_usdt','wif_usdt','sui_usdt','sui_usdc','ena_usdt'], parseTrades: r => r?.result || [], parseOB: r => r?.result?.bids?.length ? r.result : null },
-    'Bitget':       { trades: s => `https://api.bitget.com/api/v2/spot/market/fills?symbol=${s}&limit=10`, ob: s => `https://api.bitget.com/api/v2/spot/market/orderbook?symbol=${s}&limit=5`, pairs: ['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC','BRETTUSDT','PENGUUSDT','WIFUSDT','SUIUSDT','SUIUSDC','ENAUSDT'], parseTrades: r => r?.data || [], parseOB: r => r?.data?.bids?.length ? r.data : null },
-    'Gemini':       { trades: s => `https://api.gemini.com/v1/trades/${s}?limit_trades=10`, ob: s => `https://api.gemini.com/v1/book/${s}?limit_bids=5&limit_asks=5`, pairs: ['btcusd','ethusd','solusd','btcusdt','ethusdt','penguusd','penguusdc','popcatusd','popcatusdc','wifusd','wifusdc'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => r?.bids?.length ? r : null },
-    'Binance.US':   { trades: s => `https://api.binance.us/api/v3/trades?symbol=${s}&limit=10`, ob: s => `https://api.binance.us/api/v3/depth?symbol=${s}&limit=5`, pairs: ['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSD','ETHUSD','SOLUSD','BRETTUSDT','PENGUUSDT','POPCATUSDT','WIFUSDT','SUIUSDT','SUIUSD','ENAUSDT'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => r?.bids?.length ? r : null },
-    'MEXC':         { trades: s => `https://api.mexc.com/api/v3/trades?symbol=${s}&limit=10`, ob: s => `https://api.mexc.com/api/v3/depth?symbol=${s}&limit=5`, pairs: ['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC','PENGUUSDT','PENGUUSDC','POPCATUSDT','POPCATUSDC','WIFUSDT','WIFUSDC','SUIUSDT','SUIUSDC','ENAUSDT','ENAUSDC'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => r?.bids?.length ? r : null },
-    'CoinEx':       { trades: s => `https://api.coinex.com/v2/spot/deals?market=${s}&limit=10`, ob: s => `https://api.coinex.com/v2/spot/depth?market=${s}&limit=5`, pairs: ['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC','BRETTUSDT','PENGUUSDT','POPCATUSDT','WIFUSDT','WIFUSDC','SUIUSDT','SUIUSDC','ENAUSDT','ENAUSDC'], parseTrades: r => r?.data || [], parseOB: r => r?.data?.depth?.bids?.length ? r.data.depth : null },
-    'LBank':        { trades: s => `https://api.lbkex.com/v2/trades.do?symbol=${s}&size=10`, ob: s => `https://api.lbkex.com/v2/depth.do?symbol=${s}&size=5`, pairs: ['btc_usdt','eth_usdt','sol_usdt','btc_usdc','eth_usdc','sol_usdc','brett_usdt','pengu_usdt','popcat_usdt','wif_usdt','sui_usdt','ena_usdt'], parseTrades: r => r?.data || [], parseOB: r => r?.data?.bids?.length ? r.data : null },
-    'BitMart':      { trades: s => `https://api-cloud.bitmart.com/spot/quotation/v3/trades?symbol=${s}&limit=10`, ob: s => `https://api-cloud.bitmart.com/spot/quotation/v3/books?symbol=${s}&limit=5`, pairs: ['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','SOL_USDC','BRETT_USDT','PENGU_USDT','POPCAT_USDT','WIF_USDT','SUI_USDT','ENA_USDT'], parseTrades: r => r?.data || [], parseOB: r => r?.data?.buys?.length ? r.data : null },
-    'Poloniex':     { trades: s => `https://api.poloniex.com/markets/${s}/trades?limit=10`, ob: s => `https://api.poloniex.com/markets/${s}/orderBook?limit=5`, pairs: ['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','BRETT_USDT','POPCAT_USDT','WIF_USDT','SUI_USDT','ENA_USDT'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => r?.bids?.length ? r : null },
-    'HitBTC':       { trades: s => `https://api.hitbtc.com/api/3/public/trades/${s}?limit=10`, ob: s => `https://api.hitbtc.com/api/3/public/orderbook/${s}?depth=5`, pairs: ['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC','BRETTUSDT','PENGUUSDT','POPCATUSDT','WIFUSDT','SUIUSDT','ENAUSDT'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => r?.bid?.length ? r : null },
-    'BTSE':         { trades: s => `https://api.btse.com/spot/api/v3.2/market_summary?symbol=${s}`, ob: s => `https://api.btse.com/spot/api/v3.2/orderbook?symbol=${s}&depth=5`, pairs: ['BTC-USD','ETH-USD','SOL-USD','BTC-USDT','ETH-USDT','SOL-USDT','BTC-USDC','ETH-USDC','SOL-USDC','BRETT-USDT','PENGU-USDT','POPCAT-USDT','WIF-USDT','SUI-USDT','ENA-USDT'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => r?.buyQuote?.length ? r : null },
-    'Bitrue':       { trades: s => `https://openapi.bitrue.com/api/v1/trades?symbol=${s}&limit=10`, ob: s => `https://openapi.bitrue.com/api/v1/depth?symbol=${s}&limit=5`, pairs: ['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC','BRETTUSDT','PENGUUSDT','PENGUUSDC','POPCATUSDT','WIFUSDT','WIFUSDC','SUIUSDT','SUIUSDC','ENAUSDT','ENAUSDC'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => r?.bids?.length ? r : null },
+    'Binance':      { trades: s => `https://api.binance.com/api/v3/aggTrades?symbol=${s}&limit=10`, ob: s => `https://api.binance.com/api/v3/depth?symbol=${s}&limit=5`, ticker: s => `https://api.binance.com/api/v3/ticker/24hr?symbol=${s}`, pairs: ['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => r?.bids?.length ? r : null, parseTicker: r => r?.lastPrice ? r : null },
+    'Coinbase':     { trades: s => `https://api.exchange.coinbase.com/products/${s}/trades?limit=10`, ob: s => `https://api.exchange.coinbase.com/products/${s}/book?level=1`, ticker: s => `https://api.exchange.coinbase.com/products/${s}/ticker`, pairs: ['BTC-USD','ETH-USD','SOL-USD','BTC-USDT','ETH-USDT','SOL-USDT'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => r?.bids?.length ? r : null, parseTicker: r => r?.price ? r : null },  // v9.8: -PENGU/USDC,-POPCAT/USDC,-WIF/USDC,-SUI/USDC,-ENA/USDC (dead pairs)
+    'Kraken':       { trades: s => `https://api.kraken.com/0/public/Trades?pair=${s}&count=10`, ob: s => `https://api.kraken.com/0/public/Depth?pair=${s}&count=5`, ticker: s => `https://api.kraken.com/0/public/Ticker?pair=${s}`, pairs: ['XBTUSDT','ETHUSDT','SOLUSDT','XBTUSD','ETHUSD','SOLUSD','XBTUSDC','ETHUSDC','SOLUSDC'], parseTrades: r => { const k = Object.keys(r?.result||{}).find(x=>!x.includes('last')); return k ? r.result[k] : []; }, parseOB: r => { const k = Object.keys(r?.result||{})[0]; return k && r.result[k]?.bids?.length ? r.result[k] : null; }, parseTicker: r => { const k = Object.keys(r?.result||{})[0]; return k ? r.result[k] : null; } },
+    'KuCoin':       { trades: s => `https://api.kucoin.com/api/v1/market/histories?symbol=${s}`, ob: s => `https://api.kucoin.com/api/v1/market/orderbook/level2_20?symbol=${s}`, ticker: s => `https://api.kucoin.com/api/v1/market/stats?symbol=${s}`, pairs: ['BTC-USDT','ETH-USDT','SOL-USDT','BTC-USDC','ETH-USDC','SOL-USDC'], parseTrades: r => r?.data || [], parseOB: r => r?.data?.bids?.length ? r.data : null, parseTicker: r => r?.data ? r.data : null },
+    'OKX':          { trades: s => `https://www.okx.com/api/v5/market/trades?instId=${s}&limit=10`, ob: s => `https://www.okx.com/api/v5/market/books?instId=${s}&sz=5`, ticker: s => `https://www.okx.com/api/v5/market/ticker?instId=${s}`, pairs: ['BTC-USDT','ETH-USDT','SOL-USDT','BTC-USDC','ETH-USDC','SOL-USDC'], parseTrades: r => r?.data || [], parseOB: r => r?.data?.[0]?.bids?.length ? r.data[0] : null, parseTicker: r => r?.data?.[0] ? r.data[0] : null },
+    'Bybit':        { trades: s => `https://api.bybit.com/v5/market/recent-trade?category=spot&symbol=${s}&limit=10`, ob: s => `https://api.bybit.com/v5/market/orderbook?category=spot&symbol=${s}&limit=5`, ticker: s => `https://api.bybit.com/v5/market/tickers?category=spot&symbol=${s}`, pairs: ['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC'], parseTrades: r => r?.result?.list || [], parseOB: r => r?.result?.b?.length ? r.result : null, parseTicker: r => r?.result?.list?.[0] ? r.result.list[0] : null },
+    'Bitfinex':     { trades: s => `https://api-pub.bitfinex.com/v2/trades/${s}/hist?limit=10`, ob: s => `https://api-pub.bitfinex.com/v2/book/${s}/P0?len=5`, ticker: s => `https://api-pub.bitfinex.com/v2/ticker/${s}`, pairs: ['tBTCUSD','tETHUSD','tSOLUSD','tBTCUST','tETHUST','tSOLUST'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => Array.isArray(r) && r.length > 0 ? r : null, parseTicker: r => Array.isArray(r) && r.length >= 6 ? r : null },
+    'Gate.io':      { trades: s => `https://api.gateio.ws/api/v4/spot/trades?currency_pair=${s}&limit=10`, ob: s => `https://api.gateio.ws/api/v4/spot/order_book?currency_pair=${s}&limit=5`, ticker: s => `https://api.gateio.ws/api/v4/spot/tickers?currency_pair=${s}`, pairs: ['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','SOL_USDC'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => r?.bids?.length ? r : null, parseTicker: r => Array.isArray(r) && r[0] ? r[0] : null },
+    'HTX':          { trades: s => `https://api.huobi.pro/market/history/trade?symbol=${s}&size=10`, ob: s => `https://api.huobi.pro/market/depth?symbol=${s}&type=step0&depth=5`, ticker: s => `https://api.huobi.pro/market/detail/merged?symbol=${s}`, pairs: ['btcusdt','ethusdt','solusdt','btcusdc','ethusdc','solusdc'], parseTrades: r => r?.data?.[0]?.data || [], parseOB: r => r?.tick?.bids?.length ? r.tick : null, parseTicker: r => r?.tick ? r.tick : null },
+    'WOO X':        { trades: s => `https://api.woox.io/v2/public/market_trades?symbol=${s}&limit=10`, ob: s => `https://api.woox.io/v2/public/orderbook/${s}`, ticker: s => `https://api.woox.io/v2/public/market_trades?symbol=${s}&limit=1`, pairs: ['SPOT_BTC_USDT','SPOT_ETH_USDT','SPOT_SOL_USDT'], parseTrades: r => r?.rows || r?.data || [], parseOB: r => r?.rows?.length ? r : (r?.bids?.length ? r : null), parseTicker: r => r?.rows?.[0] ? r.rows[0] : null },
+    'Crypto.com':   { trades: s => `https://api.crypto.com/exchange/v1/public/get-trades?instrument_name=${s}&count=10`, ob: s => `https://api.crypto.com/exchange/v1/public/get-book?instrument_name=${s}&depth=5`, ticker: s => `https://api.crypto.com/exchange/v1/public/get-ticker?instrument_name=${s}`, pairs: ['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USD','ETH_USD','SOL_USD'], parseTrades: r => r?.result?.data || [], parseOB: r => r?.result?.data?.[0]?.bids?.length ? r.result.data[0] : null, parseTicker: r => r?.result?.data?.[0] ? r.result.data[0] : null },
+    'Bitstamp':     { trades: s => `https://www.bitstamp.net/api/v2/transactions/${s}/`, ob: s => `https://www.bitstamp.net/api/v2/order_book/${s}/`, ticker: s => `https://www.bitstamp.net/api/v2/ticker/${s}/`, pairs: ['btcusd','ethusd','solusd','btcusdt','ethusdt','solusdt','btcusdc','ethusdc','solusdc'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => r?.bids?.length ? r : null, parseTicker: r => r?.last ? r : null },
+    'WhiteBIT':     { trades: s => `https://whitebit.com/api/v4/public/trades/${s}`, ob: s => `https://whitebit.com/api/v4/public/orderbook/${s}?limit=5`, ticker: s => `https://whitebit.com/api/v4/public/ticker`, pairs: ['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','SOL_USDC'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => r?.bids?.length ? r : null, parseTicker: r => r ? r : null },
+    'AscendEX':     { trades: s => `https://ascendex.com/api/pro/v1/trades?symbol=${s}`, ob: s => `https://ascendex.com/api/pro/v1/depth?symbol=${s}&n=5`, pairs: ['BTC/USDT','ETH/USDT','SOL/USDT'], parseTrades: r => r?.data?.data || r?.data?.trades || r?.data || [], parseOB: r => r?.data?.data?.bids?.length ? r.data.data : null },
+    'BingX':        { trades: s => `https://open-api.bingx.com/openApi/spot/v1/market/trades?symbol=${s}&limit=10`, ob: s => `https://open-api.bingx.com/openApi/spot/v1/market/depth?symbol=${s}&limit=5`, pairs: ['BTC-USDT','ETH-USDT','SOL-USDT','BTC-USDC','ETH-USDC','SOL-USDC'], parseTrades: r => r?.data || [], parseOB: r => r?.data?.bids?.length ? r.data : null },
+    'Toobit':       { trades: s => `https://api.toobit.com/quote/v1/trades?symbol=${s}&limit=10`, ob: s => `https://api.toobit.com/quote/v1/depth?symbol=${s}&limit=5`, pairs: ['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC'], parseTrades: r => r?.result || [], parseOB: r => r?.result?.bids?.length ? r.result : null },
+    'Deepcoin':     { trades: s => `https://api.deepcoin.com/deepcoin/market/trades?instId=${s}&limit=10`, ob: s => `https://api.deepcoin.com/deepcoin/market/books?instId=${s}&sz=5`, pairs: ['BTC-USDT','ETH-USDT','SOL-USDT','BTC-USDC','ETH-USDC','SOL-USDC'], parseTrades: r => r?.data || [], parseOB: r => r?.data?.[0]?.bids?.length ? r.data[0] : null },
+    'XT.com':       { trades: s => `https://sapi.xt.com/v4/public/trade/recent?symbol=${s}&limit=10`, ob: s => `https://sapi.xt.com/v4/public/depth?symbol=${s}&limit=5`, pairs: ['btc_usdt','eth_usdt','sol_usdt','btc_usdc','eth_usdc','sol_usdc'], parseTrades: r => r?.result || [], parseOB: r => r?.result?.bids?.length ? r.result : null },
+    'Bitget':       { trades: s => `https://api.bitget.com/api/v2/spot/market/fills?symbol=${s}&limit=10`, ob: s => `https://api.bitget.com/api/v2/spot/market/orderbook?symbol=${s}&limit=5`, pairs: ['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC'], parseTrades: r => r?.data || [], parseOB: r => r?.data?.bids?.length ? r.data : null },
+    'Gemini':       { trades: s => `https://api.gemini.com/v1/trades/${s}?limit_trades=10`, ob: s => `https://api.gemini.com/v1/book/${s}?limit_bids=5&limit_asks=5`, pairs: ['btcusd','ethusd','solusd','btcusdt','ethusdt'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => r?.bids?.length ? r : null },
+    'Binance.US':   { trades: s => `https://api.binance.us/api/v3/aggTrades?symbol=${s}&limit=10`, ob: s => `https://api.binance.us/api/v3/depth?symbol=${s}&limit=5`, pairs: ['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSD','ETHUSD','SOLUSD'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => r?.bids?.length ? r : null },
+    'MEXC':         { trades: s => `https://api.mexc.com/api/v3/trades?symbol=${s}&limit=10`, ob: s => `https://api.mexc.com/api/v3/depth?symbol=${s}&limit=5`, pairs: ['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => r?.bids?.length ? r : null },
+    'CoinEx':       { trades: s => `https://api.coinex.com/v2/spot/deals?market=${s}&limit=10`, ob: s => `https://api.coinex.com/v2/spot/depth?market=${s}&limit=5`, pairs: ['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC'], parseTrades: r => r?.data || [], parseOB: r => r?.data?.depth?.bids?.length ? r.data.depth : null },
+    'LBank':        { trades: s => `https://api.lbkex.com/v2/trades.do?symbol=${s}&size=10`, ob: s => `https://api.lbkex.com/v2/depth.do?symbol=${s}&size=5`, pairs: ['btc_usdt','eth_usdt','sol_usdt','btc_usdc','eth_usdc','sol_usdc'], parseTrades: r => r?.data || [], parseOB: r => r?.data?.bids?.length ? r.data : null },
+    'BitMart':      { trades: s => `https://api-cloud.bitmart.com/spot/quotation/v3/trades?symbol=${s}&limit=10`, ob: s => `https://api-cloud.bitmart.com/spot/quotation/v3/books?symbol=${s}&limit=5`, pairs: ['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','SOL_USDC'], parseTrades: r => r?.data?.items || r?.data || [], parseOB: r => r?.data?.buys?.length ? r.data : null },
+    'Poloniex':     { trades: s => `https://api.poloniex.com/markets/${s}/trades?limit=10`, ob: s => `https://api.poloniex.com/markets/${s}/orderBook?limit=5`, pairs: ['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => r?.bids?.length ? r : null },
+    'HitBTC':       { trades: s => `https://api.hitbtc.com/api/3/public/trades/${s}?limit=10`, ob: s => `https://api.hitbtc.com/api/3/public/orderbook/${s}?depth=5`, pairs: ['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => r?.bid?.length ? r : null },
+    'BTSE':         { trades: s => `https://api.btse.com/spot/api/v3.2/trades?symbol=${s}`, ob: s => `https://api.btse.com/spot/api/v3.2/orderbook?symbol=${s}&depth=5`, pairs: ['BTC-USD','ETH-USD','SOL-USD','BTC-USDT','ETH-USDT','SOL-USDT','BTC-USDC','ETH-USDC','SOL-USDC'], parseTrades: r => Array.isArray(r) ? r.map(t=>({...t,price:t.price||t.p,amount:t.size||t.qty,side:t.side||''})) : [], parseOB: r => r?.buyQuote?.length ? r : null },
+    'Bitrue':       { trades: s => `https://openapi.bitrue.com/api/v1/trades?symbol=${s}&limit=10`, ob: s => `https://openapi.bitrue.com/api/v1/depth?symbol=${s}&limit=5`, pairs: ['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => r?.bids?.length ? r : null },
     'BloFin':       { trades: s => `https://openapi.blofin.com/api/v1/market/trades?instId=${s}&limit=10`, ob: s => `https://openapi.blofin.com/api/v1/market/books?instId=${s}&sz=5`, pairs: ['BTC-USDT','ETH-USDT','SOL-USDT','BTC-USDC','ETH-USDC','SOL-USDC'], parseTrades: r => r?.data || [], parseOB: r => r?.data?.[0]?.bids?.length ? r.data[0] : null },
-    'DigiFinex':    { trades: s => `https://openapi.digifinex.com/v3/trades?symbol=${s}&limit=10`, ob: s => `https://openapi.digifinex.com/v3/order_book?symbol=${s}&limit=5`, pairs: ['btc_usdt','eth_usdt','sol_usdt','btc_usdc','eth_usdc','sol_usdc','brett_usdt'], parseTrades: r => r?.data || [], parseOB: r => r?.bids?.length ? r : null },
-    'EXMO':         { trades: s => `https://api.exmo.com/v1.1/trades?pair=${s}`, ob: s => `https://api.exmo.com/v1.1/order_book?pair=${s}&limit=5`, pairs: ['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','SOL_USDC','BTC_USD','ETH_USD','PENGU_USDT','PENGU_USDC','WIF_USDT','WIF_USDC','SUI_USDT','SUI_USDC','ENA_USDT','ENA_USDC'], parseTrades: r => { const k = Object.keys(r||{})[0]; return k ? r[k] : []; }, parseOB: r => { const k = Object.keys(r||{})[0]; return k && r[k]?.bid?.length ? r[k] : null; } },
-    'CEX.IO':       { trades: s => `https://cex.io/api/trade_history/${s.replace('_','/')}/`, ob: s => `https://cex.io/api/order_book/${s.replace('_','/')}/?depth=5`, pairs: ['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USD','ETH_USD','SOL_USD','BTC_USDC','ETH_USDC','SOL_USDC','BRETT_USDT','BRETT_USDC','BRETT_USD','PENGU_USDT','PENGU_USD','POPCAT_USDT','POPCAT_USD','WIF_USDT','WIF_USDC','WIF_USD','SUI_USDT','SUI_USDC','SUI_USD','ENA_USDT','ENA_USDC','ENA_USD'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => r?.bids?.length ? r : null },
+    'DigiFinex':    { trades: s => `https://openapi.digifinex.com/v3/trades?symbol=${s}&limit=10`, ob: s => `https://openapi.digifinex.com/v3/order_book?symbol=${s}&limit=5`, pairs: ['btc_usdt','eth_usdt','btc_usdc','eth_usdc'], parseTrades: r => r?.data || [], parseOB: r => r?.bids?.length ? r : null },  // v9.9.19: removed sol_usdt,sol_usdc (not listed)
+    'EXMO':         { trades: s => `https://api.exmo.com/v1.1/trades?pair=${s}`, ob: s => `https://api.exmo.com/v1.1/order_book?pair=${s}&limit=5`, pairs: ['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','SOL_USDC','BTC_USD','ETH_USD'], parseTrades: r => { const k = Object.keys(r||{})[0]; return k ? r[k] : []; }, parseOB: r => { const k = Object.keys(r||{})[0]; return k && r[k]?.bid?.length ? r[k] : null; } },
+    'CEX.IO':       { trades: s => `https://cex.io/api/trade_history/${s.replace('_','/')}/`, ob: s => `https://cex.io/api/order_book/${s.replace('_','/')}/?depth=5`, pairs: ['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USD','ETH_USD','SOL_USD','BTC_USDC','ETH_USDC','SOL_USDC'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => r?.bids?.length ? r : null },
     'OrangeX':      { trades: s => `https://api.orangex.com/api/v1/public/get_last_trades_by_instrument?instrument_name=${s}-SPOT&count=5`, ob: s => `https://api.orangex.com/api/v1/public/get_order_book?instrument_name=${s}-SPOT&depth=5`, pairs: ['BTC-USDT','ETH-USDT','SOL-USDT','BTC-USDC','ETH-USDC'], parseTrades: r => r?.result?.trades || [], parseOB: r => r?.result?.bids ? r.result : null },
-    'Azbit':        { trades: s => `https://data.azbit.com/api/deals?currencyPairCode=${s}`, ob: s => `https://data.azbit.com/api/orderbook?currencyPairCode=${s}`, pairs: ['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','SOL_USDC','BRETT_USDT','PENGU_USDT','POPCAT_USDT','WIF_USDT','SUI_USDT','ENA_USDT'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => Array.isArray(r) && r.length ? r : null },
+    'Azbit':        { trades: s => `https://data.azbit.com/api/deals?currencyPairCode=${s}`, ob: s => `https://data.azbit.com/api/orderbook?currencyPairCode=${s}`, pairs: ['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','SOL_USDC'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => Array.isArray(r) && r.length ? r : null },
     'BVOX':         { trades: s => `https://api.bitvenus.me/openapi/quote/v1/trades?symbol=${s}&limit=5`, ob: s => `https://api.bitvenus.me/openapi/quote/v1/depth?symbol=${s}&limit=5`, pairs: ['BTCUSDT','ETHUSDT','SOLUSDT'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => r?.bids?.length ? r : null },
     'Trubit Pro':   { trades: s => `https://api-spot.trubit.com/openapi/quote/v1/trades?symbol=${s}&limit=5`, ob: s => `https://api-spot.trubit.com/openapi/quote/v1/depth?symbol=${s}&limit=5`, pairs: ['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => r?.bids?.length ? r : null },
-    'BigONE':       { trades: s => `https://big.one/api/v3/asset_pairs/${s}/trades`, ob: s => `https://big.one/api/v3/asset_pairs/${s}/depth`, pairs: ['BTC-USDT','ETH-USDT','SOL-USDT','PENGU-USDT','WIF-USDT','SUI-USDT','ENA-USDT'], parseTrades: r => r?.data || [], parseOB: r => r?.data?.bids?.length ? r.data : null },
+    'BigONE':       { trades: s => `https://big.one/api/v3/asset_pairs/${s}/trades`, ob: s => `https://big.one/api/v3/asset_pairs/${s}/depth`, pairs: ['BTC-USDT','ETH-USDT','SOL-USDT'], parseTrades: r => r?.data || [], parseOB: r => r?.data?.bids?.length ? r.data : null },
     'LATOKEN':      { trades: s => `https://api.latoken.com/v2/trade/history/${s}`, ob: s => `https://api.latoken.com/v2/book/${s}`, pairs: [['4f4a4e5e-7192-4e7e-9f78-d8f6e07c0001','0c3a106d-bde3-4c13-a26e-3fd2394529e5'],['620f2019-33c0-423b-8a9d-cde4d7f8ef7f','0c3a106d-bde3-4c13-a26e-3fd2394529e5'],['f5924e5b-3860-4a3c-94d0-6c3fd4999e73','0c3a106d-bde3-4c13-a26e-3fd2394529e5']], isUUID: true, parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => r?.bid?.length ? r : null },
-    'Coinstore':    { trades: s => `https://api.coinstore.com/api/v1/market/trade/${s}?size=5`, ob: s => `https://api.coinstore.com/api/v1/market/depth/${s}?depth=5`, pairs: ['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC','BRETTUSDT','PENGUUSDT','POPCATUSDT','WIFUSDT','SUIUSDT','ENAUSDT'], parseTrades: r => r?.data || [], parseOB: r => r?.data?.bids?.length ? r.data : null },
+    'Coinstore':    { trades: s => `https://api.coinstore.com/api/v1/market/trade/${s}?size=5`, ob: s => `https://api.coinstore.com/api/v1/market/depth/${s}?depth=5`, pairs: ['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC'], parseTrades: r => r?.data || [], parseOB: r => r?.data?.bids?.length ? r.data : null },
     'GroveX':       { trades: s => `https://openapi.grovex.io/open/api/get_trades?symbol=${s}`, ob: s => `https://openapi.grovex.io/open/api/market_dept?symbol=${s}&type=step0`, pairs: ['btcusdt','ethusdt','solusdt','btcusdc','ethusdc','solusdc'], parseTrades: r => r?.data || [], parseOB: r => r?.data?.tick?.asks ? r.data.tick : null },
-    'CoinW':        { trades: s => `https://api.coinw.com/api/v1/public?command=returnTradeHistory&symbol=${s}`, ob: s => `https://api.coinw.com/api/v1/public?command=returnOrderBook&symbol=${s}`, pairs: ['btc_usdt','eth_usdt','sol_usdt','btc_usdc','eth_usdc','sol_usdc','brett_usdt','pengu_usdt','popcat_usdt','wif_usdt','sui_usdt','ena_usdt'], parseTrades: r => r?.code === '200' && Array.isArray(r?.data) ? r.data : [], parseOB: r => r?.code === '200' && r?.data?.bids ? r.data : null },
-    'Batonex':      { trades: s => `https://api.batonex.com/openapi/quote/v1/trades?symbol=${s}&limit=5`, ob: s => `https://api.batonex.com/openapi/quote/v1/depth?symbol=${s}&limit=5`, pairs: ['BTCUSDT','ETHUSDT','SOLUSDT','WIFUSDT'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => r?.bids?.length ? r : null },  // WIF confirmed listed (32-pair exchange; BRETT/PENGU/POPCAT/SUI/ENA not listed)
-    'Bullish':      { trades: null, ob: s => `https://api.exchange.bullish.com/trading-api/v1/markets/${s}/orderbook/hybrid`, pairs: ['BTCUSDC','ETHUSDC','SOLUSDC','BTCUSDT','ETHUSDT','SOLUSDT','BTCUSD','ETHUSD','SOLUSD','PENGUUSDC','PENGUUSDT','SUIUSDC'], parseTrades: () => [], parseOB: r => r?.bids?.length || r?.asks?.length ? r : null },  // v9.8: -WIFUSDC (dead pair)
-    'Hotcoin':      { trades: s => `https://api.hotcoinfin.com/v1/market/trade?symbol=${s}&size=10`, ob: s => `https://api.hotcoinfin.com/v1/market/depth?symbol=${s}&type=step0`, pairs: ['btc_usdt','eth_usdt','sol_usdt','brett_usdt','pengu_usdt','popcat_usdt','wif_usdt','sui_usdt','ena_usdt'], parseTrades: r => r?.data?.length ? r.data : (r?.data?.data?.length ? r.data.data : []), parseOB: r => r?.data?.bids?.length ? r.data : null },
-    'Websea':       { trades: null, ob: s => `https://oapi.websea.com/v1/spot/depth?symbol=${s}&size=5`, pairs: ['BTC-USDT','ETH-USDT','SOL-USDT','BRETT-USDT','PENGU-USDT','POPCAT-USDT','WIF-USDT','SUI-USDT','ENA-USDT'], parseTrades: () => [], parseOB: r => r?.errno === 0 && r.result ? r.result : null },
-    'Darkex':       { trades: null, ob: null, pairs: ['btcusdt','ethusdt'] },
+    'CoinW':        { trades: s => `https://api.coinw.com/api/v1/public?command=returnTradeHistory&symbol=${s}`, ob: s => `https://api.coinw.com/api/v1/public?command=returnOrderBook&symbol=${s}`, pairs: ['btc_usdt','eth_usdt','sol_usdt','btc_usdc','eth_usdc','sol_usdc'], parseTrades: r => r?.code === '200' && Array.isArray(r?.data) ? r.data : [], parseOB: r => r?.code === '200' && r?.data?.bids ? r.data : null },
+    'Batonex':      { trades: s => `https://api.batonex.com/openapi/quote/v1/trades?symbol=${s}&limit=5`, ob: s => `https://api.batonex.com/openapi/quote/v1/depth?symbol=${s}&limit=5`, pairs: ['BTCUSDT','ETHUSDT','SOLUSDT'], parseTrades: r => Array.isArray(r) ? r : [], parseOB: r => r?.bids?.length ? r : null },  // WIF confirmed listed (32-pair exchange; BRETT/PENGU/POPCAT/SUI/ENA not listed)
+    'Bullish':      { trades: null, ob: s => `https://api.exchange.bullish.com/trading-api/v1/markets/${s}/orderbook/hybrid`, pairs: ['BTCUSDC','ETHUSDC','SOLUSDC','BTCUSDT','ETHUSDT','SOLUSDT','BTCUSD','ETHUSD','SOLUSD'], parseTrades: () => [], parseOB: r => r?.bids?.length || r?.asks?.length ? r : null },  // v9.8: -WIFUSDC (dead pair)
+    'Hotcoin':      { trades: s => `https://api.hotcoinfin.com/v1/market/trade?symbol=${s}&size=10`, ob: s => `https://api.hotcoinfin.com/v1/market/depth?symbol=${s}&type=step0`, pairs: ['btc_usdt','eth_usdt','sol_usdt'], parseTrades: r => r?.data?.length ? r.data : (r?.data?.data?.length ? r.data.data : []), parseOB: r => r?.data?.bids?.length ? r.data : null },
+    'Websea':       { trades: null, ob: s => `https://oapi.websea.com/v1/spot/depth?symbol=${s}&size=5`, pairs: ['BTC-USDT','ETH-USDT','SOL-USDT'], parseTrades: () => [], parseOB: r => r?.errno === 0 && r.result ? r.result : null },
+    'Darkex':       { trades: s=>`https://api.darkex.com/open/api/get_trades?symbol=${s}`, ob: s=>`https://api.darkex.com/open/api/market_dept?symbol=${s}&type=step0`, pairs: ['btcusdt','ethusdt'], parseTrades: r=>Array.isArray(r?.data)?r.data:(Array.isArray(r)?r:[]), parseOB: r=>r?.data?.tick?.bids?.length?r.data.tick:(r?.data?.bids?.length?r.data:null) },  // v9.9.14: was null/null
 };
 // Also add entries for exchanges using WOO-like or missing endpoints
-['Pionex','Zoomex','Biconomy','NovaEx','FameEX','CEEX'].forEach(n => { if (!REST_ENDPOINTS[n]) REST_ENDPOINTS[n] = null; });
+// v9.9.13: Add direct REST endpoints for previously-null exchanges
+REST_ENDPOINTS['Zoomex'] = {
+    trades: s => `https://openapi.zoomex.com/spot/quote/v1/trades?symbol=${s}&limit=10`,
+    ob:     s => `https://openapi.zoomex.com/spot/quote/v1/depth?symbol=${s}&limit=5`,
+    pairs: ['BTCUSDT','ETHUSDT','SOLUSDT'],
+    parseTrades: r => r?.result || [],
+    parseOB:     r => r?.result?.bids?.length ? r.result : null
+};
+REST_ENDPOINTS['Pionex'] = {
+    trades: s => `https://api.pionex.com/api/v1/market/trades?symbol=${s}&limit=10`,
+    ob:     s => `https://api.pionex.com/api/v1/market/depth?symbol=${s}&limit=5`,
+    pairs:  ['BTC_USDT','ETH_USDT','SOL_USDT'],
+    parseTrades: r => r?.data?.recentTrades || r?.data || [],
+    parseOB:     r => r?.data?.bids?.length ? r.data : null
+};
+REST_ENDPOINTS['NovaEx'] = {
+    trades: s => `https://novaex.com/api/v1/market/trades?symbol=${s}&limit=10`,
+    ob:     s => `https://novaex.com/api/v1/market/orderbook?symbol=${s}`,
+    pairs:  ['BTC_USDT','ETH_USDT','SOL_USDT'],
+    parseTrades: r => Array.isArray(r?.data) ? r.data : [],
+    parseOB:     r => r?.data?.bids?.length ? r.data : null
+};
+['Biconomy','FameEX'].forEach(n => { if (!REST_ENDPOINTS[n]) REST_ENDPOINTS[n] = null; });
+REST_ENDPOINTS['CEEX'] = { trades: s=>`https://api.ceex.com/openapi/quote/v1/trades?symbol=${s}&limit=5`, ob: s=>`https://api.ceex.com/openapi/quote/v1/depth?symbol=${s}&limit=10`, pairs: ['BTCUSDT','ETHUSDT','SOLUSDT'], parseTrades: r=>Array.isArray(r)?r:[], parseOB: r=>r?.bids?.length?r:null };  // v9.9.14: was null; Direct REST added (WS restFallbackUrls also active)
 
 async function startDirectRest(name) {
     const ep = REST_ENDPOINTS[name];
@@ -1443,7 +1544,8 @@ function buildStats() {
     const hybridSummary = { trades: totalHybridTrades, orderbook: totalHybridOB, tickers: totalHybridTickers, total: totalHybridTrades+totalHybridOB+totalHybridTickers, deduped: totalHybridDeduped };
     return { running:!stopFlag, uptime:elapsed, duration:Math.floor(TEST_DURATION/1000), remaining, exchanges, symbols,
         summary:{nativeWins:nW,ccxtProWins:pW,ccxtRestWins:rW,directRestWins:dW,ties:ti,nativeOnly:nO,bothFailed:bf,totalActive,totalTickers,totalDirectRest},
-        enrichment: enrichStats, healthSummary, hybridSummary, subManager: getSubManagerStats() };
+        enrichment: enrichStats, healthSummary, hybridSummary, subManager: getSubManagerStats(),
+        valkey: { connected: vkReady, host: VK_HOST, port: VK_PORT, enabled: VK_ENABLED } };
 }
 
 const server = http.createServer((req,res) => {
@@ -1451,7 +1553,7 @@ const server = http.createServer((req,res) => {
     else if (req.url==='/api/stats') { res.writeHead(200,{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}); res.end(JSON.stringify(buildStats())); }
     else if (req.url==='/api/health') { res.writeHead(200,{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'});
         const h = {}; for (const n of Object.keys(stats)) { const hm = healthMetrics[n]; h[n] = { score: hm ? calcHealthScore(n) : 100, errors: hm?.errors||{}, totalErrors: hm?.totalErrors||0, events: (hm?.events||[]).slice(-20), fixes: hm ? getFixRecommendation(n) : [], connectionHistory: (hm?.connectionHistory||[]).slice(-20), connectedSince: hm?.connectedSince||{} }; }
-        res.end(JSON.stringify({ exchanges: h, summary: { avgScore: Math.round(Object.values(h).reduce((a,x)=>a+x.score,0)/Math.max(Object.keys(h).length,1)), critical: Object.entries(h).filter(([,x])=>x.score<50).map(([n])=>n), warnings: Object.entries(h).filter(([,x])=>x.score>=50&&x.score<80).map(([n])=>n) } })); }
+        res.end(JSON.stringify({ exchanges: h, summary: { avgScore: Math.round(Object.values(h).reduce((a,x)=>a+x.score,0)/Math.max(Object.keys(h).length,1)), critical: Object.entries(h).filter(([x])=>x.score<50).map(([n])=>n), warnings: Object.entries(h).filter(([x])=>x.score>=50&&x.score<80).map(([n])=>n) } })); }
     else if (req.url==='/api/submanager') { res.writeHead(200,{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'});
         res.end(JSON.stringify({ stats: getSubManagerStats(), limits: EXCHANGE_WS_LIMITS, failoverUrls: FAILOVER_URLS })); }
     else if (req.url==='/api/events') { res.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-cache','Connection':'keep-alive','Access-Control-Allow-Origin':'*'}); sseClients.push(res); req.on('close',()=>{const i=sseClients.indexOf(res);if(i>-1)sseClients.splice(i,1);}); }
@@ -1464,60 +1566,66 @@ const server = http.createServer((req,res) => {
 const EXCHANGES = [
 
 // ═══ BATCH 1: TIER 1 ═══
-{ name:'Binance', tier:1, batch:1, nativeType:'ws', ccxtId:'binance', skipPro:true, ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC','PENGU/USDT','PENGU/USDC','WIF/USDT','WIF/USDC','SUI/USDT','SUI/USDC','ENA/USDT','ENA/USDC'],  // skipPro:true (v9.4 — CCXT Pro causes WIF/USDC,BTC/USDC,SUI/USDC connection closures + 56 timeouts → health 70. Native WS covers all 14 pairs with trades+depth5 OB.)
+{ name:'Binance', tier:1, batch:1, nativeType:'ws', ccxtId:'binance', skipTicker:true,  // v9.9.15: CCXT Pro re-enabled; removed /USD (not in CCXT Binance spot); removed meme /USDC pairs (caused v9.4 connection closures); skipTicker avoids watchTicker timeouts
+  ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC'],  // 10 safe pairs: USDT core + USDC core + meme USDT; v9.9.11 BTC/USD,ETH/USD,SOL/USD kept in native only
   startNative:()=>connectWS({ name:'Binance',
     urls:['wss://stream.binance.com:9443/stream','wss://stream.binance.com:443/stream','wss://data-stream.binance.vision/stream'],
-    restFallbackUrls: ['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC','PENGUUSDT','PENGUUSDC','WIFUSDT','WIFUSDC','SUIUSDT','SUIUSDC','ENAUSDT','ENAUSDC'].map(s=>({url:`https://api.binance.com/api/v3/trades?symbol=${s}&limit=5`,parse:r=>{if(Array.isArray(r))addN('Binance',s,r.length,0);}})),
-    onOpen:ws=>ws.send(JSON.stringify({method:'SUBSCRIBE',params:['btcusdt@trade','ethusdt@trade','solusdt@trade','btcusdc@trade','ethusdc@trade','solusdc@trade','btcusdt@depth5@100ms','ethusdt@depth5@100ms','solusdt@depth5@100ms','btcusdc@depth5@100ms','ethusdc@depth5@100ms','solusdc@depth5@100ms','penguusdt@trade','penguusdc@trade','wifusdt@trade','wifusdc@trade','suiusdt@trade','suiusdc@trade','enausdt@trade','enausdc@trade','penguusdt@depth5@100ms','penguusdc@depth5@100ms','wifusdt@depth5@100ms','wifusdc@depth5@100ms','suiusdt@depth5@100ms','suiusdc@depth5@100ms','enausdt@depth5@100ms','enausdc@depth5@100ms'],id:1})),
+    restFallbackUrls: ['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC','BTCUSD','ETHUSD','SOLUSD'].map(s=>({url:`https://api.binance.com/api/v3/aggTrades?symbol=${s}&limit=5`,parse:r=>{if(Array.isArray(r))addN('Binance',s,r.length,0);}})),
+    onOpen:ws=>ws.send(JSON.stringify({method:'SUBSCRIBE',params:['btcusdt@aggTrade','ethusdt@aggTrade','solusdt@aggTrade','btcusdc@aggTrade','ethusdc@aggTrade','solusdc@aggTrade','btcusd@aggTrade','ethusd@aggTrade','solusd@aggTrade','btcusdt@depth5','ethusdt@depth5','solusdt@depth5','btcusdc@depth5','ethusdc@depth5','solusdc@depth5','btcusd@depth5','ethusd@depth5','solusd@depth5'],id:1})),
     onMsg:(msg)=>{const d=JSON.parse(msg);if(d.error){addErr('Binance','native',`WS:${JSON.stringify(d.error).slice(0,80)}`);return;}if(!d.data)return;
-      if(d.data.e==='trade') addN('Binance',d.data.s,1,0,String(d.data.t));
+      // v9.9.2: aggTrade (one per taker sweep) instead of trade (one per fill) — 5-10× fewer msgs, reduces TCP backpressure
+      if(d.data.e==='aggTrade') addN('Binance',d.data.s,1,0,String(d.data.a));
+      // v9.9.2: depth5 (1000ms) instead of depth5@100ms — 10× fewer OB msgs, prevents connection drops under load
       if(d.data.lastUpdateId&&d.data.bids) addNWithOBValidation('Binance',(d.stream||'').split('@')[0].toUpperCase(),1,d.data.lastUpdateId);}
   })},
 
-{ name:'Coinbase', tier:1, batch:1, nativeType:'ws', ccxtId:'coinbase', ccxtPairs:['BTC/USD','ETH/USD','SOL/USD','BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC','PENGU/USD','POPCAT/USD','WIF/USD','SUI/USD','ENA/USD'],  // v9.8: -PENGU/USDC,-POPCAT/USDC,-WIF/USDC,-SUI/USDC,-ENA/USDC (dead pairs)
+{ name:'Coinbase', tier:1, batch:1, nativeType:'ws', ccxtId:'coinbase', ccxtPairs:['BTC/USD','ETH/USD','SOL/USD','BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC'],  // v9.9.8: reduced from 14→6 (meme pairs caused 275 unknown errors); v9.9.11: +USDC core pairs (safe). Native WS covers all 14 product_ids
   startNative:()=>connectWS({ name:'Coinbase',
     urls:['wss://ws-feed.exchange.coinbase.com','wss://ws-feed.pro.coinbase.com'],
-    onOpen:ws=>ws.send(JSON.stringify({type:'subscribe',product_ids:['BTC-USD','ETH-USD','SOL-USD','BTC-USDT','ETH-USDT','SOL-USDT','BTC-USDC','ETH-USDC','SOL-USDC','PENGU-USD','POPCAT-USD','WIF-USD','SUI-USD','ENA-USD'],channels:['matches','level2_batch','heartbeat']})),
+    onOpen:ws=>ws.send(JSON.stringify({type:'subscribe',product_ids:['BTC-USD','ETH-USD','SOL-USD','BTC-USDT','ETH-USDT','SOL-USDT','BTC-USDC','ETH-USDC','SOL-USDC'],channels:['matches','level2_batch','heartbeat']})),
     onMsg:(msg)=>{const d=JSON.parse(msg);if(d.type==='match'||d.type==='last_match')addN('Coinbase',d.product_id,1,0,String(d.trade_id));if(d.type==='l2update'||d.type==='snapshot')addN('Coinbase',d.product_id,0,1);}
   })},
 
-{ name:'Kraken', tier:1, batch:1, nativeType:'ws', ccxtId:'kraken', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USD','ETH/USD','SOL/USD','BTC/USDC','ETH/USDC','SOL/USDC','PENGU/USDT','PENGU/USDC','PENGU/USD','POPCAT/USD','WIF/USD','SUI/USD','ENA/USD'],
+{ name:'Kraken', tier:1, batch:1, nativeType:'ws', ccxtId:'kraken', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USD','ETH/USD','SOL/USD','BTC/USDC','ETH/USDC','SOL/USDC'],
   startNative:()=>connectWS({ name:'Kraken',
-    urls:['wss://ws.kraken.com/v2','wss://ws-auth.kraken.com/v2'],
+    urls:['wss://ws.kraken.com/v2'],  // v9.9.21: removed ws-auth (auth-only endpoint — causes failover loop → circuit breaker)
     pingMsg:{method:'ping'}, pingInt:25000,
-    onOpen:ws=>{const s=['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USD','ETH/USD','SOL/USD','BTC/USDC','ETH/USDC','SOL/USDC','PENGU/USDT','PENGU/USDC','PENGU/USD','POPCAT/USD','WIF/USD','SUI/USD','ENA/USD'];ws.send(JSON.stringify({method:'subscribe',params:{channel:'trade',symbol:s,snapshot:false}}));ws.send(JSON.stringify({method:'subscribe',params:{channel:'book',symbol:s,depth:10,snapshot:true}}));},
-    onMsg:(msg)=>{const d=JSON.parse(msg);if(!d.data||!d.channel)return;if(d.channel==='trade')for(const t of d.data)addN('Kraken',t.symbol,1,0);if(d.channel==='book')for(const b of d.data)addN('Kraken',b.symbol,0,1);}
+    onOpen:ws=>{const s=['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USD','ETH/USD','SOL/USD','BTC/USDC','ETH/USDC','SOL/USDC'];ws.send(JSON.stringify({method:'subscribe',params:{channel:'trade',symbol:s,snapshot:false}}));ws.send(JSON.stringify({method:'subscribe',params:{channel:'book',symbol:s,depth:10,snapshot:true}}));},
+    onMsg:(msg)=>{const d=JSON.parse(msg);if(!d.data||!d.channel)return;if(d.channel==='trade')for(const t of d.data)addN('Kraken',t.symbol,1,0);if(d.channel==='book'){const now=Date.now();for(const b of d.data){const k='K:'+b.symbol;if(_nativeOBThrottle[k]&&now-_nativeOBThrottle[k]<2000)continue;_nativeOBThrottle[k]=now;addN('Kraken',b.symbol,0,1);}}}
   })},
 
-{ name:'KuCoin', tier:1, batch:1, nativeType:'ws', ccxtId:'kucoin', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC','BRETT/USDT','PENGU/USDT','POPCAT/USDT','WIF/USDT','WIF/USDC','SUI/USDT','SUI/USDC','ENA/USDT','ENA/USDC'],
+{ name:'KuCoin', tier:1, batch:1, nativeType:'ws', ccxtId:'kucoin', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC'],  // v9.9.15: reduced 15→8 pairs (2 chunks, 6 workers) to prevent health=70 auto-recovery; BRETT/PENGU/POPCAT/ENA still covered by native WS
   startNative:async()=>{
     // v9.8: retry KuCoin token fetch with exponential backoff (3 attempts); token valid ~24h
     let resp=null; for(let _a=0;_a<3;_a++){try{resp=await httpsReq('https://api.kucoin.com/api/v1/bullet-public',{method:'POST'});if(resp?.data?.token)break;addErr('KuCoin','native',`tokenFetch${_a+1}:noToken`);}catch(e){addErr('KuCoin','native',`tokenFetch${_a+1}:${e.message?.slice(0,30)}`);} if(_a<2)await sleep(2000*(_a+1));}
     try{
     if(!resp?.data?.token){addErr('KuCoin','native','No WS token after retries');return;}
-    const ep=resp.data.instanceServers?.[0]?.endpoint||'wss://ws-api-spot.kucoin.com';
-    connectWS({name:'KuCoin',url:`${ep}?token=${resp.data.token}`,pingMsg:{id:Date.now(),type:'ping'},pingInt:18000,
-      restFallbackUrls:['BTC-USDT','ETH-USDT','SOL-USDT','BRETT-USDT','PENGU-USDT','POPCAT-USDT','WIF-USDT','WIF-USDC','SUI-USDT','SUI-USDC','ENA-USDT','ENA-USDC'].map(s=>({url:`https://api.kucoin.com/api/v1/market/orderbook/level2_20?symbol=${s}`,parse:r=>{if(r?.data?.bids)addN('KuCoin',s,0,1);}})),
-      onOpen:ws=>{ws.send(JSON.stringify({id:1,type:'subscribe',topic:'/market/match:BTC-USDT,ETH-USDT,SOL-USDT,BTC-USDC,ETH-USDC,SOL-USDC,BRETT-USDT,PENGU-USDT,POPCAT-USDT,WIF-USDT,WIF-USDC,SUI-USDT,SUI-USDC,ENA-USDT,ENA-USDC',privateChannel:false,response:true}));ws.send(JSON.stringify({id:3,type:'subscribe',topic:'/spotMarket/level2Depth5:BTC-USDT,ETH-USDT,SOL-USDT,BTC-USDC,ETH-USDC,SOL-USDC,BRETT-USDT,PENGU-USDT,POPCAT-USDT,WIF-USDT,WIF-USDC,SUI-USDT,SUI-USDC,ENA-USDT,ENA-USDC',privateChannel:false,response:true}));},
-      onMsg:(msg)=>{const d=JSON.parse(msg);if(d.type==='pong'||d.type==='welcome'||d.type==='ack')return;if(!d.topic||!d.data)return;const sym=d.data.symbol||d.topic.split(':').pop()||'';if(d.topic.includes('/market/match'))addN('KuCoin',sym,1,0,d.data.tradeId);if(d.topic.includes('level2Depth5'))addN('KuCoin',sym,0,1);}
+    connectWS({name:'KuCoin',
+      // v9.9.5: re-fetch token+endpoint on every reconnect (token valid 24h but endpoint can change)
+      getUrl:async()=>{try{const r=await httpsReq('https://api.kucoin.com/api/v1/bullet-public',{method:'POST'});if(r?.data?.token){const e2=r.data.instanceServers?.[0]?.endpoint||'wss://ws-api-spot.kucoin.com';return`${e2}?token=${r.data.token}`;}addErr('KuCoin','native','getUrl:noToken');}catch(e){addErr('KuCoin','native','getUrl:'+e.message?.slice(0,30));}return null;},
+      urls:['wss://ws-api-spot.kucoin.com','wss://ws-api.kucoin.com'],  // fallback if getUrl fails
+      pingMsg:{id:Date.now(),type:'ping'},pingInt:18000,
+      restFallbackUrls:['BTC-USDT','ETH-USDT','SOL-USDT'].map(s=>({url:`https://api.kucoin.com/api/v1/market/orderbook/level2_20?symbol=${s}`,parse:r=>{if(r?.data?.bids)addN('KuCoin',s,0,1);}})),
+      onOpen:ws=>{ws.send(JSON.stringify({id:1,type:'subscribe',topic:'/market/match:BTC-USDT,ETH-USDT,SOL-USDT,BTC-USDC,ETH-USDC,SOL-USDC',privateChannel:false,response:true}));ws.send(JSON.stringify({id:3,type:'subscribe',topic:'/spotMarket/level2Depth5:BTC-USDT,ETH-USDT,SOL-USDT,BTC-USDC,ETH-USDC,SOL-USDC',privateChannel:false,response:true}));},
+      onMsg:(msg)=>{const d=JSON.parse(msg);if(d.type==='pong'||d.type==='welcome'||d.type==='ack')return;if(!d.topic||!d.data)return;const sym=d.data.symbol||d.topic.split(':').pop()||'';if(d.topic.includes('/market/match'))addN('KuCoin',sym,1,0,d.data.tradeId);if(d.topic.includes('level2Depth5')){const k='KC:'+sym;const now=Date.now();if(!_nativeOBThrottle[k]||now-_nativeOBThrottle[k]>=2000){_nativeOBThrottle[k]=now;addN('KuCoin',sym,0,1);}}}
     });}catch(e){addErr('KuCoin','native',e.message);}
   }},
 
-{ name:'OKX', tier:1, batch:1, nativeType:'ws', ccxtId:'okx', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC','PENGU/USDT','PENGU/USDC','PENGU/USD','WIF/USDT','WIF/USDC','WIF/USD','SUI/USDT','SUI/USDC','SUI/USD','ENA/USDT','ENA/USDC','ENA/USD'],
+{ name:'OKX', tier:1, batch:1, nativeType:'ws', ccxtId:'okx', skipPro:true, ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC'],  // v9.9.9: skipPro — Pro=360 msgs vs 603 timeouts; native wins by 120× (43,468 vs 360)
   startNative:()=>connectWS({ name:'OKX',
     urls:['wss://ws.okx.com:8443/ws/v5/public','wss://wsaws.okx.com:8443/ws/v5/public'],
     pingMsg:'ping', pingInt:25000,
-    onOpen:ws=>{const p=['BTC-USDT','ETH-USDT','SOL-USDT','BTC-USDC','ETH-USDC','SOL-USDC','PENGU-USDT','PENGU-USDC','PENGU-USD','WIF-USDT','WIF-USDC','WIF-USD','SUI-USDT','SUI-USDC','SUI-USD','ENA-USDT','ENA-USDC','ENA-USD'];ws.send(JSON.stringify({op:'subscribe',args:p.map(x=>({channel:'trades',instId:x}))}));ws.send(JSON.stringify({op:'subscribe',args:p.map(x=>({channel:'books5',instId:x}))}));},
+    onOpen:ws=>{const p=['BTC-USDT','ETH-USDT','SOL-USDT','BTC-USDC','ETH-USDC','SOL-USDC'];ws.send(JSON.stringify({op:'subscribe',args:p.map(x=>({channel:'trades',instId:x}))}));ws.send(JSON.stringify({op:'subscribe',args:p.map(x=>({channel:'books5',instId:x}))}));},
     onMsg:(msg)=>{if(msg==='pong')return;const d=JSON.parse(msg);if(!d.data||!d.arg)return;if(d.arg.channel==='trades')for(const t of d.data)addN('OKX',d.arg.instId,1,0,t.tradeId);if(d.arg.channel==='books5'){const cs=d.data?.[0]?.checksum;addNWithOBValidation('OKX',d.arg.instId,1,cs);}}
   })},
 
-{ name:'Bybit', tier:1, batch:1, nativeType:'ws', ccxtId:'bybit', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC','BRETT/USDT','BRETT/USDC','PENGU/USDT','POPCAT/USDT','WIF/USDT','WIF/USDC','SUI/USDT','SUI/USDC','ENA/USDT','ENA/USDC'],
+{ name:'Bybit', tier:1, batch:1, nativeType:'ws', ccxtId:'bybit', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC'],
   startNative:()=>connectWS({ name:'Bybit',
     urls:['wss://stream.bybit.com/v5/public/spot','wss://stream.bytick.com/v5/public/spot','wss://stream.bybit.kz/v5/public/spot'],
     pingMsg:{op:'ping'}, pingInt:20000,
     onOpen:ws=>{
       // Bybit V5 — batch subscriptions with delays to avoid rate-limit drops
-      const allPairs=['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC','BRETTUSDT','BRETTUSDC','PENGUUSDT','POPCATUSDT','WIFUSDT','WIFUSDC','SUIUSDT','SUIUSDC','ENAUSDT','ENAUSDC'];
+      const allPairs=['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC'];
       const batchSz=5;
       for(let i=0;i<allPairs.length;i+=batchSz){
         const batch=allPairs.slice(i,i+batchSz);
@@ -1530,144 +1638,148 @@ const EXCHANGES = [
         for(let i=0;i<allPairs.length;i+=batchSz){
           const batch=allPairs.slice(i,i+batchSz);
           setTimeout(()=>{
-            if(ws.readyState===1)ws.send(JSON.stringify({op:'subscribe',args:batch.map(x=>`orderbook.50.${x}`)}));
+            if(ws.readyState===1)ws.send(JSON.stringify({op:'subscribe',args:batch.map(x=>`orderbook.50.${x}`)}));  // v9.9.4: restored depth50 (DuckDB async handles load; depth1 too shallow for production)
           },i/batchSz*500);
         }
       },2000);
     },
     staleTimeout:45000,
-    restFallbackUrls:['BTCUSDT','ETHUSDT','SOLUSDT','BRETTUSDT','PENGUUSDT','POPCATUSDT','WIFUSDT','SUIUSDT','ENAUSDT'].map(s=>({url:`https://api.bybit.com/v5/market/recent-trade?category=spot&symbol=${s}&limit=5`,parse:r=>{if(r?.result?.list)addN('Bybit',s,r.result.list.length,0);}})),
+    restFallbackUrls:['BTCUSDT','ETHUSDT','SOLUSDT'].map(s=>({url:`https://api.bybit.com/v5/market/recent-trade?category=spot&symbol=${s}&limit=5`,parse:r=>{if(r?.result?.list)addN('Bybit',s,r.result.list.length,0);}})),
     onMsg:(msg)=>{const d=JSON.parse(msg);if(d.op==='subscribe'&&d.success===false){console.error('[Bybit] subscribe failed:',d.ret_msg);return;}if(d.op==='pong'||d.op==='subscribe')return;if(!d.topic||!d.data)return;const sym=d.topic.split('.').pop();if(d.topic.startsWith('publicTrade'))addN('Bybit',sym,Array.isArray(d.data)?d.data.length:1,0,d.data?.[0]?.i);if(d.topic.startsWith('orderbook'))addN('Bybit',sym,0,1);}
   })},
 
-{ name:'Bitfinex', tier:1, batch:1, nativeType:'ws', ccxtId:'bitfinex', skipPro:true, ccxtPairs:['BTC/USD','ETH/USD','SOL/USD','BTC/USDT','ETH/USDT','SOL/USDT','SUI/USDT','SUI/USD','ENA/USDT','ENA/USD'],  // skipPro: typeErr in watchTrades/watchOB (v9.4)
+{ name:'Bitfinex', tier:1, batch:1, nativeType:'ws', ccxtId:'bitfinex', skipPro:true, ccxtPairs:['BTC/USD','ETH/USD','SOL/USD','BTC/USDT','ETH/USDT','SOL/USDT'],  // skipPro: typeErr in watchTrades/watchOB (v9.4)
   startNative:()=>{const ch={};connectWS({name:'Bitfinex',
     urls:['wss://api-pub.bitfinex.com/ws/2','wss://api.bitfinex.com/ws/2'],
     pingMsg:JSON.stringify({event:'ping'}), pingInt:25000,
     subscriptions:['tBTCUSD','tETHUSD','tSOLUSD','tBTCUST','tETHUST','tSOLUST'].flatMap(s=>[JSON.stringify({event:'subscribe',channel:'trades',symbol:s}),JSON.stringify({event:'subscribe',channel:'book',symbol:s,prec:'P0',len:25})]),
     onOpen:ws=>{Object.keys(ch).forEach(k=>delete ch[k]); // v9.8: clear stale chanId→symbol map on every reconnect
-    for(const s of['tBTCUSD','tETHUSD','tSOLUSD','tBTCUST','tETHUST','tSOLUST','tSUIUST','tSUIUSD','tENAUST','tENAUSD']){ws.send(JSON.stringify({event:'subscribe',channel:'trades',symbol:s}));ws.send(JSON.stringify({event:'subscribe',channel:'book',symbol:s,prec:'P0',len:25}));}},
+    for(const s of['tBTCUSD','tETHUSD','tSOLUSD','tBTCUST','tETHUST','tSOLUST']){ws.send(JSON.stringify({event:'subscribe',channel:'trades',symbol:s}));ws.send(JSON.stringify({event:'subscribe',channel:'book',symbol:s,prec:'P0',len:25}));}},
     staleTimeout:60000,
-    onMsg:(msg)=>{try{const d=JSON.parse(msg);if(d.event==='subscribed'){ch[d.chanId]={channel:d.channel,symbol:d.symbol||d.pair};return;}if(!Array.isArray(d)||d.length<2)return;const info=ch[d[0]];if(!info)return;if(d[1]==='hb')return;const sym=info.symbol.startsWith('t')?info.symbol:`t${info.symbol}`;if(info.channel==='trades'&&(d[1]==='te'||d[1]==='tu'))addN('Bitfinex',sym,1,0);if(info.channel==='book')addN('Bitfinex',sym,0,1);}catch(e){/* sanitize: ignore malformed Bitfinex msgs */}}
+    onMsg:(msg)=>{try{const d=JSON.parse(msg);if(d.event==='subscribed'){ch[d.chanId]={channel:d.channel,symbol:d.symbol||d.pair};return;}if(!Array.isArray(d)||d.length<2)return;const info=ch[d[0]];if(!info)return;if(d[1]==='hb')return;const sym=info.symbol.startsWith('t')?info.symbol:`t${info.symbol}`;if(info.channel==='trades'&&(d[1]==='te'||d[1]==='tu'))addN('Bitfinex',sym,1,0);if(info.channel==='book'){const k='B:'+sym;const now=Date.now();if(!_nativeOBThrottle[k]||now-_nativeOBThrottle[k]>=2000){_nativeOBThrottle[k]=now;addN('Bitfinex',sym,0,1);}}}catch(e){/* sanitize: ignore malformed Bitfinex msgs */}}
   });}},
 
-{ name:'Gate.io', tier:1, batch:1, nativeType:'ws', ccxtId:'gateio', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC','BRETT/USDT','PENGU/USDT','POPCAT/USDT','WIF/USDT','WIF/USDC','SUI/USDT','SUI/USDC','ENA/USDT','ENA/USDC'],
+{ name:'Gate.io', tier:1, batch:1, nativeType:'ws', ccxtId:'gateio', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC'],
   startNative:()=>connectWS({ name:'Gate.io',
-    urls:['wss://api.gateio.ws/ws/v4/','wss://fx-ws.gateio.ws/v4/ws/usdt'],
+    urls:['wss://api.gateio.ws/ws/v4/','wss://fx-ws.gateio.ws/v4/ws/usdt','wss://ws.gate.io/v4/'],  // v9.9.5: +3rd endpoint
     pingMsg:{time:Math.floor(Date.now()/1000),channel:'spot.ping'}, pingInt:15000,
-    restFallbackUrls:['BTC_USDT','ETH_USDT','SOL_USDT','BRETT_USDT','PENGU_USDT','POPCAT_USDT','WIF_USDT','SUI_USDT','ENA_USDT'].map(s=>({url:`https://api.gateio.ws/api/v4/spot/trades?currency_pair=${s}&limit=5`,parse:r=>{if(Array.isArray(r))addN('Gate.io',s,r.length,0);}})),
-    subscriptions:(()=>{const t=Math.floor(Date.now()/1000);const p=['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','SOL_USDC','BRETT_USDT','PENGU_USDT','POPCAT_USDT','WIF_USDT','WIF_USDC','SUI_USDT','SUI_USDC','ENA_USDT','ENA_USDC'];return[{time:t,channel:'spot.trades',event:'subscribe',payload:p},...p.map(s=>({time:t,channel:'spot.order_book',event:'subscribe',payload:[s,'5','1000ms']}))];})(),
-    onOpen:ws=>{const t=Math.floor(Date.now()/1000);const p=['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','SOL_USDC','BRETT_USDT','PENGU_USDT','POPCAT_USDT','WIF_USDT','WIF_USDC','SUI_USDT','SUI_USDC','ENA_USDT','ENA_USDC'];ws.send(JSON.stringify({time:t,channel:'spot.trades',event:'subscribe',payload:p}));for(const s of p)ws.send(JSON.stringify({time:t,channel:'spot.order_book',event:'subscribe',payload:[s,'5','1000ms']}));},
+    restFallbackUrls:['BTC_USDT','ETH_USDT','SOL_USDT'].map(s=>({url:`https://api.gateio.ws/api/v4/spot/trades?currency_pair=${s}&limit=5`,parse:r=>{if(Array.isArray(r))addN('Gate.io',s,r.length,0);}})),
+    subscriptions:(()=>{const t=Math.floor(Date.now()/1000);const p=['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','SOL_USDC'];return[{time:t,channel:'spot.trades',event:'subscribe',payload:p},...p.map(s=>({time:t,channel:'spot.order_book',event:'subscribe',payload:[s,'5','1000ms']}))];})(),
+    onOpen:ws=>{const t=Math.floor(Date.now()/1000);const p=['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','SOL_USDC'];ws.send(JSON.stringify({time:t,channel:'spot.trades',event:'subscribe',payload:p}));for(const s of p)ws.send(JSON.stringify({time:t,channel:'spot.order_book',event:'subscribe',payload:[s,'5','1000ms']}));},
     staleTimeout:45000,
     onMsg:(msg)=>{const d=JSON.parse(msg);if(!d.result||d.event==='subscribe')return;if(d.channel==='spot.trades')addN('Gate.io',d.result.currency_pair,1,0,String(d.result.id));if(d.channel==='spot.order_book'&&d.result.bids)addN('Gate.io',d.result.s||d.result.currency_pair,0,1);}
   })},
 
-{ name:'HTX', tier:1, batch:1, nativeType:'ws', ccxtId:'htx', skipPro:true, ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','BRETT/USDT','PENGU/USDT','POPCAT/USDT','WIF/USDT','SUI/USDT','ENA/USDT'],  // -SOL/USDC (delisted); skipPro: connection closed PENGU/WIF/ENA (v9.4)
+{ name:'HTX', tier:1, batch:1, nativeType:'ws', ccxtId:'htx', skipPro:true, ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC'],  // -SOL/USDC (delisted); skipPro: connection closed PENGU/WIF/ENA (v9.4)
   startNative:()=>connectWS({ name:'HTX',
     urls:['wss://api.huobi.pro/ws','wss://api-aws.huobi.pro/ws'],
     compression:'gzip',
-    restFallbackUrls:['btcusdt','ethusdt','solusdt','brettusdt','penguusdt','popcatusdt','wifusdt','suiusdt','enausdt'].map(s=>({url:`https://api.huobi.pro/market/trade?symbol=${s}`,parse:r=>{if(r?.tick?.data)addN('HTX',s,r.tick.data.length,0);}})),
-    subscriptions:['btcusdt','ethusdt','solusdt','btcusdc','ethusdc','brettusdt','penguusdt','popcatusdt','wifusdt','suiusdt','enausdt'].flatMap(s=>[{sub:`market.${s}.trade.detail`,id:s+'t'},{sub:`market.${s}.depth.step0`,id:s+'d'}]),
-    onOpen:ws=>{for(const s of['btcusdt','ethusdt','solusdt','btcusdc','ethusdc','brettusdt','penguusdt','popcatusdt','wifusdt','suiusdt','enausdt']){ws.send(JSON.stringify({sub:`market.${s}.trade.detail`,id:s+'t'}));ws.send(JSON.stringify({sub:`market.${s}.depth.step0`,id:s+'d'}));}},  // removed solusdc (delisted)
+    restFallbackUrls:['btcusdt','ethusdt','solusdt'].map(s=>({url:`https://api.huobi.pro/market/trade?symbol=${s}`,parse:r=>{if(r?.tick?.data)addN('HTX',s,r.tick.data.length,0);}})),
+    subscriptions:['btcusdt','ethusdt','solusdt','btcusdc','ethusdc'].flatMap(s=>[{sub:`market.${s}.trade.detail`,id:s+'t'},{sub:`market.${s}.depth.step0`,id:s+'d'}]),
+    onOpen:ws=>{for(const s of['btcusdt','ethusdt','solusdt','btcusdc','ethusdc']){ws.send(JSON.stringify({sub:`market.${s}.trade.detail`,id:s+'t'}));ws.send(JSON.stringify({sub:`market.${s}.depth.step0`,id:s+'d'}));}},  // removed solusdc (delisted)
     staleTimeout:45000,
     onMsg:(msg,ws)=>{const d=JSON.parse(msg);if(d.ping){ws.send(JSON.stringify({pong:d.ping}));return;}if(d.subbed)return;const ch=d.ch||'';const parts=ch.split('.');if(parts.length<3)return;const sym=parts[1];if(ch.includes('.trade.detail')&&d.tick?.data)addN('HTX',sym,d.tick.data.length,0);if(ch.includes('.depth')&&d.tick)addN('HTX',sym,0,1);}
   })},
 
-{ name:'WOO X', tier:1, batch:1, nativeType:'ws', ccxtId:'woo', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','BRETT/USDT','PENGU/USDT','POPCAT/USDT','WIF/USDT','SUI/USDT','ENA/USDT'],  // -SOL/USDC (delisted, audit 2026-02-28)
+{ name:'WOO X', tier:1, batch:1, nativeType:'ws', ccxtId:'woo', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC'],  // -SOL/USDC (delisted, audit 2026-02-28)
   startNative:()=>connectWS({ name:'WOO X',
-    urls:['wss://wss.woo.org/ws/stream/OqdphuyCtYWxwzhxyLLjOWNdFP7sQt8RPWzmb5xY','wss://wss.woo.org/ws/stream/public'],
+    urls:['wss://wss.woox.io/ws/stream/OqdphuyCtYWxwzhxyLLjOWNdFP7sQt8RPWzmb5xY','wss://wss.woox.io/ws/stream/public'],
     pingMsg:{event:'ping'}, pingInt:9000,
-    subscriptions:['SPOT_BTC_USDT','SPOT_ETH_USDT','SPOT_SOL_USDT','SPOT_BTC_USDC','SPOT_ETH_USDC','SPOT_BRETT_USDT','SPOT_PENGU_USDT','SPOT_POPCAT_USDT','SPOT_WIF_USDT','SPOT_SUI_USDT','SPOT_ENA_USDT'].flatMap(s=>[{id:s,event:'subscribe',topic:`${s}@trade`},{id:s+'o',event:'subscribe',topic:`${s}@orderbook`}]),
-    onOpen:ws=>{for(const s of['SPOT_BTC_USDT','SPOT_ETH_USDT','SPOT_SOL_USDT','SPOT_BTC_USDC','SPOT_ETH_USDC','SPOT_BRETT_USDT','SPOT_PENGU_USDT','SPOT_POPCAT_USDT','SPOT_WIF_USDT','SPOT_SUI_USDT','SPOT_ENA_USDT']){ws.send(JSON.stringify({id:s,event:'subscribe',topic:`${s}@trade`}));ws.send(JSON.stringify({id:s+'o',event:'subscribe',topic:`${s}@orderbook`}));}},  // removed SPOT_SOL_USDC (delisted)
+    subscriptions:['SPOT_BTC_USDT','SPOT_ETH_USDT','SPOT_SOL_USDT','SPOT_BTC_USDC','SPOT_ETH_USDC'].flatMap(s=>[{id:s,event:'subscribe',topic:`${s}@trade`},{id:s+'o',event:'subscribe',topic:`${s}@orderbook`}]),
+    onOpen:ws=>{for(const s of['SPOT_BTC_USDT','SPOT_ETH_USDT','SPOT_SOL_USDT','SPOT_BTC_USDC','SPOT_ETH_USDC']){ws.send(JSON.stringify({id:s,event:'subscribe',topic:`${s}@trade`}));ws.send(JSON.stringify({id:s+'o',event:'subscribe',topic:`${s}@orderbook`}));}},  // removed SPOT_SOL_USDC (delisted)
     staleTimeout:45000,
     onMsg:(msg)=>{const d=JSON.parse(msg);if(d.event==='pong'||d.event==='subscribe')return;const t=d.topic||'';const sym=t.split('@')[0];if(!sym.startsWith('SPOT_'))return;if(t.includes('@trade')&&d.data)addN('WOO X',sym,1,0);if(t.includes('@orderbook')&&d.data)addN('WOO X',sym,0,1);}
   })},
 
 // ═══ BATCH 2: TIER 2 ═══
-{ name:'Crypto.com', tier:2, batch:2, nativeType:'ws', ccxtId:'cryptocom', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USD','ETH/USD','SOL/USD','PENGU/USDT','PENGU/USD','POPCAT/USD','WIF/USDT','WIF/USD','SUI/USDT','SUI/USD','ENA/USDT','ENA/USD'],
+{ name:'Crypto.com', tier:2, batch:2, nativeType:'ws', ccxtId:'cryptocom', skipPro:true,  // v9.9.15: skipPro — auto-recovery triggered every ~8min (health=70); 4 chunks × 3 workers hitting rate limit; native WS delivers 2k+ trades/run and covers all 18 pairs
+  ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USD','ETH/USD','SOL/USD'],
   startNative:()=>connectWS({ name:'Crypto.com',
     urls:['wss://stream.crypto.com/exchange/v1/market','wss://stream.crypto.com/v2/market'],
-    pingMsg:{id:0,method:'public/heartbeat'}, pingInt:25000,
-    onOpen:ws=>{/* 1s delay after connect per Crypto.com docs to prevent ECONNRESET */setTimeout(()=>{if(ws.readyState!==1)return;const p=['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USD','ETH_USD','SOL_USD','BTC_USDC','ETH_USDC','SOL_USDC','PENGU_USDT','PENGU_USD','POPCAT_USD','WIF_USDT','WIF_USD','SUI_USDT','SUI_USD','ENA_USDT','ENA_USD'];ws.send(JSON.stringify({id:1,method:'subscribe',params:{channels:p.flatMap(x=>[`trade.${x}`,`book.${x}.10`])}}));},1000);},
+    pingMsg:null, pingInt:0,  // Crypto.com: no client-initiated pings; respond to server heartbeats only
+    onOpen:ws=>{/* 1s delay after connect per Crypto.com docs to prevent ECONNRESET */setTimeout(()=>{if(ws.readyState!==1)return;const p=['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USD','ETH_USD','SOL_USD','BTC_USDC','ETH_USDC','SOL_USDC'];ws.send(JSON.stringify({id:1,method:'subscribe',params:{channels:p.flatMap(x=>[`trade.${x}`,`book.${x}.10`])}}));},1000);},
     onMsg:(msg)=>{const d=JSON.parse(msg);
-      if(d.method==='public/heartbeat'){return;}
+      if(d.method==='public/heartbeat'){ws.send(JSON.stringify({id:d.id,method:'public/respond-heartbeat'}));return;}
       if(!d.result)return;const ch=d.result.channel||'';const sym=d.result.instrument_name||ch.split('.')[1]||'';if(ch.startsWith('trade')&&d.result.data)addN('Crypto.com',sym,d.result.data.length,0);if(ch.startsWith('book')&&d.result.data)addN('Crypto.com',sym,0,1);}
   })},
 
-{ name:'Bitstamp', tier:2, batch:2, nativeType:'ws', ccxtId:'bitstamp', ccxtPairs:['BTC/USD','ETH/USD','SOL/USD','BTC/USDT','ETH/USDT','BTC/USDC','ETH/USDC','SOL/USDC','PENGU/USD','POPCAT/USD','WIF/USD','SUI/USD','ENA/USD'],  // -SOL/USDT (audit 2026-02-28)
+{ name:'Bitstamp', tier:2, batch:2, nativeType:'ws', ccxtId:'bitstamp', skipPro:true, ccxtPairs:['BTC/USD','ETH/USD','SOL/USD','BTC/USDT','ETH/USDT','BTC/USDC','ETH/USDC','SOL/USDC'],  // v9.9.9: skipPro — Pro=1 msg in 20 min (completely broken), was causing 376 timeouts -SOL/USDT delisted
   startNative:()=>connectWS({ name:'Bitstamp',
     urls:['wss://ws.bitstamp.net'],
     pingMsg:JSON.stringify({event:'bts:heartbeat'}), pingInt:20000,
     restFallbackUrls:[{url:'https://www.bitstamp.net/api/v2/transactions/btcusd/',parse:r=>{if(Array.isArray(r))addN('Bitstamp','btcusd',Math.min(r.length,5),0);}}],
-    subscriptions:['btcusd','ethusd','solusd','btcusdt','ethusdt','btcusdc','ethusdc','solusdc','penguusd','popcatusd','wifusd','suiusd','enausd'].flatMap(s=>[JSON.stringify({event:'bts:subscribe',data:{channel:`live_trades_${s}`}}),JSON.stringify({event:'bts:subscribe',data:{channel:`order_book_${s}`}})]),
-    onOpen:ws=>{for(const s of['btcusd','ethusd','solusd','btcusdt','ethusdt','btcusdc','ethusdc','solusdc','penguusd','popcatusd','wifusd','suiusd','enausd']){ws.send(JSON.stringify({event:'bts:subscribe',data:{channel:`live_trades_${s}`}}));ws.send(JSON.stringify({event:'bts:subscribe',data:{channel:`order_book_${s}`}}));}},  // -solusdt (not on Bitstamp)
+    subscriptions:['btcusd','ethusd','solusd','btcusdt','ethusdt','btcusdc','ethusdc','solusdc'].flatMap(s=>[JSON.stringify({event:'bts:subscribe',data:{channel:`live_trades_${s}`}}),JSON.stringify({event:'bts:subscribe',data:{channel:`order_book_${s}`}})]),
+    onOpen:ws=>{for(const s of['btcusd','ethusd','solusd','btcusdt','ethusdt','btcusdc','ethusdc','solusdc']){ws.send(JSON.stringify({event:'bts:subscribe',data:{channel:`live_trades_${s}`}}));ws.send(JSON.stringify({event:'bts:subscribe',data:{channel:`order_book_${s}`}}));}},  // -solusdt (not on Bitstamp)
     onMsg:(msg)=>{const d=JSON.parse(msg);if(!d.channel)return;
       // v9.7: accept both 'trade' (v1 WS) and 'data' (v2 WS) — Bitstamp API v2 uses event:'data' for live_trades
       if(d.channel.startsWith('live_trades_')&&(d.event==='trade'||d.event==='data')&&d.data){const sym=d.channel.replace('live_trades_','');addN('Bitstamp',sym,1,0,String(d.data.id||''));}
       if(d.channel.startsWith('order_book_')&&d.data?.bids)addN('Bitstamp',d.channel.replace('order_book_',''),0,1);}
   })},
 
-{ name:'WhiteBIT', tier:2, batch:2, nativeType:'ws', ccxtId:'whitebit', skipPro:true, ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC','BTC/USD','ETH/USD','SOL/USD','PENGU/USDT','PENGU/USDC','WIF/USDT','WIF/USDC','SUI/USDT','SUI/USDC','ENA/USDT','ENA/USDC'],  // skipPro: connection closed SOL/SUI/WIF (v9.4)
+{ name:'WhiteBIT', tier:2, batch:2, nativeType:'ws', ccxtId:'whitebit', skipPro:true, ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC','BTC/USD','ETH/USD','SOL/USD'],  // skipPro: connection closed SOL/SUI/WIF (v9.4)
   startNative:()=>connectWS({ name:'WhiteBIT',
     urls:['wss://api.whitebit.com/ws'],
     restFallbackUrls:['BTC_USDT','ETH_USDT','SOL_USDT'].map(s=>({url:`https://whitebit.com/api/v4/public/trades/${s}`,parse:r=>{if(Array.isArray(r)&&r.length)addN('WhiteBIT',s,Math.min(r.length,5),0);}})),
     pingMsg:{id:0,method:'server.ping',params:[]}, pingInt:25000,
-    subscriptions:[{id:1,method:'trades_subscribe',params:['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','SOL_USDC','BTC_USD','ETH_USD','SOL_USD','PENGU_USDT','PENGU_USDC','WIF_USDT','WIF_USDC','SUI_USDT','SUI_USDC','ENA_USDT','ENA_USDC']},...['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','SOL_USDC','BTC_USD','ETH_USD','SOL_USD','PENGU_USDT','PENGU_USDC','WIF_USDT','WIF_USDC','SUI_USDT','SUI_USDC','ENA_USDT','ENA_USDC'].map(s=>({id:2,method:'depth_subscribe',params:[s,100,'0',true]}))],
-    onOpen:ws=>{ws.send(JSON.stringify({id:1,method:'trades_subscribe',params:['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','SOL_USDC','BTC_USD','ETH_USD','SOL_USD','PENGU_USDT','PENGU_USDC','WIF_USDT','WIF_USDC','SUI_USDT','SUI_USDC','ENA_USDT','ENA_USDC']}));for(const s of['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','SOL_USDC','BTC_USD','ETH_USD','SOL_USD','PENGU_USDT','PENGU_USDC','WIF_USDT','WIF_USDC','SUI_USDT','SUI_USDC','ENA_USDT','ENA_USDC'])ws.send(JSON.stringify({id:2,method:'depth_subscribe',params:[s,100,'0',true]}));},
+    subscriptions:[{id:1,method:'trades_subscribe',params:['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','SOL_USDC','BTC_USD','ETH_USD','SOL_USD']},...['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','SOL_USDC','BTC_USD','ETH_USD','SOL_USD'].map(s=>({id:2,method:'depth_subscribe',params:[s,20,'0',true]}))],  // v9.9.4: depth 20 (full enough for production, less than original 100)
+    onOpen:ws=>{ws.send(JSON.stringify({id:1,method:'trades_subscribe',params:['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','SOL_USDC','BTC_USD','ETH_USD','SOL_USD']}));for(const s of['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','SOL_USDC','BTC_USD','ETH_USD','SOL_USD'])ws.send(JSON.stringify({id:2,method:'depth_subscribe',params:[s,20,'0',true]}));},  // v9.9.4: depth 20
     staleTimeout:45000,
     onMsg:(msg)=>{const d=JSON.parse(msg);if(d.method==='trades_update'&&d.params)addN('WhiteBIT',d.params[0],d.params[1]?.length||1,0);if(d.method==='depth_update'&&d.params)addN('WhiteBIT',d.params[2]||'',0,1);}
   })},
 
-{ name:'AscendEX', tier:2, batch:2, nativeType:'ws', ccxtId:'ascendex', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USD','ETH/USD','SOL/USD','BRETT/USDT','PENGU/USDT','WIF/USDT','SUI/USDT','ENA/USDT'],
+{ name:'AscendEX', tier:2, batch:2, nativeType:'ws', ccxtId:'ascendex', skipTicker:true, ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USD','ETH/USD','SOL/USD'],  // v9.9.9: reduced 11→6 pairs; v9.9.19: +skipTicker (ticker errors)
   startNative:()=>connectWS({ name:'AscendEX',
-    urls:['wss://ascendex.com/1/api/pro/v1/stream'],
+    urls:['wss://ascendex.com/1/api/pro/v1/stream','wss://ascendex.com/api/pro/v1/stream'],  // v9.9.5: +failover
     pingMsg:{op:'ping'}, pingInt:15000,
-    subscriptions:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC','BTC/USD','ETH/USD','SOL/USD','BRETT/USDT','PENGU/USDT','WIF/USDT','SUI/USDT','ENA/USDT'].flatMap(s=>[{op:'sub',ch:`trades:${s}`},{op:'sub',ch:`depth:${s}`}]),
-    onOpen:ws=>{for(const s of['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC','BTC/USD','ETH/USD','SOL/USD','BRETT/USDT','PENGU/USDT','WIF/USDT','SUI/USDT','ENA/USDT']){ws.send(JSON.stringify({op:'sub',ch:`trades:${s}`}));ws.send(JSON.stringify({op:'sub',ch:`depth:${s}`}));}},
+    subscriptions:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC','BTC/USD','ETH/USD','SOL/USD'].flatMap(s=>[{op:'sub',ch:`trades:${s}`},{op:'sub',ch:`depth:${s}`}]),
+    onOpen:ws=>{for(const s of['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC','BTC/USD','ETH/USD','SOL/USD']){ws.send(JSON.stringify({op:'sub',ch:`trades:${s}`}));ws.send(JSON.stringify({op:'sub',ch:`depth:${s}`}));}},
     staleTimeout:45000,
     onMsg:(msg,ws)=>{const d=JSON.parse(msg);if(d.m==='ping'){ws.send(JSON.stringify({op:'pong'}));return;}if(d.m==='trades'&&d.data&&d.symbol)addN('AscendEX',d.symbol,Array.isArray(d.data)?d.data.length:1,0);if((d.m==='depth'||d.m==='depth-snapshot')&&d.symbol)addN('AscendEX',d.symbol,0,1);}
   })},
 
-{ name:'BingX', tier:2, batch:2, nativeType:'ws', ccxtId:'bingx', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC','BRETT/USDT','PENGU/USDT','POPCAT/USDT','WIF/USDT','SUI/USDT','SUI/USDC','ENA/USDT'],
-  startNative:()=>connectWS({ name:'BingX',
-    urls:['wss://open-api-ws.bingx.com/market','wss://open-api-ws.bingx.com/market/v2'],
-    compression:'gzip', pingMsg:'Pong', pingInt:5000,
-    subscriptions:['BTC-USDT','ETH-USDT','SOL-USDT','BTC-USDC','ETH-USDC','SOL-USDC','BRETT-USDT','PENGU-USDT','POPCAT-USDT','WIF-USDT','SUI-USDT','SUI-USDC','ENA-USDT'].flatMap(p=>[{id:p,reqType:'sub',dataType:`${p}@trade`},{id:p+'d',reqType:'sub',dataType:`${p}@depth5`}]),
-    onOpen:ws=>{for(const p of['BTC-USDT','ETH-USDT','SOL-USDT','BTC-USDC','ETH-USDC','SOL-USDC','BRETT-USDT','PENGU-USDT','POPCAT-USDT','WIF-USDT','SUI-USDT','SUI-USDC','ENA-USDT']){ws.send(JSON.stringify({id:p,reqType:'sub',dataType:`${p}@trade`}));ws.send(JSON.stringify({id:p+'d',reqType:'sub',dataType:`${p}@depth5`}));}},
-    staleTimeout:45000,
-    onMsg:(msg)=>{if(msg==='Ping')return;const d=JSON.parse(msg);if(!d.dataType)return;const sym=d.dataType.split('@')[0];if(d.dataType.includes('@trade'))addN('BingX',sym,1,0);if(d.dataType.includes('@depth'))addN('BingX',sym,0,1);}
-  })},
+{ name:'BingX', tier:2, batch:2, nativeType:'ws', ccxtId:'bingx', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC'],
+  // v9.9.5: split 26 subs across 2 connections (7+6 pairs) to avoid subscription-limit drops
+  startNative:()=>{
+    const _bxCfg=(pairs)=>({name:'BingX',urls:['wss://open-api-ws.bingx.com/market','wss://open-api-ws.bingx.com/market/v2'],compression:'gzip',pingMsg:'Pong',pingInt:5000,subscriptions:pairs.flatMap(p=>[{id:p,reqType:'sub',dataType:`${p}@trade`},{id:p+'d',reqType:'sub',dataType:`${p}@depth5`}]),onOpen:ws=>{for(const p of pairs){ws.send(JSON.stringify({id:p,reqType:'sub',dataType:`${p}@trade`}));ws.send(JSON.stringify({id:p+'d',reqType:'sub',dataType:`${p}@depth5`}));}},staleTimeout:45000,onMsg:(msg)=>{if(msg==='Ping')return;const d=JSON.parse(msg);if(!d.dataType)return;const sym=d.dataType.split('@')[0];if(d.dataType.includes('@trade'))addN('BingX',sym,1,0);if(d.dataType.includes('@depth'))addN('BingX',sym,0,1);}});
+    connectWS(_bxCfg(['BTC-USDT','ETH-USDT','SOL-USDT','BTC-USDC','ETH-USDC','SOL-USDC']));
 
-{ name:'Toobit', tier:2, batch:2, nativeType:'ws', ccxtId:'toobit', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC','PENGU/USDT','POPCAT/USDT','WIF/USDT','SUI/USDT','ENA/USDT'],  // -BRETT/USDT (not on Toobit, audit 2026-02-28)
+  }},
+
+{ name:'Toobit', tier:2, batch:2, nativeType:'ws', ccxtId:'toobit', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC'],  // v9.9.9: reduced 11→6 pairs; 50 timeouts from meme pairs → health 70 (Pro wins 3×, keeping it)
   startNative:()=>connectWS({ name:'Toobit',
     urls:['wss://stream.toobit.com/quote/ws/v1','wss://stream.toobit.com/quote/ws/v2'],
     customPing:ws=>{try{ws.send(JSON.stringify({ping:Date.now()}));}catch{}}, customPingInt:15000,
-    subscriptions:['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC','PENGUUSDT','POPCATUSDT','WIFUSDT','SUIUSDT','ENAUSDT'].flatMap(s=>[{symbol:s,topic:'trade',event:'sub',params:{binary:false}},{symbol:s,topic:'depth',event:'sub',params:{binary:false}}]),
-    onOpen:ws=>{for(const s of['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC','PENGUUSDT','POPCATUSDT','WIFUSDT','SUIUSDT','ENAUSDT']){ws.send(JSON.stringify({symbol:s,topic:'trade',event:'sub',params:{binary:false}}));ws.send(JSON.stringify({symbol:s,topic:'depth',event:'sub',params:{binary:false}}));}},  // removed BRETTUSDT (not listed)
+    subscriptions:['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC'].flatMap(s=>[{symbol:s,topic:'trade',event:'sub',params:{binary:false}},{symbol:s,topic:'depth',event:'sub',params:{binary:false}}]),
+    onOpen:ws=>{for(const s of['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC']){ws.send(JSON.stringify({symbol:s,topic:'trade',event:'sub',params:{binary:false}}));ws.send(JSON.stringify({symbol:s,topic:'depth',event:'sub',params:{binary:false}}));}},  // removed BRETTUSDT (not listed)
     staleTimeout:45000,
     onMsg:(msg)=>{const d=JSON.parse(msg);if(d.pong||d.ping)return;const sym=d.symbol||d.symbolName||'';if(d.topic==='trade'&&d.data)addN('Toobit',sym,d.data.length||1,0);if(d.topic==='depth'&&d.data)addN('Toobit',sym,0,d.data.length||1);}
   })},
 
-{ name:'Deepcoin', tier:2, batch:2, nativeType:'ws', ccxtId:'deepcoin', skipPro:true, ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','PENGU/USDT','WIF/USDT'],  // -BTC/USDC,ETH/USDC,SOL/USDC (delisted from Deepcoin, audit 2026-02-28)
+{ name:'Deepcoin', tier:2, batch:2, nativeType:'ws', ccxtId:'deepcoin', skipPro:true, ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT'],  // -BTC/USDC,ETH/USDC,SOL/USDC (delisted from Deepcoin, audit 2026-02-28)
   startNative:()=>connectWS({ name:'Deepcoin',
     urls:['wss://stream.deepcoin.com/streamlet/trade/public/spot?platform=api'],
     pingMsg:'ping', pingInt:15000,
-    subscriptions:(()=>{const reqId=Date.now();return['BTCUSDT','ETHUSDT','SOLUSDT','PENGUUSDT','WIFUSDT'].map((s,i)=>({SendTopicAction:{Action:'1',FilterValue:`DeepCoin_${s}`,LocalNo:reqId+i,ResumeNo:-2,TopicID:'2'}}));})(),
+    subscriptions:(()=>{const reqId=Date.now();return['BTCUSDT','ETHUSDT','SOLUSDT'].map((s,i)=>({SendTopicAction:{Action:'1',FilterValue:`DeepCoin_${s}`,LocalNo:reqId+i,ResumeNo:-2,TopicID:'2'}}));})(),
     onOpen:ws=>{const reqId=Date.now();
-      ['BTCUSDT','ETHUSDT','SOLUSDT','PENGUUSDT','WIFUSDT'].forEach((s,i)=>ws.send(JSON.stringify({SendTopicAction:{Action:'1',FilterValue:`DeepCoin_${s}`,LocalNo:reqId+i,ResumeNo:-2,TopicID:'2'}})));},
+      ['BTCUSDT','ETHUSDT','SOLUSDT'].forEach((s,i)=>ws.send(JSON.stringify({SendTopicAction:{Action:'1',FilterValue:`DeepCoin_${s}`,LocalNo:reqId+i,ResumeNo:-2,TopicID:'2'}})));},
     staleTimeout:45000,
-    restPoll:(name)=>{const poll=async()=>{if(stopFlag)return;for(const sym of['BTC-USDT','ETH-USDT','SOL-USDT','BTC-USD','PENGU-USDT','WIF-USDT']){try{const r=await httpsReq(`https://api.deepcoin.com/deepcoin/market/books?instId=${sym}&sz=5`);if(r?.code==='0'&&r.data)addN('Deepcoin',sym,0,1);}catch{}}if(!stopFlag)setTimeout(poll,5000);};poll();},  // v9.9: 5s OB refresh; removed USDC pairs (delisted)
+    restPoll:(name)=>{const poll=async()=>{if(stopFlag)return;
+      // OB poll
+      for(const sym of['BTC-USDT','ETH-USDT','SOL-USDT']){try{const r=await httpsReq(`https://api.deepcoin.com/deepcoin/market/books?instId=${sym}&sz=5`);if(r?.code==='0'&&r.data)addN('Deepcoin',sym,0,1);}catch{}}
+      // Trade poll (v9.9.9: WS trade subscription TopicID 2 produces 0 trades — use REST)
+      for(const sym of['BTC-USDT','ETH-USDT','SOL-USDT']){try{const r=await httpsReq(`https://api.deepcoin.com/deepcoin/market/trades?instId=${sym}&limit=10`);if(r?.code==='0'&&Array.isArray(r.data)&&r.data.length)addN('Deepcoin',sym,r.data.length,0);}catch{}}
+      if(!stopFlag)setTimeout(poll,5000);};poll();},
     onMsg:(msg)=>{if(msg==='pong')return;const d=JSON.parse(msg);if(d.a==='PMT'&&d.r&&Array.isArray(d.r))for(const row of d.r){const inst=row.d?.I||'';addN('Deepcoin',inst.replace('DeepCoin_',''),1,0);}}
   })},
 
-{ name:'XT.com', tier:2, batch:2, nativeType:'ws', ccxtId:'xt', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC','BRETT/USDT','PENGU/USDT','POPCAT/USDT','WIF/USDT','SUI/USDT','SUI/USDC','ENA/USDT'],
+{ name:'XT.com', tier:2, batch:2, nativeType:'ws', ccxtId:'xt', skipPro:true, ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC'],  // v9.9.10: skipPro — health=78 auto-recovery twice in v9.9.9 test
   startNative:()=>connectWS({ name:'XT.com',
-    urls:['wss://stream.xt.com/public','wss://stream2.xt.com/public','wss://stream3.xt.com/public'],
+    urls:['wss://stream.xt.com/public'],  // v9.9.6: removed stream2/stream3 (DNS ENOTFOUND)
     pingMsg:'ping', pingInt:15000,
     staleTimeout:45000,
-    restFallbackUrls:['btc_usdt','eth_usdt','sol_usdt','brett_usdt','pengu_usdt','popcat_usdt','wif_usdt','sui_usdt','ena_usdt'].map(s=>({url:`https://sapi.xt.com/v4/public/trade/recent?symbol=${s}&limit=5`,parse:r=>{if(r?.result)addN('XT.com',s,Array.isArray(r.result)?r.result.length:1,0);}})),
+    restFallbackUrls:['btc_usdt','eth_usdt','sol_usdt'].map(s=>({url:`https://sapi.xt.com/v4/public/trade/recent?symbol=${s}&limit=5`,parse:r=>{if(r?.result)addN('XT.com',s,Array.isArray(r.result)?r.result.length:1,0);}})),
     onOpen:ws=>{
-      const pairs=['btc_usdt','eth_usdt','sol_usdt','btc_usdc','eth_usdc','sol_usdc','brett_usdt','pengu_usdt','popcat_usdt','wif_usdt','sui_usdt','sui_usdc','ena_usdt'];
+      const pairs=['btc_usdt','eth_usdt','sol_usdt','btc_usdc','eth_usdc','sol_usdc'];
       const tradeChannels=pairs.map(s=>`trade@${s}`);
       const depthChannels=pairs.map(s=>`depth@${s},5`);
       ws.send(JSON.stringify({method:'subscribe',params:tradeChannels,id:'xt_trades'}));
@@ -1692,99 +1804,104 @@ const EXCHANGES = [
     staleTimeout:45000,
     onOpen:ws=>{
       // Zoomex V5 — batch subscriptions with delays
-      const pairs=['BTCUSDT','ETHUSDT','SOLUSDT','BRETTUSDT','PENGUUSDT','POPCATUSDT','WIFUSDT','SUIUSDT','ENAUSDT'];
+      const pairs=['BTCUSDT','ETHUSDT','SOLUSDT'];
       const b1=pairs.slice(0,5),b2=pairs.slice(5);
       ws.send(JSON.stringify({op:'subscribe',args:b1.map(x=>`publicTrade.${x}`)}));
       setTimeout(()=>{if(ws.readyState===1)ws.send(JSON.stringify({op:'subscribe',args:b2.map(x=>`publicTrade.${x}`)}));},500);
-      setTimeout(()=>{if(ws.readyState===1)ws.send(JSON.stringify({op:'subscribe',args:b1.map(x=>`orderbook.50.${x}`)}));},1200);
+      setTimeout(()=>{if(ws.readyState===1)ws.send(JSON.stringify({op:'subscribe',args:b1.map(x=>`orderbook.50.${x}`)}));},1200);  // v9.9.4: restored depth50
       setTimeout(()=>{if(ws.readyState===1)ws.send(JSON.stringify({op:'subscribe',args:b2.map(x=>`orderbook.50.${x}`)}));},1800);
+      setTimeout(()=>{if(ws.readyState===1)ws.send(JSON.stringify({op:'subscribe',args:[...b1,...b2].map(x=>`tickers.${x}`)}));},2500);  // v9.9.4: add ticker stream
     },
     // REST fallback disabled: api.zoomex.com DNS unreachable (verified 2026-02-27); WS stream.zoomex.com works fine
     restFallbackUrls:[],  // was: api.zoomex.com (ENOTFOUND)
-    onMsg:(msg)=>{const d=JSON.parse(msg);if(d.op==='pong'||d.op==='subscribe')return;if(!d.topic||!d.data)return;const sym=d.topic.split('.').pop();if(d.topic.startsWith('publicTrade'))addN('Zoomex',sym,Array.isArray(d.data)?d.data.length:1,0);if(d.topic.startsWith('orderbook'))addN('Zoomex',sym,0,1);}
+    onMsg:(msg)=>{const d=JSON.parse(msg);if(d.op==='pong'||d.op==='subscribe')return;if(!d.topic||!d.data)return;const sym=d.topic.split('.').pop();if(d.topic.startsWith('publicTrade'))addN('Zoomex',sym,Array.isArray(d.data)?d.data.length:1,0);if(d.topic.startsWith('orderbook'))addN('Zoomex',sym,0,1);if(d.topic.startsWith('tickers'))addNTicker('Zoomex',sym);}
   })},
 
-{ name:'Bitget', tier:2, batch:2, nativeType:'ws', ccxtId:'bitget', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC','BRETT/USDT','PENGU/USDT','WIF/USDT','SUI/USDT','SUI/USDC','ENA/USDT'],
+{ name:'Bitget', tier:2, batch:2, nativeType:'ws', ccxtId:'bitget', skipPro:true,  // v9.9.15: CCXT Pro timeout storm on wss://ws.bitget.com/v2/ws/public (floods stderr with RequestTimeout); native WS is excellent (37k+msg/h), Pro adds nothing
+  ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC'],
   startNative:()=>connectWS({ name:'Bitget',
     urls:['wss://ws.bitget.com/v2/ws/public'],
     customPing:ws=>ws.send('ping'), customPingInt:30000,
-    onOpen:ws=>ws.send(JSON.stringify({op:'subscribe',args:['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC','BRETTUSDT','PENGUUSDT','POPCATUSDT','WIFUSDT','SUIUSDT','ENAUSDT'].flatMap(s=>[{instType:'SPOT',channel:'trade',instId:s},{instType:'SPOT',channel:'books5',instId:s}])})),
+    onOpen:ws=>ws.send(JSON.stringify({op:'subscribe',args:['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC'].flatMap(s=>[{instType:'SPOT',channel:'trade',instId:s},{instType:'SPOT',channel:'books5',instId:s}])})),  // v9.9.12: -POPCATUSDT (Bitget code 40034: delisted)
     onMsg:(msg)=>{if(msg==='pong')return;const d=JSON.parse(msg);if(d.event||d.op==='pong')return;const sym=d.arg?.instId;if(!sym)return;if(d.arg.channel==='trade'&&d.data)addN('Bitget',sym,d.data.length,0);if(d.arg.channel==='books5'&&d.data)addN('Bitget',sym,0,d.data.length);}
   })},
 
 // ═══ BATCH 3: TIER 2 CONT + TIER 3 ═══
-{ name:'Gemini', tier:2, batch:3, nativeType:'ws', ccxtId:'gemini', skipTicker:true, ccxtPairs:['BTC/USD','ETH/USD','SOL/USD','BTC/USDT','ETH/USDT','BTC/USDC','ETH/USDC','SOL/USDC','PENGU/USDC','PENGU/USD','POPCAT/USDC','POPCAT/USD','WIF/USDC','WIF/USD'],  // v9.7: removed skipPro:true, added skipTicker:true — watchTicker notSupported but watchTrades+watchOrderBook work fine (+68K/min)
+{ name:'Gemini', tier:2, batch:3, nativeType:'ws', ccxtId:'gemini', skipPro:true, skipTicker:true, ccxtPairs:['BTC/USD','ETH/USD','SOL/USD','BTC/USDT','ETH/USDT'],  // v9.9.16: skipPro:true restored — Gemini API rejects loadMarkets (GET /v1/symbols fetch errors); native WS now delivers trades (type:'trade' fix); v9.9.12: +PENGU/USD,POPCAT/USD,WIF/USD,SUI/USD
   startNative:()=>connectWS({ name:'Gemini',
     urls:['wss://api.gemini.com/v2/marketdata'],
     wsHeaders:{'Origin':'https://exchange.gemini.com'},  // Origin required for Gemini WS handshake (v9.4)
     staleTimeout:90000,  // Gemini sends heartbeats every 5s — allow longer stale window
-    onOpen:ws=>ws.send(JSON.stringify({type:'subscribe',subscriptions:[{name:'l2',symbols:['BTCUSD','ETHUSD','SOLUSD','BTCUSDT','ETHUSDT','BTCUSDC','ETHUSDC','SOLUSDC','PENGUUSDC','PENGUUSD','POPCATUSDC','POPCATUSD','WIFUSDC','WIFUSD']}]})),
-    onMsg:(msg)=>{const d=JSON.parse(msg);if(d.type==='heartbeat')return;if(d.type==='l2_updates'&&d.symbol){if(d.trades&&d.trades.length)addN('Gemini',d.symbol,d.trades.length,0);if(d.changes&&d.changes.length)addN('Gemini',d.symbol,0,1);}}
+    onOpen:ws=>ws.send(JSON.stringify({type:'subscribe',subscriptions:[{name:'l2',symbols:['BTCUSD','ETHUSD','SOLUSD','BTCUSDT','ETHUSDT','BTCUSDC','ETHUSDC','SOLUSDC']}]})),  // v9.9.16: +SUIUSD,SUIUSDT
+    onMsg:(msg)=>{const d=JSON.parse(msg);if(d.type==='heartbeat')return;if(d.type==='trade'&&d.symbol){addN('Gemini',d.symbol,1,0,String(d.event_id||d.tid||''));return;}  // v9.9.16: real-time trades are standalone type:'trade' events
+    if(d.type==='l2_updates'&&d.symbol){if(d.trades&&d.trades.length)addN('Gemini',d.symbol,d.trades.length,0);if(d.changes&&d.changes.length)addN('Gemini',d.symbol,0,1);}}
   })},
 
-{ name:'Binance.US', tier:2, batch:3, nativeType:'ws', ccxtId:'binanceus', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC','BTC/USD','ETH/USD','SOL/USD','BRETT/USDT','PENGU/USDT','POPCAT/USDT','WIF/USDT','SUI/USDT','SUI/USD','ENA/USDT'],
+{ name:'Binance.US', tier:2, batch:3, nativeType:'ws', ccxtId:'binanceus', skipPro:true, ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC','BTC/USD','ETH/USD','SOL/USD'],  // v9.9.9: skipPro — Pro=1,037 msgs vs 77 timeouts; native covers it well
   startNative:()=>connectWS({ name:'Binance.US',
     urls:['wss://stream.binance.us:9443/stream'],
-    onOpen:ws=>ws.send(JSON.stringify({method:'SUBSCRIBE',params:['btcusdt@trade','ethusdt@trade','solusdt@trade','btcusdc@trade','ethusdc@trade','solusdc@trade','btcusd@trade','ethusd@trade','solusd@trade','btcusdt@depth5@1000ms','ethusdt@depth5@1000ms','solusdt@depth5@1000ms','btcusdc@depth5@1000ms','ethusdc@depth5@1000ms','solusdc@depth5@1000ms','btcusd@depth5@1000ms','ethusd@depth5@1000ms','solusd@depth5@1000ms','brettusdt@trade','penguusdt@trade','popcatusdt@trade','wifusdt@trade','suiusdt@trade','suiusd@trade','enausdt@trade','brettusdt@depth5@1000ms','penguusdt@depth5@1000ms','popcatusdt@depth5@1000ms','wifusdt@depth5@1000ms','suiusdt@depth5@1000ms','suiusd@depth5@1000ms','enausdt@depth5@1000ms'],id:1})),
-    onMsg:(msg)=>{const d=JSON.parse(msg);if(!d.data)return;if(d.data.e==='trade')addN('Binance.US',d.data.s?.toLowerCase(),1,0,String(d.data.t));if(d.data.lastUpdateId)addNWithOBValidation('Binance.US',(d.stream||'').split('@')[0],1,d.data.lastUpdateId);}
+    onOpen:ws=>ws.send(JSON.stringify({method:'SUBSCRIBE',params:['btcusdt@aggTrade','ethusdt@aggTrade','solusdt@aggTrade','btcusdc@aggTrade','ethusdc@aggTrade','solusdc@aggTrade','btcusd@aggTrade','ethusd@aggTrade','solusd@aggTrade','btcusdt@depth5@1000ms','ethusdt@depth5@1000ms','solusdt@depth5@1000ms','btcusdc@depth5@1000ms','ethusdc@depth5@1000ms','solusdc@depth5@1000ms','btcusd@depth5@1000ms','ethusd@depth5@1000ms','solusd@depth5@1000ms'],id:1})),  // v9.9.3: @trade→@aggTrade (5-10x fewer msgs, same as main Binance)
+    onMsg:(msg)=>{const d=JSON.parse(msg);if(!d.data)return;if(d.data.e==='aggTrade')addN('Binance.US',d.data.s?.toLowerCase(),1,0,String(d.data.a));if(d.data.lastUpdateId)addNWithOBValidation('Binance.US',(d.stream||'').split('@')[0],1,d.data.lastUpdateId);}
   })},
 
-{ name:'MEXC', tier:2, batch:3, nativeType:'rest', ccxtId:'mexc', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC','PENGU/USDT','PENGU/USDC','POPCAT/USDT','POPCAT/USDC','WIF/USDT','WIF/USDC','SUI/USDT','SUI/USDC','ENA/USDT','ENA/USDC'],
-  startNative:()=>runREST('MEXC',['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC','BRETTUSDT','PENGUUSDT','POPCATUSDT','WIFUSDT','SUIUSDT','ENAUSDT'].flatMap(s=>[
+{ name:'MEXC', tier:2, batch:3, nativeType:'rest', ccxtId:'mexc', skipPro:true,  // v9.9.14: skipPro — canary returned 0 trades in 10s; nativeType:rest already provides double-REST so Pro adds nothing
+  ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC'],
+  startNative:()=>runREST('MEXC',['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC'].flatMap(s=>[
     {url:`https://api.mexc.com/api/v3/trades?symbol=${s}&limit=20`,parse:r=>{if(Array.isArray(r))addN('MEXC',s,r.length,0);}},
     {url:`https://api.mexc.com/api/v3/depth?symbol=${s}&limit=5`,parse:r=>{if(r?.bids?.length)addN('MEXC',s,0,1);}}
   ]))},
 
-{ name:'CoinEx', tier:3, batch:3, nativeType:'ws', ccxtId:'coinex', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC','BRETT/USDT','PENGU/USDT','POPCAT/USDT','WIF/USDT','WIF/USDC','SUI/USDT','SUI/USDC','ENA/USDT','ENA/USDC'],
+{ name:'CoinEx', tier:3, batch:3, nativeType:'ws', ccxtId:'coinex', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT'],  // v9.9.9: reduced from 5→3 pairs; still 44 timeouts with 5 pairs → health 70
   startNative:()=>connectWS({ name:'CoinEx',
     urls:['wss://socket.coinex.com/v2/spot'],
     compression:'gzip', pingMsg:{method:'server.ping',params:{},id:1}, pingInt:15000,
-    onOpen:ws=>{const p=['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC','BRETTUSDT','PENGUUSDT','POPCATUSDT','WIFUSDT','SUIUSDT','ENAUSDT'];ws.send(JSON.stringify({method:'deals.subscribe',params:{market_list:p},id:2}));ws.send(JSON.stringify({method:'depth.subscribe',params:{market_list:p.map(m=>[m,5,'0',false])},id:3}));},
+    onOpen:ws=>{const p=['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC'];ws.send(JSON.stringify({method:'deals.subscribe',params:{market_list:p},id:2}));ws.send(JSON.stringify({method:'depth.subscribe',params:{market_list:p.map(m=>[m,5,'0',false])},id:3}));},
     onMsg:(msg,ws)=>{const d=JSON.parse(msg);if(d.method==='server.ping'){ws.send(JSON.stringify({method:'server.pong',params:{},id:d.id||1}));return;}if(!d.method)return;if(d.method==='deals.update'&&d.data)addN('CoinEx',d.data.market,d.data.deal_list?.length||1,0);if(d.method==='depth.update'&&d.data)addN('CoinEx',d.data.market,0,1);}
   })},
 
-{ name:'LBank', tier:3, batch:3, nativeType:'ws', ccxtId:'lbank', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC','BRETT/USDT','PENGU/USDT','POPCAT/USDT','WIF/USDT','SUI/USDT','ENA/USDT'],
+{ name:'LBank', tier:3, batch:3, nativeType:'ws', ccxtId:null, ccxtPairs:[],  // v9.9.14: ccxtId→null — CCXT REST hit lbkperp.lbank.com ENOTFOUND (futures URL); native WS is excellent (8k+ msg/h)
   startNative:()=>connectWS({ name:'LBank',
-    urls:['wss://www.lbkex.net/ws/V2/','wss://www.lbkex.com/ws/V2/'],
-    restFallbackUrls:['btc_usdt','eth_usdt','sol_usdt','brett_usdt','pengu_usdt','popcat_usdt','wif_usdt','sui_usdt','ena_usdt'].map(s=>({url:`https://api.lbkex.com/v2/trades.do?symbol=${s}&size=5`,parse:r=>{if(r?.data&&Array.isArray(r.data))addN('LBank',s,r.data.length,0);}})),
-    subscriptions:['btc_usdt','eth_usdt','sol_usdt','btc_usdc','eth_usdc','sol_usdc','brett_usdt','pengu_usdt','popcat_usdt','wif_usdt','sui_usdt','ena_usdt'].flatMap(s=>[{action:'subscribe',subscribe:'trade',pair:s},{action:'subscribe',subscribe:'depth',pair:s,depth:10}]),
-    onOpen:ws=>{for(const s of['btc_usdt','eth_usdt','sol_usdt','btc_usdc','eth_usdc','sol_usdc','brett_usdt','pengu_usdt','popcat_usdt','wif_usdt','sui_usdt','ena_usdt']){ws.send(JSON.stringify({action:'subscribe',subscribe:'trade',pair:s}));ws.send(JSON.stringify({action:'subscribe',subscribe:'depth',pair:s,depth:10}));}},
+    urls:['wss://api.lbank.info/ws/V2/','wss://www.lbkex.net/ws/V2/'],  // v9.9.19: api.lbank.info primary (lbkex.com cert expired, lbkex.net unreliable)
+    restFallbackUrls:['btc_usdt','eth_usdt','sol_usdt'].map(s=>({url:`https://api.lbkex.com/v2/trades.do?symbol=${s}&size=5`,parse:r=>{if(r?.data&&Array.isArray(r.data))addN('LBank',s,r.data.length,0);}})),
+    subscriptions:['btc_usdt','eth_usdt','sol_usdt','btc_usdc','eth_usdc','sol_usdc'].flatMap(s=>[{action:'subscribe',subscribe:'trade',pair:s},{action:'subscribe',subscribe:'depth',pair:s,depth:10}]),
+    onOpen:ws=>{for(const s of['btc_usdt','eth_usdt','sol_usdt','btc_usdc','eth_usdc','sol_usdc']){ws.send(JSON.stringify({action:'subscribe',subscribe:'trade',pair:s}));ws.send(JSON.stringify({action:'subscribe',subscribe:'depth',pair:s,depth:10}));}},
     staleTimeout:45000,
     onMsg:(msg,ws)=>{const d=JSON.parse(msg);
       if(d.action==='ping'){ws.send(JSON.stringify({action:'pong',pong:d.ping}));return;}
-      const sym=d.pair||'';if(d.trade)addN('LBank',sym,1,0);if(d.type==='trade'&&d.trade)addN('LBank',sym,1,0);if(d.depth)addN('LBank',sym,0,1);if(d.type==='depth'&&d.depth)addN('LBank',sym,0,1);}
+      const sym=d.pair||'';if(d.trade)addN('LBank',sym,1,0);if(d.depth)addN('LBank',sym,0,1);}
   })},
 
-{ name:'BitMart', tier:3, batch:3, nativeType:'ws', ccxtId:'bitmart', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC','BRETT/USDT','PENGU/USDT','POPCAT/USDT','WIF/USDT','SUI/USDT','ENA/USDT'],
+{ name:'BitMart', tier:3, batch:3, nativeType:'ws', ccxtId:'bitmart', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC'],  // v9.9.9: native WS=0 msgs; added REST trade fallback + backup WS URL
   startNative:()=>connectWS({ name:'BitMart',
-    urls:['wss://ws-manager-compress.bitmart.com/api?protocol=1.1'],
+    urls:['wss://ws-manager-compress.bitmart.com/api?protocol=1.1','wss://ws-manager-compress.bitmart.com?protocol=1.1'],  // v9.9.19: fixed backup URL (old /api returned 426)
     compression:'inflate', pingMsg:'ping', pingInt:10000,
-    onOpen:ws=>ws.send(JSON.stringify({op:'subscribe',args:['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','SOL_USDC','BRETT_USDT','PENGU_USDT','POPCAT_USDT','WIF_USDT','SUI_USDT','ENA_USDT'].flatMap(p=>[`spot/trade:${p}`,`spot/depth5:${p}`])})),
-    onMsg:(msg)=>{if(msg==='pong')return;const d=JSON.parse(msg);if(!d.data)return;if(d.table==='spot/trade'&&Array.isArray(d.data))for(const t of d.data)addN('BitMart',t.symbol,1,0);if(d.table==='spot/depth5'&&Array.isArray(d.data))for(const b of d.data)addN('BitMart',b.symbol,0,1);}
+    restFallbackUrls:['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC'].map(s=>({url:`https://api-cloud.bitmart.com/spot/v2/trades?symbol=${s}&N=10`,parse:r=>{if(r?.data?.trades?.length)addN('BitMart',s,r.data.trades.length,0);}})),
+    onOpen:ws=>ws.send(JSON.stringify({op:'subscribe',args:['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','SOL_USDC'].flatMap(p=>[`spot/trade:${p}`,`spot/depth5:${p}`])})),
+    onMsg:(msg)=>{if(msg==='pong')return;try{const d=JSON.parse(msg);if(!d||!d.data)return;if(d.table==='spot/trade'&&Array.isArray(d.data))for(const t of d.data)addN('BitMart',t.symbol,1,0);if(d.table==='spot/depth5'&&Array.isArray(d.data))for(const b of d.data)addN('BitMart',b.symbol,0,1);}catch{}}
   })},
 
 { name:'Pionex', tier:3, batch:3, nativeType:'ws', ccxtId:null, ccxtPairs:[],
   startNative:()=>connectWS({ name:'Pionex',
     urls:['wss://ws.pionex.com/wsPub'],  // removed ws2.pionex.com (DNS ENOTFOUND)
-    onOpen:ws=>{const pairs=['BTC_USDT','ETH_USDT','SOL_USDT','PENGU_USDT','WIF_USDT','SUI_USDT','ENA_USDT'];pairs.forEach((s,i)=>{setTimeout(()=>{ws.send(JSON.stringify({op:'SUBSCRIBE',topic:'TRADE',symbol:s}));ws.send(JSON.stringify({op:'SUBSCRIBE',topic:'DEPTH',symbol:s,limit:5}));},i*200);});},  // Expanded: +WIF,SUI,ENA; removed BRETT,POPCAT (NOT_LISTED on Pionex). Staggered 200ms delay per pair to avoid rejection
-    onMsg:(msg,ws)=>{const d=JSON.parse(msg);if(d.op==='PING'){ws.send(JSON.stringify({op:'PONG'}));return;}if(!d.topic)return;const sym=d.symbol||'';if(d.topic==='TRADE'&&d.data)addN('Pionex',sym,Array.isArray(d.data)?d.data.length:1,0);if(d.topic==='DEPTH'&&d.data)addN('Pionex',sym,0,1);}
+    onOpen:ws=>{const pairs=['BTC_USDT','ETH_USDT','SOL_USDT'];pairs.forEach((s,i)=>{setTimeout(()=>{ws.send(JSON.stringify({op:'SUBSCRIBE',topic:'TRADE',symbol:s}));ws.send(JSON.stringify({op:'SUBSCRIBE',topic:'DEPTH',symbol:s,limit:5}));ws.send(JSON.stringify({op:'SUBSCRIBE',topic:'BOOK_TICKER',symbol:s}));},i*200);});},  // v9.9.4: +BOOK_TICKER; staggered 200ms/pair
+    onMsg:(msg,ws)=>{const d=JSON.parse(msg);if(d.op==='PING'){ws.send(JSON.stringify({op:'PONG'}));return;}if(!d.topic)return;const sym=d.symbol||'';if(d.topic==='TRADE'&&d.data)addN('Pionex',sym,Array.isArray(d.data)?d.data.length:1,0);if(d.topic==='DEPTH'&&d.data)addN('Pionex',sym,0,1);if(d.topic==='BOOK_TICKER'&&d.symbol)addNTicker('Pionex',d.symbol);}
   })},
 
-{ name:'Poloniex', tier:3, batch:3, nativeType:'ws', ccxtId:'poloniex', skipPro:true, ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','BRETT/USDT','POPCAT/USDT','WIF/USDT','SUI/USDT','ENA/USDT'],
+{ name:'Poloniex', tier:3, batch:3, nativeType:'ws', ccxtId:'poloniex', skipPro:true, ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC'],
   startNative:()=>connectWS({ name:'Poloniex',
     urls:['wss://ws.poloniex.com/ws/public'],  // removed ws2 (ENOTFOUND on Windows, v9.5); skipPro: 142 timeouts + typeErr (v9.5)
     pingMsg:{event:'ping'}, pingInt:20000,
-    onOpen:ws=>{ws.send(JSON.stringify({event:'subscribe',channel:['trades'],symbols:['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','BRETT_USDT','POPCAT_USDT','WIF_USDT','SUI_USDT','ENA_USDT']}));ws.send(JSON.stringify({event:'subscribe',channel:['book'],symbols:['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','BRETT_USDT','POPCAT_USDT','WIF_USDT','SUI_USDT','ENA_USDT']}));},  // Removed PENGU_USDT (NOT_LISTED, verified 2026-02-27)
+    onOpen:ws=>{ws.send(JSON.stringify({event:'subscribe',channel:['trades'],symbols:['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC']}));ws.send(JSON.stringify({event:'subscribe',channel:['book'],symbols:['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC']}));},  // Removed PENGU_USDT (NOT_LISTED, verified 2026-02-27)
     onMsg:(msg)=>{const d=JSON.parse(msg);if(!d.channel||!d.data)return;const items=Array.isArray(d.data)?d.data:[d.data];for(const it of items){if(d.channel==='trades')addN('Poloniex',it.symbol,1,0,it.id);if(d.channel==='book')addN('Poloniex',it.symbol,0,1);}}
   })},
 
-{ name:'HitBTC', tier:3, batch:3, nativeType:'ws', ccxtId:'hitbtc', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC','BRETT/USDT','PENGU/USDT','POPCAT/USDT','WIF/USDT','SUI/USDT','ENA/USDT'],
+{ name:'HitBTC', tier:3, batch:3, nativeType:'ws', ccxtId:'hitbtc', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC'],  // v9.9.8: reduced from 12→5 pairs; 591 timeouts from low-volume pairs → health 70
   startNative:()=>connectWS({ name:'HitBTC',
     urls:['wss://api.hitbtc.com/api/3/ws/public'],
     pingMsg:{method:'server.ping',params:{},id:99}, pingInt:20000,
-    onOpen:ws=>{ws.send(JSON.stringify({ch:'trades',method:'subscribe',params:{symbols:['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC','BRETTUSDT','PENGUUSDT','POPCATUSDT','WIFUSDT','SUIUSDT','ENAUSDT']},id:1}));ws.send(JSON.stringify({ch:'orderbook/full',method:'subscribe',params:{symbols:['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC','BRETTUSDT','PENGUUSDT','POPCATUSDT','WIFUSDT','SUIUSDT','ENAUSDT'],limit:5},id:2}));},
+    onOpen:ws=>{ws.send(JSON.stringify({ch:'trades',method:'subscribe',params:{symbols:['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC']},id:1}));ws.send(JSON.stringify({ch:'orderbook/full',method:'subscribe',params:{symbols:['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC'],limit:5},id:2}));},
     // v9.7: added d.snapshot handling for trades (HitBTC sends initial snapshot then updates)
-    onMsg:(msg)=>{const d=JSON.parse(msg);if(!d.ch)return;if(d.ch==='trades'){if(d.update)for(const[sym,trades]of Object.entries(d.update))addN('HitBTC',sym,trades.length,0);if(d.snapshot)for(const[sym,trades]of Object.entries(d.snapshot))addN('HitBTC',sym,trades.length,0);}if(d.ch==='orderbook/full'){const p=d.snapshot||d.update||{};for(const sym of Object.keys(p))addN('HitBTC',sym,0,1);}}
+    onMsg:(msg)=>{const d=JSON.parse(msg);if(!d.ch)return;if(d.ch==='trades'){if(d.update)for(const[sym,trades]of Object.entries(d.update))addN('HitBTC',sym,trades.length,0);if(d.snapshot)for(const[sym,trades]of Object.entries(d.snapshot))addN('HitBTC',sym,trades.length,0);}if(d.ch==='orderbook/full'){const p=d.snapshot||d.update||{};const now=Date.now();for(const sym of Object.keys(p)){const k='H:'+sym;if(_nativeOBThrottle[k]&&now-_nativeOBThrottle[k]<2000)continue;_nativeOBThrottle[k]=now;addN('HitBTC',sym,0,1);}}}
   })},
 
 // ═══ BATCH 4: TIER 3 WS ═══
@@ -1792,34 +1909,36 @@ const EXCHANGES = [
   startNative:()=>connectWS({ name:'BTSE',
     urls:['wss://ws.btse.com/ws/spot'],  // removed ws.btse.io (DNS ENOTFOUND)
     pingMsg:'ping', pingInt:30000,
-    onOpen:ws=>ws.send(JSON.stringify({op:'subscribe',args:['tradeHistoryApi:BTC-USD','tradeHistoryApi:ETH-USD','tradeHistoryApi:SOL-USD','tradeHistoryApi:BTC-USDT','tradeHistoryApi:ETH-USDT','tradeHistoryApi:SOL-USDT','tradeHistoryApi:BTC-USDC','tradeHistoryApi:ETH-USDC','tradeHistoryApi:SOL-USDC','tradeHistoryApi:BRETT-USDT','tradeHistoryApi:PENGU-USDT','tradeHistoryApi:PENGU-USD','tradeHistoryApi:PENGU-USDC','tradeHistoryApi:POPCAT-USDT','tradeHistoryApi:POPCAT-USD','tradeHistoryApi:POPCAT-USDC','tradeHistoryApi:WIF-USDT','tradeHistoryApi:WIF-USD','tradeHistoryApi:WIF-USDC','tradeHistoryApi:SUI-USDT','tradeHistoryApi:SUI-USD','tradeHistoryApi:SUI-USDC','tradeHistoryApi:ENA-USDT','tradeHistoryApi:ENA-USD','tradeHistoryApi:ENA-USDC']})),  // +10 meme USD/USDC pairs (audit 2026-02-28)
+    onOpen:ws=>ws.send(JSON.stringify({op:'subscribe',args:[]})),  // +10 meme USD/USDC pairs (audit 2026-02-28)
     // v9.6: REST polling fallback — BTSE ws.btse.com DNS is intermittent over long runs (286 trades/h vs 4711 expected)
-    restPoll:(name)=>{const poll=async()=>{if(stopFlag)return;for(const s of['BTC-USD','ETH-USD','SOL-USD','BTC-USDT','ETH-USDT','SOL-USDT','BRETT-USDT','PENGU-USDT','WIF-USDT','SUI-USDT','ENA-USDT']){try{const r=await httpsReq(`https://api.btse.com/spot/api/v3.2/trades?symbol=${s}&count=5`);if(Array.isArray(r)&&r.length)addN('BTSE',s,r.length,0);}catch{}}if(!stopFlag)setTimeout(poll,30000);};poll();},
+    restPoll:(name)=>{const poll=async()=>{if(stopFlag)return;for(const s of['BTC-USD','ETH-USD','SOL-USD','BTC-USDT','ETH-USDT','SOL-USDT']){try{const r=await httpsReq(`https://api.btse.com/spot/api/v3.2/trades?symbol=${s}&count=5`);if(Array.isArray(r)&&r.length)addN('BTSE',s,r.length,0);}catch{}try{const t=await httpsReq(`https://api.btse.com/spot/api/v3.2/ticker?symbol=${s}`);const _tD=Array.isArray(t)?t[0]:t;if(_tD?.lastPrice||_tD?.price||_tD?.lowestAsk)addNTicker('BTSE',s);}catch{}}if(!stopFlag)setTimeout(poll,30000);};poll();},  // v9.9.4: +ticker
     onMsg:(msg)=>{if(msg==='pong')return;const d=JSON.parse(msg);if(d.topic?.startsWith('tradeHistoryApi')&&d.data)addN('BTSE',d.topic.replace('tradeHistoryApi:',''),d.data.length,0);if(d.topic?.startsWith('update:')&&d.data)addN('BTSE',d.topic.replace('update:','').replace('_0',''),0,1);},
 
-    extra:[{url:'wss://ws.btse.com/ws/oss/spot',onOpen:ws=>ws.send(JSON.stringify({op:'subscribe',args:['update:BTC-USD_0','update:ETH-USD_0','update:SOL-USD_0','update:BTC-USDT_0','update:ETH-USDT_0','update:SOL-USDT_0','update:BTC-USDC_0','update:ETH-USDC_0','update:SOL-USDC_0','update:BRETT-USDT_0','update:PENGU-USDT_0','update:PENGU-USD_0','update:PENGU-USDC_0','update:POPCAT-USDT_0','update:POPCAT-USD_0','update:POPCAT-USDC_0','update:WIF-USDT_0','update:WIF-USD_0','update:WIF-USDC_0','update:SUI-USDT_0','update:SUI-USD_0','update:SUI-USDC_0','update:ENA-USDT_0','update:ENA-USD_0','update:ENA-USDC_0']}))}]
+    extra:[{url:'wss://ws.btse.com/ws/oss/spot',onOpen:ws=>ws.send(JSON.stringify({op:'subscribe',args:['update:BTC-USD_0','update:ETH-USD_0','update:SOL-USD_0','update:BTC-USDT_0','update:ETH-USDT_0','update:SOL-USDT_0','update:BTC-USDC_0','update:ETH-USDC_0','update:SOL-USDC_0']}))}]
   })},
 
 { name:'Biconomy', tier:3, batch:4, nativeType:'ws', ccxtId:null, ccxtPairs:[],
   startNative:()=>connectWS({ name:'Biconomy',
-    urls:['wss://bei.biconomy.com/ws'],
+    urls:['wss://bei.biconomy.com/ws'],  // v9.9.12: bei. subdomain Cloudflare-blocked; REST fallback via www. added
+    restFallbackUrls:[...['BTC_USDT','ETH_USDT','SOL_USDT'].map(s=>({url:`https://www.biconomy.com/api/v1/depth?symbol=${s}&type=step0`,parse:r=>{if(r?.data?.asks?.length)addN('Biconomy',s,0,1);}})),
+      ...['BTC_USDT','ETH_USDT','SOL_USDT'].map(s=>({url:`https://www.biconomy.com/api/v1/deals?symbol=${s}&size=20`,parse:r=>{const t=r?.data;if(Array.isArray(t)&&t.length)addN('Biconomy',s,t.length,0);}}))],
     pingMsg:JSON.stringify({method:'server.ping',params:[],id:5160}), pingInt:30000, staleTimeout:30000,  // v9.8: force fast reconnect when WS dies
-    onOpen:ws=>{const pairs=['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','SOL_USDC','BRETT_USDT','PENGU_USDT','POPCAT_USDT','WIF_USDT','SUI_USDT','ENA_USDT'];pairs.forEach((p,i)=>{ws.send(JSON.stringify({method:'depth.subscribe',params:[p,5,'0'],id:10+i*2}));ws.send(JSON.stringify({method:'deals.subscribe',params:[p],id:10+i*2+1}));});},
+    onOpen:ws=>{const pairs=['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','SOL_USDC'];pairs.forEach((p,i)=>{ws.send(JSON.stringify({method:'depth.subscribe',params:[p,5,'0'],id:10+i*2}));ws.send(JSON.stringify({method:'deals.subscribe',params:[p],id:10+i*2+1}));});},
     onMsg:(msg)=>{const d=JSON.parse(msg);if(d.method==='depth.update'&&d.params)addN('Biconomy',d.params[2]||'',0,1);if(d.method==='deals.update'&&d.params)addN('Biconomy',d.params[0]||'',d.params[1]?.length||1,0);}
   })},
 
 { name:'Hotcoin', tier:3, batch:4, nativeType:'ws+rest', ccxtId:null, ccxtPairs:[],
   startNative:()=>{
-    runREST('Hotcoin',['btc_usdt','eth_usdt','sol_usdt','brett_usdt','pengu_usdt','popcat_usdt','wif_usdt','sui_usdt','ena_usdt','btc_usdc','eth_usdc','sol_usdc'].flatMap(s=>[
+    runREST('Hotcoin',['btc_usdt','eth_usdt','sol_usdt','btc_usdc','eth_usdc','sol_usdc'].flatMap(s=>[
       {url:`https://api.hotcoinfin.com/v1/market/trade?symbol=${s}&size=10`,parse:r=>{if(Date.now()-(lastMsgTimes['Hotcoin']||0)<15000)return;if(r?.data?.length)addN('Hotcoin',s,r.data.length,0);else if(r?.data?.data?.length)addN('Hotcoin',s,r.data.data.length,0);}},
       {url:`https://api.hotcoinfin.com/v1/market/depth?symbol=${s}&type=step0`,parse:r=>{if(Date.now()-(lastMsgTimes['Hotcoin']||0)<15000)return;if(r?.data?.bids?.length)addN('Hotcoin',s,0,1);}}
     ]),10000);  // v9.9: skip REST poll when WS received data in last 15s
     connectWS({ name:'Hotcoin',
       urls:['wss://wss.hotcoinfin.com/trade/multiple'],
       compression:'gzip',
-      onOpen:ws=>{for(const s of['btc_usdt','eth_usdt','sol_usdt','brett_usdt','pengu_usdt','popcat_usdt','wif_usdt','sui_usdt','ena_usdt','btc_usdc','eth_usdc','sol_usdc']){ws.send(JSON.stringify({sub:`market.${s}.trade.depth`}));ws.send(JSON.stringify({sub:`market.${s}.trade.detail`}));}},
+      onOpen:ws=>{for(const s of['btc_usdt','eth_usdt','sol_usdt','btc_usdc','eth_usdc','sol_usdc']){ws.send(JSON.stringify({sub:`market.${s}.trade.depth`}));ws.send(JSON.stringify({sub:`market.${s}.trade.detail`}));ws.send(JSON.stringify({sub:`market.${s}.detail`,id:s+'_tk'}));}},  // v9.9.4: +24h stats ticker channel
       staleTimeout:60000,
-      onMsg:(msg,ws)=>{try{const d=JSON.parse(msg);if(d.ping!==undefined){ws.send(JSON.stringify({pong:d.ping}));return;}if(!d.ch)return;const sym=d.ch.split('.')[1]||'';if(d.ch.includes('trade.detail')&&d.data)addN('Hotcoin',sym,Array.isArray(d.data)?d.data.length:1,0);if(d.ch.includes('trade.depth')&&d.data)addN('Hotcoin',sym,0,1);}catch{}}
+      onMsg:(msg,ws)=>{try{const d=JSON.parse(msg);if(d.ping!==undefined){ws.send(JSON.stringify({pong:d.ping}));return;}if(!d.ch)return;const sym=d.ch.split('.')[1]||'';if(d.ch.includes('trade.detail')&&d.data)addN('Hotcoin',sym,Array.isArray(d.data)?d.data.length:1,0);if(d.ch.includes('trade.depth')&&d.data)addN('Hotcoin',sym,0,1);if(/^market\.[^.]+\.detail$/.test(d.ch)&&d.tick)addNTicker('Hotcoin',sym);}catch{}}
     });
   }},
 
@@ -1828,30 +1947,31 @@ const EXCHANGES = [
   startNative:()=>connectWS({ name:'NovaEx',
     urls:['wss://wss.woox.io/ws/stream/OqdphuyIYbng-t001'],
     pingMsg:{event:'ping'}, pingInt:9000,
-    onOpen:ws=>{for(const s of['SPOT_BTC_USDT','SPOT_ETH_USDT','SPOT_SOL_USDT','SPOT_BTC_USDC','SPOT_ETH_USDC']){ws.send(JSON.stringify({id:s+'o',event:'subscribe',topic:`${s}@orderbook`}));ws.send(JSON.stringify({id:s+'t',event:'subscribe',topic:`${s}@trade`}));}},
-    onMsg:(msg)=>{const d=JSON.parse(msg);if(d.event==='pong'||d.event==='subscribe')return;const t=d.topic||'';const sym=t.split('@')[0];if(!sym.startsWith('SPOT_'))return;if(t.includes('@trade')&&d.data)addN('NovaEx',sym,1,0);if(t.includes('@orderbook')&&d.data)addN('NovaEx',sym,0,1);}
+    onOpen:ws=>{for(const s of['SPOT_BTC_USDT','SPOT_ETH_USDT','SPOT_SOL_USDT','SPOT_BTC_USDC','SPOT_ETH_USDC']){ws.send(JSON.stringify({id:s+'o',event:'subscribe',topic:`${s}@orderbook`}));ws.send(JSON.stringify({id:s+'t',event:'subscribe',topic:`${s}@trade`}));ws.send(JSON.stringify({id:s+'k',event:'subscribe',topic:`${s}@ticker`}));}},  // v9.9.4: +ticker channel
+    onMsg:(msg)=>{const d=JSON.parse(msg);if(d.event==='pong'||d.event==='subscribe')return;const t=d.topic||'';const sym=t.split('@')[0];if(!sym.startsWith('SPOT_'))return;if(t.includes('@trade')&&d.data)addN('NovaEx',sym,1,0);if(t.includes('@orderbook')&&d.data)addN('NovaEx',sym,0,1);if(t.includes('@ticker')&&d.data)addNTicker('NovaEx',sym);}
   })},
 
 { name:'FameEX', tier:3, batch:4, nativeType:'ws', ccxtId:null, ccxtPairs:[],
   startNative:()=>connectWS({ name:'FameEX',
     urls:['wss://wsapi.fameex.com/v1/ws/stream/public'],
-    onOpen:ws=>{for(const s of['btcusdt','ethusdt','solusdt','btcusdc','ethusdc','solusdc','wifusdt']){ws.send(JSON.stringify({event:'sub',params:{channel:`market_${s}_trade_detail`}}));ws.send(JSON.stringify({event:'sub',params:{channel:`market_${s}_depth_step0`}}));}},
+    onOpen:ws=>{for(const s of['btcusdt','ethusdt','solusdt','btcusdc','ethusdc','solusdc']){ws.send(JSON.stringify({event:'sub',params:{channel:`market_${s}_trade_detail`}}));ws.send(JSON.stringify({event:'sub',params:{channel:`market_${s}_depth_step0`}}));ws.send(JSON.stringify({event:'sub',params:{channel:`market_${s}_ticker`}}));}},  // v9.9.4: +ticker channel
     // v9.7: REST poll DISABLED — api.fameex.com returns 404 on all endpoints (API deprecated/moved); relying on WS only
-    onMsg:(msg,ws)=>{const d=JSON.parse(msg);if(d.ping){ws.send(JSON.stringify({pong:d.ping}));return;}const ch=d.channel||'';if(!ch)return;if(ch.includes('_trade')&&Array.isArray(d.data)){const sym=ch.replace('market_','').replace(/_trade.*$/,'').toUpperCase();addN('FameEX',sym,d.data.length,0);}if(ch.includes('_depth')&&d.tick){const sym=(d.tick.pair||ch.replace('market_','').replace(/_depth.*$/,'')).toUpperCase();addN('FameEX',sym,0,1);}}
+    onMsg:(msg,ws)=>{const d=JSON.parse(msg);if(d.ping){ws.send(JSON.stringify({pong:d.ping}));return;}const ch=d.channel||'';if(!ch)return;if(ch.includes('_trade')&&Array.isArray(d.data)){const sym=ch.replace('market_','').replace(/_trade.*$/,'').toUpperCase();addN('FameEX',sym,d.data.length,0);}if(ch.includes('_depth')&&d.tick){const sym=(d.tick.pair||ch.replace('market_','').replace(/_depth.*$/,'')).toUpperCase();addN('FameEX',sym,0,1);}if(ch.includes('_ticker')&&(d.tick||d.data)){const sym=ch.replace('market_','').replace(/_ticker.*$/,'').toUpperCase();addNTicker('FameEX',sym);}}  // v9.9.5: accept d.data fallback
   })},
 
 { name:'Websea', tier:3, batch:4, nativeType:'ws', ccxtId:null, ccxtPairs:[],
   startNative:()=>connectWS({ name:'Websea',
     urls:['wss://oapi.websea.com/ws/v1/spot/market'],
-    onOpen:ws=>{for(const s of['BTC-USDT','ETH-USDT','SOL-USDT','PENGU-USDT','WIF-USDT','SUI-USDT','ENA-USDT']){ws.send(JSON.stringify({op:'sub',channel:'trade',symbol:s}));ws.send(JSON.stringify({op:'sub',channel:'depth',symbol:s}));}},
-    onMsg:(msg,ws)=>{const d=JSON.parse(msg);if(d.op==='ping'||d.ping){ws.send(JSON.stringify({op:'pong'}));return;}if(d.channel==='trade'&&d.symbol)addN('Websea',d.symbol,1,0);if(d.channel==='depth'&&d.symbol)addN('Websea',d.symbol,0,1);}
+    onOpen:ws=>{for(const s of['BTC-USDT','ETH-USDT','SOL-USDT']){ws.send(JSON.stringify({op:'sub',channel:'trade',symbol:s}));ws.send(JSON.stringify({op:'sub',channel:'depth',symbol:s}));ws.send(JSON.stringify({op:'sub',channel:'ticker',symbol:s}));}},  // v9.9.4: +ticker channel
+    onMsg:(msg,ws)=>{const d=JSON.parse(msg);if(d.op==='ping'||d.ping){ws.send(JSON.stringify({op:'pong'}));return;}if(d.channel==='trade'&&d.symbol)addN('Websea',d.symbol,1,0);if(d.channel==='depth'&&d.symbol)addN('Websea',d.symbol,0,1);if(d.channel==='ticker'&&d.symbol)addNTicker('Websea',d.symbol);}
   })},
 
-{ name:'Bullish', tier:3, batch:4, nativeType:'ws', ccxtId:'bullish', ccxtPairs:['BTC/USDC','ETH/USDC','SOL/USDC','BTC/USDT','ETH/USDT','SOL/USDT','BTC/USD','ETH/USD','SOL/USD','PENGU/USDT','PENGU/USDC','SUI/USDC'],  // v9.8: -WIF/USDC (dead pair)
+{ name:'Bullish', tier:3, batch:4, nativeType:'ws', ccxtId:'bullish', ccxtPairs:['BTC/USDC','ETH/USDC','SOL/USDC','BTC/USDT','ETH/USDT','SOL/USDT'],  // v9.9.9: reduced 12→6 pairs; 294 timeouts from meme/margin pairs → health 70
   startNative:()=>connectWS({ name:'Bullish',
     urls:['wss://api.exchange.bullish.com/trading-api/v1/market-data/trades'],
-    onOpen:ws=>{for(const sym of['BTCUSDC','ETHUSDC','SOLUSDC','BTCUSDT','ETHUSDT','SOLUSDT','BTCUSD','ETHUSD','SOLUSD','PENGUUSDT','PENGUUSDC','SUIUSDC'])ws.send(JSON.stringify({jsonrpc:'2.0',type:'command',method:'subscribe',params:{topic:'anonymousTrades',symbol:sym},id:sym+'_t'}));},
-    restPoll:(name)=>{let _bInt=20000;let _bFail=0;const poll=async()=>{if(stopFlag)return;let _ok=0;for(const s of['BTCUSDC','ETHUSDC','SOLUSDC','BTCUSDT','ETHUSDT','SOLUSDT','BTCUSD','ETHUSD','SOLUSD','PENGUUSDT','PENGUUSDC','SUIUSDC']){try{const r=await httpsReq(`https://api.exchange.bullish.com/trading-api/v1/markets/${s}/orderbook/hybrid`);if(r?.bids?.length||r?.asks?.length){addN('Bullish',s,0,1);_ok++;}}catch{_bFail++;}}if(_ok>0){_bFail=0;_bInt=Math.max(20000,_bInt-5000);}else if(_bFail>0){_bInt=Math.min(60000,_bInt+5000);}if(!stopFlag)setTimeout(poll,_bInt);};poll();},  // v9.9: adaptive OB poll 20-60s (was fixed 45s), backs off on errors
+    // v9.9.5: stagger subs 500ms apart to avoid rate-limit on connect (12 subs × 500ms = 6s total)
+    onOpen:ws=>{const _bsyms=['BTCUSDC','ETHUSDC','SOLUSDC','BTCUSDT','ETHUSDT','SOLUSDT','BTCUSD','ETHUSD','SOLUSD'];_bsyms.forEach((sym,i)=>setTimeout(()=>{if(ws.readyState===1)ws.send(JSON.stringify({jsonrpc:'2.0',type:'command',method:'subscribe',params:{topic:'anonymousTrades',symbol:sym},id:sym+'_t'}));},i*500));},
+    restPoll:(name)=>{let _bInt=20000;let _bFail=0;const poll=async()=>{if(stopFlag)return;let _ok=0;for(const s of['BTCUSDC','ETHUSDC','SOLUSDC','BTCUSDT','ETHUSDT','SOLUSDT','BTCUSD','ETHUSD','SOLUSD']){try{const r=await httpsReq(`https://api.exchange.bullish.com/trading-api/v1/markets/${s}/orderbook/hybrid`);if(r?.bids?.length||r?.asks?.length){addN('Bullish',s,0,1);_ok++;}}catch{_bFail++;}}if(_ok>0){_bFail=0;_bInt=Math.max(20000,_bInt-5000);}else if(_bFail>0){_bInt=Math.min(60000,_bInt+5000);}if(!stopFlag)setTimeout(poll,_bInt);};poll();},  // v9.9: adaptive OB poll 20-60s (was fixed 45s), backs off on errors
     onMsg:(msg,ws)=>{const d=JSON.parse(msg);if(d.type==='ping'){ws.send(JSON.stringify({type:'pong',id:d.id||'pong'}));return;}if(d.data?.trades&&d.data.symbol)addN('Bullish',d.data.symbol,d.data.trades.length,0);}
   })},
 
@@ -1859,21 +1979,25 @@ const EXCHANGES = [
   startNative:()=>connectWS({ name:'Darkex',
     urls:['wss://ws.darkex.com/kline-api/ws'],
     compression:'gzip',
-    onOpen:ws=>{for(const s of['btcusdt','ethusdt','popcatusdt','wifusdt','suiusdt']){ws.send(JSON.stringify({event:'sub',params:{channel:`market_${s}_depth_step0`}}));ws.send(JSON.stringify({event:'sub',params:{channel:`market_${s}_trade_ticker`}}));}},
+    restFallbackUrls:['btcusdt','ethusdt'].flatMap(s=>[  // v9.9.14: WS-stale REST fallback (was missing entirely)
+      {url:`https://api.darkex.com/open/api/get_trades?symbol=${s}`,parse:r=>{const t=r?.data;if(Array.isArray(t)&&t.length)addN('Darkex',s.toUpperCase(),t.length,0);}},
+      {url:`https://api.darkex.com/open/api/market_dept?symbol=${s}&type=step0`,parse:r=>{if(r?.data?.tick?.bids?.length||r?.data?.bids?.length)addN('Darkex',s.toUpperCase(),0,1);}}]),
+    onOpen:ws=>{for(const s of['btcusdt','ethusdt']){ws.send(JSON.stringify({event:'sub',params:{channel:`market_${s}_depth_step0`}}));ws.send(JSON.stringify({event:'sub',params:{channel:`market_${s}_trade_ticker`}}));ws.send(JSON.stringify({event:'sub',params:{channel:`market_${s}_detail`}}));}},  // v9.9.4: +24h ticker
     staleTimeout:60000,
-    onMsg:(msg,ws)=>{const d=JSON.parse(msg);if(d.ping!==undefined){ws.send(JSON.stringify({pong:d.ping}));return;}if(!d.channel||!d.tick)return;const m=d.channel.match(/market_(\w+?)_(depth|trade)/);if(!m)return;const sym=m[1].toUpperCase();if(d.channel.includes('_depth_'))addN('Darkex',sym,0,1);if(d.channel.includes('_trade_')&&d.tick.data)addN('Darkex',sym,d.tick.data.length,0);}
+    // v9.9.5: move !d.tick guard after _detail (ticker) handler so detail msgs without tick still fire
+    onMsg:(msg,ws)=>{const d=JSON.parse(msg);if(d.ping!==undefined){ws.send(JSON.stringify({pong:d.ping}));return;}if(!d.channel)return;const mk=d.channel.match(/market_(\w+?)_detail$/);if(mk){addNTicker('Darkex',mk[1].toUpperCase());return;}if(!d.tick)return;const m=d.channel.match(/market_(\w+?)_(depth|trade)/);if(!m)return;const sym=m[1].toUpperCase();if(d.channel.includes('_depth_'))addN('Darkex',sym,0,1);if(d.channel.includes('_trade_')&&d.tick.data)addN('Darkex',sym,d.tick.data.length,0);}
   })},
 
-{ name:'Bitrue', tier:3, batch:4, nativeType:'ws', ccxtId:'bitrue', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC','BRETT/USDT','PENGU/USDT','PENGU/USDC','POPCAT/USDT','WIF/USDT','WIF/USDC','SUI/USDT','SUI/USDC','ENA/USDT','ENA/USDC'],
+{ name:'Bitrue', tier:3, batch:4, nativeType:'ws', ccxtId:'bitrue', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC'],  // v9.9.8: reduced from 16→4 pairs; 272 timeouts from low-volume pairs → health 70
   startNative:()=>connectWS({ name:'Bitrue',
     urls:['wss://ws.bitrue.com/market/ws','wss://wsapi.bitrue.com/kline-api/ws'],
     compression:'gzip',
-    onOpen:ws=>{for(const sym of['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC','BRETTUSDT','PENGUUSDT','POPCATUSDT','WIFUSDT','SUIUSDT','ENAUSDT'])ws.send(JSON.stringify({event:'sub',params:{cb_id:sym,channel:`market_${sym}_depth_step0`}}));},
-    restPoll:(name)=>{const poll=async()=>{if(stopFlag)return;for(const s of['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC','BRETTUSDT','PENGUUSDT','POPCATUSDT','WIFUSDT','SUIUSDT','ENAUSDT']){try{const r=await httpsReq(`https://openapi.bitrue.com/api/v1/trades?symbol=${s}&limit=5`);if(Array.isArray(r))addN('Bitrue',s,r.length,0);}catch{}}if(!stopFlag)setTimeout(poll,5000);};poll();},  // v9.9: 5s trade poll
+    onOpen:ws=>{for(const sym of['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC'])ws.send(JSON.stringify({event:'sub',params:{cb_id:sym,channel:`market_${sym}_depth_step0`}}));},
+    restPoll:(name)=>{const poll=async()=>{if(stopFlag)return;for(const s of['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC','SOLUSDC']){try{const r=await httpsReq(`https://openapi.bitrue.com/api/v1/trades?symbol=${s}&limit=5`);if(Array.isArray(r))addN('Bitrue',s,r.length,0);}catch{}}if(!stopFlag)setTimeout(poll,5000);};poll();},  // v9.9: 5s trade poll
     onMsg:(msg,ws)=>{const d=JSON.parse(msg);if(d.event==='ping'){ws.send(JSON.stringify({event:'pong'}));return;}if(d.channel?.includes('depth')&&d.tick){const sym=d.channel.replace('market_','').replace('_depth_step0','');addN('Bitrue',sym,0,1);}}
   })},
 
-{ name:'BloFin', tier:3, batch:4, nativeType:'ws', ccxtId:'blofin', ccxtPairs:['BTC/USDT:USDT','ETH/USDT:USDT','SOL/USDT:USDT','BTC/USDC:USDC','SOL/USDC:USDC','BTC/USD:USD','ETH/USD:USD','SOL/USD:USD'],  // removed ETH/USDC:USDC (CCXT not found, v9.4)
+{ name:'BloFin', tier:3, batch:4, nativeType:'ws', ccxtId:'blofin', skipPro:true, ccxtPairs:['BTC/USDT:USDT','ETH/USDT:USDT','SOL/USDT:USDT','BTC/USDC:USDC','SOL/USDC:USDC','BTC/USD:USD','ETH/USD:USD','SOL/USD:USD'],  // v9.9.9: skipPro — Pro=54 msgs vs 244 timeouts; native=13,419 dominates completely
   startNative:()=>connectWS({ name:'BloFin',
     urls:['wss://openapi.blofin.com/ws/public'],
     pingMsg:'ping', pingInt:25000,
@@ -1882,29 +2006,29 @@ const EXCHANGES = [
   })},
 
 // ═══ BATCH 5: REST + REMAINING ═══
-{ name:'DigiFinex', tier:3, batch:5, nativeType:'ws', ccxtId:'digifinex', skipPro:true, ccxtPairs:['BTC/USDT','BTC/USDC','ETH/USDT','ETH/USDC','SOL/USDT','BRETT/USDT'],
+{ name:'DigiFinex', tier:3, batch:5, nativeType:'ws', ccxtId:'digifinex', skipPro:true, ccxtPairs:['BTC/USDT','BTC/USDC','ETH/USDT','ETH/USDC'],  // v9.9.19: removed SOL/USDT (not listed on DigiFinex)
   startNative:()=>connectWS({ name:'DigiFinex',
     urls:['wss://openapi.digifinex.com/ws/v1/'],
     compression:'inflate',
     customPing:ws=>ws.send(JSON.stringify({id:0,method:'server.ping',params:[]})), customPingInt:30000,
-    onOpen:ws=>{ws.send(JSON.stringify({id:1,method:'trades.subscribe',params:['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','SOL_USDC','BRETT_USDT']}));ws.send(JSON.stringify({id:2,method:'depth.subscribe',params:['BTC_USDT',5,'0']}));},
+    onOpen:ws=>{ws.send(JSON.stringify({id:1,method:'trades.subscribe',params:['BTC_USDT','ETH_USDT','BTC_USDC','ETH_USDC']}));ws.send(JSON.stringify({id:2,method:'depth.subscribe',params:['BTC_USDT',5,'0']}));},
     onMsg:(msg)=>{const d=JSON.parse(msg);if(d.method==='trades.update'&&d.params)addN('DigiFinex',d.params[2]||'',d.params[1]?.length||1,0);if(d.method==='depth.update'&&d.params)addN('DigiFinex',d.params[2]||'',0,1);},
-    extra:['ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','SOL_USDC','BRETT_USDT'].map((p,i)=>({onOpen:ws=>ws.send(JSON.stringify({id:i+3,method:'depth.subscribe',params:[p,5,'0']}))}))
+    extra:['ETH_USDT','BTC_USDC','ETH_USDC'].map((p,i)=>({onOpen:ws=>ws.send(JSON.stringify({id:i+3,method:'depth.subscribe',params:[p,5,'0']}))}))
   })},
 
-{ name:'EXMO', tier:3, batch:5, nativeType:'ws', ccxtId:'exmo', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC','BTC/USD','ETH/USD','PENGU/USDT','PENGU/USDC','WIF/USDT','WIF/USDC','SUI/USDT','SUI/USDC','ENA/USDT','ENA/USDC'],
+{ name:'EXMO', tier:3, batch:5, nativeType:'ws', ccxtId:'exmo', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC','BTC/USD','ETH/USD'],  // v9.9.9: reduced 16→8 pairs; 168 timeouts from meme pairs → health 70 (Pro still wins 2.3× with fewer pairs)
   startNative:()=>connectWS({ name:'EXMO',
     urls:['wss://ws-api.exmo.com/v1/public','wss://ws-api.exmo.me/v1/public','wss://ws-api.exmo.io/v1/public'],
     pingMsg:{method:'ping',id:99}, pingInt:20000,
     staleTimeout:45000,
-    onOpen:ws=>ws.send(JSON.stringify({method:'subscribe',topics:['spot/trades:BTC_USDT','spot/trades:ETH_USDT','spot/trades:SOL_USDT','spot/trades:BTC_USDC','spot/trades:ETH_USDC','spot/trades:SOL_USDC','spot/trades:BTC_USD','spot/trades:ETH_USD','spot/trades:BTC_DAI','spot/order_book_snapshots:BTC_USDT','spot/order_book_snapshots:ETH_USDT','spot/order_book_snapshots:SOL_USDT','spot/order_book_snapshots:BTC_USDC','spot/order_book_snapshots:ETH_USDC','spot/order_book_snapshots:SOL_USDC','spot/order_book_snapshots:BTC_USD','spot/order_book_snapshots:ETH_USD','spot/order_book_snapshots:BTC_DAI','spot/trades:PENGU_USDT','spot/trades:PENGU_USDC','spot/trades:WIF_USDT','spot/trades:WIF_USDC','spot/trades:SUI_USDT','spot/trades:SUI_USDC','spot/trades:ENA_USDT','spot/trades:ENA_USDC','spot/order_book_snapshots:PENGU_USDT','spot/order_book_snapshots:PENGU_USDC','spot/order_book_snapshots:WIF_USDT','spot/order_book_snapshots:WIF_USDC','spot/order_book_snapshots:SUI_USDT','spot/order_book_snapshots:SUI_USDC','spot/order_book_snapshots:ENA_USDT','spot/order_book_snapshots:ENA_USDC']})),
-    onMsg:(msg)=>{const d=JSON.parse(msg);if(d.event!=='update'&&d.event!=='snapshot')return;const t=d.topic||'';const data=d.data||{};if(t.includes('trades')){const sym=t.split(':')[1];const trades=Array.isArray(data)?data:(data.trades||[]);addN('EXMO',sym,trades.length,0);}if(t.includes('order_book')&&(data.bid||data.ask)){const sym=t.split(':')[1];addN('EXMO',sym,0,1);}}
+    onOpen:ws=>ws.send(JSON.stringify({method:'subscribe',topics:['spot/trades:BTC_USDT','spot/trades:ETH_USDT','spot/trades:SOL_USDT','spot/trades:BTC_USDC','spot/trades:ETH_USDC','spot/trades:SOL_USDC','spot/trades:BTC_USD','spot/trades:ETH_USD','spot/trades:BTC_DAI','spot/order_book_snapshots:BTC_USDT','spot/order_book_snapshots:ETH_USDT','spot/order_book_snapshots:SOL_USDT','spot/order_book_snapshots:BTC_USDC','spot/order_book_snapshots:ETH_USDC','spot/order_book_snapshots:SOL_USDC','spot/order_book_snapshots:BTC_USD','spot/order_book_snapshots:ETH_USD','spot/order_book_snapshots:BTC_DAI']})),
+    onMsg:(msg)=>{const d=JSON.parse(msg);if(d.event!=='update'&&d.event!=='snapshot')return;const t=d.topic||'';const data=d.data||{};if(t.includes('trades')){const sym=t.split(':')[1];const trades=Array.isArray(data)?data:(data.trades||[]);addN('EXMO',sym,trades.length,0);}if(t.includes('order_book')&&(data.bid||data.ask)){const sym=t.split(':')[1];const k='EX:'+sym;const now=Date.now();if(!_nativeOBThrottle[k]||now-_nativeOBThrottle[k]>=2000){_nativeOBThrottle[k]=now;addN('EXMO',sym,0,1);}}}
   })},
 
-{ name:'CEX.IO', tier:3, batch:5, nativeType:'rest', ccxtId:'cex', skipPro:true, ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC','BTC/USD','ETH/USD','SOL/USD','BRETT/USDT','BRETT/USDC','BRETT/USD','PENGU/USDT','PENGU/USD','POPCAT/USDT','POPCAT/USD','WIF/USDT','WIF/USDC','WIF/USD','SUI/USDT','SUI/USDC','SUI/USD','ENA/USDT','ENA/USDC','ENA/USD'],
+{ name:'CEX.IO', tier:3, batch:5, nativeType:'rest', ccxtId:'cex', skipPro:true, ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BTC/USDC','ETH/USDC','SOL/USDC','BTC/USD','ETH/USD','SOL/USD'],
   startNative:()=>{
     // v9.9: throttled polling — CEX.IO rate limit ~10 req/s; 50 URLs × 100ms stagger = 5s round, fits 8s cycle
-    const _cexPairs=[['BTC','USDT'],['ETH','USDT'],['SOL','USDT'],['BTC','USDC'],['ETH','USDC'],['SOL','USDC'],['BTC','USD'],['ETH','USD'],['SOL','USD'],['BRETT','USDT'],['BRETT','USDC'],['BRETT','USD'],['PENGU','USDT'],['PENGU','USD'],['POPCAT','USDT'],['POPCAT','USD'],['WIF','USDT'],['WIF','USDC'],['WIF','USD'],['SUI','USDT'],['SUI','USDC'],['SUI','USD'],['ENA','USDT'],['ENA','USDC'],['ENA','USD']];
+    const _cexPairs=[['BTC','USDT'],['ETH','USDT'],['SOL','USDT'],['BTC','USDC'],['ETH','USDC'],['SOL','USDC'],['BTC','USD'],['ETH','USD'],['SOL','USD']];
     const _cexFetches=_cexPairs.flatMap(([b,q])=>[
       {url:`https://cex.io/api/trade_history/${b}/${q}/`,parse:r=>{if(Array.isArray(r))addN('CEX.IO',`${b}_${q}`,Math.min(r.length,20),0);}},
       {url:`https://cex.io/api/order_book/${b}/${q}/?depth=5`,parse:r=>{if(r?.bids?.length)addN('CEX.IO',`${b}_${q}`,0,1);}}
@@ -1916,34 +2040,38 @@ const EXCHANGES = [
 { name:'OrangeX', tier:3, batch:5, nativeType:'rest', ccxtId:null, ccxtPairs:[],
   startNative:()=>runREST('OrangeX',['BTC-USDT','ETH-USDT','SOL-USDT','BTC-USDC','ETH-USDC'].flatMap(sym=>[
     {url:`https://api.orangex.com/api/v1/public/get_last_trades_by_instrument?instrument_name=${sym}-SPOT&count=5`,parse:r=>{if(r?.result?.trades)addN('OrangeX',sym,r.result.trades.length,0);}},
-    {url:`https://api.orangex.com/api/v1/public/get_order_book?instrument_name=${sym}-SPOT&depth=5`,parse:r=>{if(r?.result?.bids)addN('OrangeX',sym,0,1);}}
+    {url:`https://api.orangex.com/api/v1/public/get_order_book?instrument_name=${sym}-SPOT&depth=5`,parse:r=>{if(r?.result?.bids)addN('OrangeX',sym,0,1);}},
+    {url:`https://api.orangex.com/api/v1/public/get_ticker?instrument_name=${sym}-SPOT`,parse:r=>{if(r?.result?.best_bid_price||r?.result?.last_price)addNTicker('OrangeX',sym);}}  // v9.9.4: ticker
   ]))},
 
 { name:'Azbit', tier:3, batch:5, nativeType:'rest', ccxtId:null, ccxtPairs:[],
-  startNative:()=>runREST('Azbit',['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','SOL_USDC','PENGU_USDT','WIF_USDT'].flatMap(sym=>[  // v9.8: -BRETT_USDT,-POPCAT_USDT,-SUI_USDT,-ENA_USDT (dead pairs)
+  startNative:()=>runREST('Azbit',['BTC_USDT','ETH_USDT','SOL_USDT','BTC_USDC','ETH_USDC','SOL_USDC'].flatMap(sym=>[  // v9.8: -BRETT_USDT,-POPCAT_USDT,-SUI_USDT,-ENA_USDT (dead pairs)
     {url:`https://data.azbit.com/api/deals?currencyPairCode=${sym}`,parse:r=>{if(Array.isArray(r))addN('Azbit',sym,Math.min(r.length,5),0);}},
-    {url:`https://data.azbit.com/api/orderbook?currencyPairCode=${sym}`,parse:r=>{if(Array.isArray(r)&&r.length)addN('Azbit',sym,0,1);}}
-  ]))},
+    {url:`https://data.azbit.com/api/orderbook?currencyPairCode=${sym}`,parse:r=>{if(Array.isArray(r)&&r.length)addN('Azbit',sym,0,1);}},
+    {url:`https://data.azbit.com/api/ticker?currencyPairCode=${sym}`,parse:r=>{if(r?.last||r?.price||r?.volume)addNTicker('Azbit',sym);}}  // v9.9.4: ticker
+  ]), 30000)},  // v9.9.5: 30s poll (low-volume — reduces API load vs default 8s)
 
 { name:'BVOX', tier:3, batch:5, nativeType:'rest', ccxtId:null, ccxtPairs:[],
   startNative:()=>runREST('BVOX',['BTCUSDT','ETHUSDT','SOLUSDT'].flatMap(sym=>[
     {url:`https://api.bitvenus.me/openapi/quote/v1/trades?symbol=${sym}&limit=5`,parse:r=>{if(Array.isArray(r))addN('BVOX',sym,r.length,0);}},
-    {url:`https://api.bitvenus.me/openapi/quote/v1/depth?symbol=${sym}&limit=5`,parse:r=>{if(r?.bids?.length)addN('BVOX',sym,0,1);}}
-  ]))},
+    {url:`https://api.bitvenus.me/openapi/quote/v1/depth?symbol=${sym}&limit=5`,parse:r=>{if(r?.bids?.length)addN('BVOX',sym,0,1);}},
+    {url:`https://api.bitvenus.me/openapi/quote/v1/ticker?symbol=${sym}`,parse:r=>{if(r?.symbol||r?.price||r?.data?.price)addNTicker('BVOX',sym);}}  // v9.9.4: ticker
+  ]), 30000)},  // v9.9.5: 30s poll (low-volume)
 
 { name:'Trubit Pro', tier:3, batch:5, nativeType:'rest', ccxtId:null, ccxtPairs:[],
   startNative:()=>runREST('Trubit Pro',['BTCUSDT','ETHUSDT','SOLUSDT','BTCUSDC','ETHUSDC'].flatMap(sym=>[
     {url:`https://api-spot.trubit.com/openapi/quote/v1/trades?symbol=${sym}&limit=5`,parse:r=>{if(Array.isArray(r))addN('Trubit Pro',sym,r.length,0);}},
-    {url:`https://api-spot.trubit.com/openapi/quote/v1/depth?symbol=${sym}&limit=5`,parse:r=>{if(r?.bids?.length)addN('Trubit Pro',sym,0,1);}}
-  ]))},
+    {url:`https://api-spot.trubit.com/openapi/quote/v1/depth?symbol=${sym}&limit=5`,parse:r=>{if(r?.bids?.length)addN('Trubit Pro',sym,0,1);}},
+    {url:`https://api-spot.trubit.com/openapi/quote/v1/ticker?symbol=${sym}`,parse:r=>{if(r?.symbol||r?.price||r?.data)addNTicker('Trubit Pro',sym);}}  // v9.9.4: ticker
+  ]), 30000)},  // v9.9.5: 30s poll (low-volume)
 
-{ name:'BigONE', tier:3, batch:5, nativeType:'rest', ccxtId:'bigone', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','PENGU/USDT','WIF/USDT','SUI/USDT','ENA/USDT'],
-  startNative:()=>runREST('BigONE',['BTC-USDT','ETH-USDT','SOL-USDT','PENGU-USDT','WIF-USDT','SUI-USDT','ENA-USDT'].flatMap(sym=>[
+{ name:'BigONE', tier:3, batch:5, nativeType:'rest', ccxtId:'bigone', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT'],
+  startNative:()=>runREST('BigONE',['BTC-USDT','ETH-USDT','SOL-USDT'].flatMap(sym=>[
     {url:`https://big.one/api/v3/asset_pairs/${sym}/trades`,parse:r=>{if(r?.data?.length)addN('BigONE',sym,r.data.length,0);}},
     {url:`https://big.one/api/v3/asset_pairs/${sym}/depth`,parse:r=>{if(r?.data?.bids?.length)addN('BigONE',sym,0,1);}}
   ]))},
 
-{ name:'LATOKEN', tier:3, batch:5, nativeType:'rest', ccxtId:'latoken', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT','BRETT/USDT','PENGU/USDT','POPCAT/USDT','ENA/USDT'],  // v9.8: -WIF/USDT,-SUI/USDT (dead pairs)
+{ name:'LATOKEN', tier:3, batch:5, nativeType:'rest', ccxtId:'latoken', ccxtPairs:['BTC/USDT','ETH/USDT','SOL/USDT'],  // v9.8: -WIF/USDT,-SUI/USDT (dead pairs)
   startNative:()=>runREST('LATOKEN',[
     ['4f4a4e5e-7192-4e7e-9f78-d8f6e07c0001','0c3a106d-bde3-4c13-a26e-3fd2394529e5','BTC_USDT'],
     ['620f2019-33c0-423b-8a9d-cde4d7f8ef7f','0c3a106d-bde3-4c13-a26e-3fd2394529e5','ETH_USDT'],
@@ -1961,14 +2089,15 @@ const EXCHANGES = [
 { name:'Coinstore', tier:3, batch:6, nativeType:'ws', ccxtId:null, ccxtPairs:[],
   startNative:()=>connectWS({ name:'Coinstore',
     urls:['wss://ws.coinstore.com/s/ws'],
-    restFallbackUrls:['BTCUSDT','ETHUSDT','SOLUSDT','PENGUUSDT','WIFUSDT','SUIUSDT','ENAUSDT'].map(s=>({
+    restFallbackUrls:['BTCUSDT','ETHUSDT','SOLUSDT'].map(s=>({
       url:`https://api.coinstore.com/api/v1/market/trade/${s}?size=5`,
       parse:r=>{if(r?.data&&Array.isArray(r.data))addN('Coinstore',s,r.data.length,0);}
     })),
     onOpen:ws=>{
-      const pairs=['btcusdt','ethusdt','solusdt','btcusdc','ethusdc','solusdc','penguusdt','wifusdt','suiusdt','enausdt'];
+      const pairs=['btcusdt','ethusdt','solusdt','btcusdc','ethusdc','solusdc'];
       ws.send(JSON.stringify({op:'SUB',channel:pairs.map(s=>`${s}@trade`),id:1}));
       ws.send(JSON.stringify({op:'SUB',channel:pairs.map(s=>`${s}@depth@20`),id:2}));
+      ws.send(JSON.stringify({op:'SUB',channel:pairs.map(s=>`${s}@ticker`),id:3}));  // v9.9.4: add ticker stream
     },
     onMsg:(msg,ws)=>{
       const d=JSON.parse(msg);
@@ -1976,26 +2105,28 @@ const EXCHANGES = [
       if(d.T==='trade'&&d.symbol){addN('Coinstore',d.symbol,1,0,String(d.tradeId||d.seq||''));return;}
       if(d.T==='trade'&&d.data&&Array.isArray(d.data)){for(const t of d.data)addN('Coinstore',t.symbol,1,0,String(t.tradeId||''));return;}
       if((d.T==='depth'||d.level!==undefined)&&(d.b||d.a)){addN('Coinstore',d.symbol||'',0,1);return;}
+      if(d.T==='ticker'&&d.symbol){addNTicker('Coinstore',d.symbol);return;}  // v9.9.4: handle ticker
       if(d.ping!==undefined||d.action==='ping')ws.send(JSON.stringify({op:'pong',epochMillis:Date.now()}));
     }
   })},
 
 { name:'GroveX', tier:3, batch:6, nativeType:'ws', ccxtId:null, ccxtPairs:[],
   startNative:()=>connectWS({ name:'GroveX',
-    urls:['wss://ws.grovex.io/kline-api/ws','wss://openapi.grovex.io/kline-api/ws'],
+    urls:['wss://ws.grovex.io/kline-api/ws'],  // v9.9.19: removed openapi.grovex.io (404)
     compression:'gzip',
-    restFallbackUrls:[{url:'https://openapi.grovex.io/open/api/market_dept?symbol=btcusdt&type=step0',
-      parse:r=>{if(r?.data?.tick?.asks)addN('GroveX','BTCUSDT',0,1);}}],
+    restFallbackUrls:['BTCUSDT'],
     onOpen:ws=>{
-      for(const s of['btcusdt','ethusdt','solusdt','btcusdc','ethusdc','solusdc','brettusdt','penguusdt','popcatusdt','wifusdt','suiusdt','enausdt']){
+      for(const s of['btcusdt','ethusdt','solusdt','btcusdc','ethusdc','solusdc']){
         ws.send(JSON.stringify({event:'sub',params:{channel:`market_${s}_depth_step0`,cb_id:s+'d',asks:150,bids:150}}));
         ws.send(JSON.stringify({event:'sub',params:{channel:`market_${s}_trade_ticker`,cb_id:s+'t'}}));
+        ws.send(JSON.stringify({event:'sub',params:{channel:`market_${s}_detail`,cb_id:s+'_tk'}}));  // v9.9.4: 24h stats ticker
       }
     },
     onMsg:(msg,ws)=>{
       const d=JSON.parse(msg);
       if(d.ping!==undefined){ws.send(JSON.stringify({pong:d.ping}));return;}
       if(d.pong!==undefined||!d.channel||!d.tick)return;
+      const mk=d.channel.match(/market_(\w+?)_detail$/);if(mk){addNTicker('GroveX',mk[1].toUpperCase());return;}  // v9.9.4: ticker (before depth/trade regex)
       const m=d.channel.match(/market_(\w+?)_(depth|trade)/);
       if(!m)return;
       const sym=m[1].toUpperCase();
@@ -2006,36 +2137,43 @@ const EXCHANGES = [
 
 { name:'CoinW', tier:3, batch:6, nativeType:'rest', ccxtId:null, ccxtPairs:[],
   startNative:()=>{
-    const pm={btc_usdt:'BTC_USDT',eth_usdt:'ETH_USDT',sol_usdt:'SOL_USDT',btc_usdc:'BTC_USDC',eth_usdc:'ETH_USDC',sol_usdc:'SOL_USDC',brett_usdt:'BRETT_USDT',pengu_usdt:'PENGU_USDT',popcat_usdt:'POPCAT_USDT',wif_usdt:'WIF_USDT',sui_usdt:'SUI_USDT',ena_usdt:'ENA_USDT'};
+    const pm={btc_usdt:'BTC_USDT',eth_usdt:'ETH_USDT',sol_usdt:'SOL_USDT',btc_usdc:'BTC_USDC',eth_usdc:'ETH_USDC',sol_usdc:'SOL_USDC'};
     runREST('CoinW',Object.keys(pm).flatMap(sym=>[
       {url:`https://api.coinw.com/api/v1/public?command=returnTradeHistory&symbol=${sym}`,
        parse:r=>{if(r?.code==='200'&&Array.isArray(r?.data))addN('CoinW',pm[sym],Math.min(r.data.length,10),0);}},
       {url:`https://api.coinw.com/api/v1/public?command=returnOrderBook&symbol=${sym}`,
-       parse:r=>{if(r?.code==='200'&&r?.data&&(r.data.bids||r.data.asks))addN('CoinW',pm[sym],0,1);}}
-    ]),8000);
+       parse:r=>{if(r?.code==='200'&&r?.data&&(r.data.bids||r.data.asks))addN('CoinW',pm[sym],0,1);}},
+      {url:`https://api.coinw.com/api/v1/public?command=returnTicker&symbol=${sym}`,
+       parse:r=>{if(r?.code==='200'&&r?.data)addNTicker('CoinW',pm[sym]);}}  // v9.9.4: ticker
+    ]), 30000);  // v9.9.5: 30s poll (low-volume)
   }},
 
 { name:'Batonex', tier:3, batch:6, nativeType:'rest', ccxtId:null, ccxtPairs:[],
-  startNative:()=>runREST('Batonex',['BTCUSDT','ETHUSDT','SOLUSDT','WIFUSDT'].flatMap(sym=>[  // +WIF confirmed live; BRETT/PENGU/POPCAT/SUI/ENA not listed (exchange has only 32 pairs)
+  startNative:()=>runREST('Batonex',['BTCUSDT','ETHUSDT','SOLUSDT'].flatMap(sym=>[  // +WIF confirmed live; BRETT/PENGU/POPCAT/SUI/ENA not listed (exchange has only 32 pairs)
     {url:`https://api.batonex.com/openapi/quote/v1/trades?symbol=${sym}&limit=5`,
      parse:r=>{if(Array.isArray(r))addN('Batonex',sym,r.length,0);}},
     {url:`https://api.batonex.com/openapi/quote/v1/depth?symbol=${sym}&limit=5`,
-     parse:r=>{if(r?.bids?.length)addN('Batonex',sym,0,1);}}
-  ]))},
+     parse:r=>{if(r?.bids?.length)addN('Batonex',sym,0,1);}},
+    {url:`https://api.batonex.com/openapi/quote/v1/ticker?symbol=${sym}`,
+     parse:r=>{if(r?.symbol||r?.price||r?.data)addNTicker('Batonex',sym);}}  // v9.9.4: ticker
+  ]), 30000)},  // v9.9.5: 30s poll (low-volume)
 
 { name:'CEEX', tier:3, batch:6, nativeType:'ws', ccxtId:null, ccxtPairs:[],
   startNative:()=>connectWS({ name:'CEEX',
     urls:['wss://wsapi.ceex.com/openapi/quote/ws/v1'],
-    restFallbackUrls:['BTCUSDT','ETHUSDT','SOLUSDT','WIFUSDT','SUIUSDT','ENAUSDT'].flatMap(s=>[
+    restFallbackUrls:['BTCUSDT','ETHUSDT','SOLUSDT'].flatMap(s=>[
       {url:`https://api.ceex.com/openapi/quote/v1/trades?symbol=${s}&limit=5`,
        parse:r=>{if(Array.isArray(r))addN('CEEX',s,r.length,0);}},
       {url:`https://api.ceex.com/openapi/quote/v1/depth?symbol=${s}&limit=10`,
-       parse:r=>{if(r?.bids?.length)addN('CEEX',s,0,1);}}
+       parse:r=>{if(r?.bids?.length)addN('CEEX',s,0,1);}},
+      {url:`https://api.ceex.com/openapi/quote/v1/ticker?symbol=${s}`,
+       parse:r=>{if(r?.price||r?.last||r?.symbol)addNTicker('CEEX',s);}}  // v9.9.4: ticker fallback
     ]),
     onOpen:ws=>{
-      for(const s of['BTCUSDT','ETHUSDT','SOLUSDT','WIFUSDT','SUIUSDT','ENAUSDT']){
+      for(const s of['BTCUSDT','ETHUSDT','SOLUSDT']){
         ws.send(JSON.stringify({symbol:s,topic:'depth',event:'sub'}));
         ws.send(JSON.stringify({symbol:s,topic:'trade',event:'sub'}));
+        ws.send(JSON.stringify({symbol:s,topic:'ticker',event:'sub'}));  // v9.9.4: +ticker
       }
     },
     onMsg:(msg,ws)=>{
@@ -2050,9 +2188,9 @@ const EXCHANGES = [
         for(const t of d.data)addN('CEEX',d.symbol||'',1,0,String(t.v||''));
         return;
       }
+      if(d.topic==='ticker'&&d.symbol){addNTicker('CEEX',d.symbol);return;}  // v9.9.4
     }
-  })},
-];
+  })}];
 
 // ═══════════════════ REPORT GENERATOR (v9.5 — Full Architecture + Streaming Detail) ═══════════════════
 function generateReport() {
@@ -2062,11 +2200,12 @@ function generateReport() {
     r += `**Date:** ${new Date().toISOString().split('T')[0]}\n`;
     r += `**Test Duration:** ${MINUTES} minutes (${data.uptime}s actual)\n`;
     r += `**Exchanges Tested:** ${Object.keys(data.exchanges).length}\n`;
-    r += `**Pairs Tested:** BTC/ETH/SOL/BRETT/PENGU/POPCAT/WIF/SUI/ENA × USDT/USDC/USD (all available per exchange)\n`;
+    r += `**Pairs Tested:** BTC/ETH/SOL × USDT/USDC/USD (all available per exchange)\n`;
     r += `**Method:** v9.5 Enhanced — 4 parallel methods + Subscription Manager: Native WS/REST, CCXT Pro, CCXT REST, Direct REST\n`;
     r += `**Storage:** DuckDB ${duckEnabled ? '✅ enabled' : '❌ disabled'}\n`;
     r += `**Health:** Avg Score ${data.healthSummary.avgScore}/100 | ${data.healthSummary.critical.length} critical | ${data.healthSummary.warnings.length} warnings\n`;
-    r += `**Dashboard:** http://localhost:${HTTP_PORT} (9 tabs: Hybrid Flow, Per Exchange, Per Pair, Dedup Analysis, Analytics, Correlation, Health, Sub Manager, Live Events)\n\n`;
+    r += `**Dashboard:** http://localhost:${HTTP_PORT} (9 tabs: Hybrid Flow, Per Exchange, Per Pair, Dedup Analysis, Analytics, Correlation, Health, Sub Manager, Live Events)\n`;
+    r += `**v9.9.22:** Stripped to BTC/ETH/SOL only — removed BRETT/PENGU/POPCAT/WIF/SUI/ENA + OB throttle fixes (Kraken/Bitfinex/HitBTC/KuCoin/EXMO)\n\n`;
 
     // ═══════════════════════════════════════════════════════
     // DETAILED ARCHITECTURE EXPLANATION
@@ -2191,8 +2330,8 @@ function generateReport() {
         'Bitfinex':     { type:'ws', ccxt:'bitfinex', ws:'api-pub.bitfinex.com/ws/2', comp:'none', ping:'{event:ping} 25s', failover:2 },
         'Gate.io':      { type:'ws', ccxt:'gateio', ws:'api.gateio.ws/ws/v4/', comp:'none', ping:'{channel:spot.ping} 15s', failover:3 },
         'HTX':          { type:'ws', ccxt:'htx', ws:'api.huobi.pro/ws', comp:'**gzip**', ping:'server-push {ping}→{pong}', failover:3 },
-        'WOO X':        { type:'ws', ccxt:'woo', ws:'wss.woo.org/ws/stream', comp:'none', ping:'{event:ping} 9s', failover:0 },
-        'Crypto.com':   { type:'ws', ccxt:'cryptocom', ws:'stream.crypto.com/exchange/v1/market', comp:'none', ping:'{method:public/heartbeat} 25s', failover:0 },
+        'WOO X':        { type:'ws', ccxt:'woo', ws:'wss.woox.io/ws/stream', comp:'none', ping:'{event:ping} 9s', failover:0 },
+        'Crypto.com':   { type:'ws', ccxt:'cryptocom', ws:'stream.crypto.com/exchange/v1/market', comp:'none', ping:'respond to server {method:public/heartbeat} with {method:public/respond-heartbeat}', failover:0 },
         'Bitstamp':     { type:'ws', ccxt:'bitstamp', ws:'ws.bitstamp.net', comp:'none', ping:'{event:bts:heartbeat} 20s', failover:0 },
         'WhiteBIT':     { type:'ws', ccxt:'whitebit', ws:'api.whitebit.com/ws', comp:'none', ping:'{method:server.ping} 25s', failover:0 },
         'AscendEX':     { type:'ws', ccxt:'ascendex', ws:'ascendex.com/1/api/pro/v1/stream', comp:'none', ping:'{op:ping} 15s', failover:0 },
@@ -2265,7 +2404,7 @@ function generateReport() {
     r += `|----------|--------|----------|\n`;
     for (const [key, urls] of Object.entries(FAILOVER_URLS)) {
         if (key === 'default' || !urls.length) continue;
-        const displayName = Object.entries(FAILOVER_KEY_MAP).find(([,v])=>v===key)?.[0] || key;
+        const displayName = Object.entries(FAILOVER_KEY_MAP).find(([v])=>v===key)?.[0] || key;
         r += `| ${displayName} | ${urls.length} | ${urls.join(', ')} |\n`;
     }
     r += `\n**Failover Logic:** On connection close, timeout, or stale detection → rotate to next URL in list → max 5 rotations per minute per exchange → exponential backoff between retries.\n\n`;
@@ -2476,7 +2615,7 @@ function generateReport() {
 // ═══════════════════ MAIN (v9 — Subscription Manager Launch) ═══════════════════
 async function main() {
     console.log('╔═══════════════════════════════════════════════════════════════════════════╗');
-    console.log(`║  ENHANCED 4-METHOD v9.6 — ${MINUTES}-MINUTE Test + Subscription Manager              ║`);
+    console.log(`║  ENHANCED 4-METHOD v9.9.19 — ${MINUTES}-MINUTE Test + Subscription Manager             ║`);
     console.log('║  All 53 exchanges × 4 methods × Trades + OrderBook + Tickers              ║');
     console.log('║  Subscription Manager: Batched subs, stale monitor, connection pools       ║');
     console.log(`║  Dashboard: http://localhost:${HTTP_PORT}                                           ║`);
@@ -2516,7 +2655,12 @@ async function main() {
             try { await Promise.resolve(ex.startNative()); } catch(e) { addErr(ex.name,'native',e.message); }
             // Method 2: CCXT Pro (watch* streaming) — skip if Pro broken for this exchange
             if (ex.ccxtId && ccxt.pro?.[ex.ccxtId] && !ex.skipPro) {
-                startCCXTPro(ex.name, ex.ccxtId, ex.ccxtPairs, ex.skipTicker||false).catch(()=>{});  // v9.7: pass skipTicker flag
+                // v9.9.8: split ccxtPairs into 4-pair chunks per CCXT Pro instance (reduces timeouts per connection)
+                // Each chunk runs on its own instance so low-volume pair timeouts don't penalise high-volume pairs
+                const _cSz = 4, _allP = ex.ccxtPairs, _skip = ex.skipTicker||false;
+                for (let _ci = 0; _ci * _cSz < _allP.length; _ci++) {
+                    startCCXTPro(ex.name, ex.ccxtId, _allP.slice(_ci*_cSz, (_ci+1)*_cSz), _skip, _ci).catch(()=>{});
+                }
             }
             // Method 3: CCXT REST (fetch* polling) — markets already pre-loaded
             if (ex.ccxtId && ex.ccxtPairs?.length) {
@@ -2535,6 +2679,156 @@ async function main() {
 
     // DuckDB flush timer
     const duckFlushTimer = duckEnabled ? setInterval(flushDuckDB, 10000) : null;
+
+    // v9.9.13: clear CCXT response buffers every 60s to prevent RAM accumulation
+    setInterval(() => {
+        try {
+            for (const ex of EXCHANGES) {
+                if (!ex.ccxtId) continue;
+                const inst = preloadedRest[ex.name];
+                if (inst) { inst.last_json_response = ''; inst.last_http_response = ''; }
+                const proInst = preloadedPro[ex.name];
+                if (proInst) { proInst.last_json_response = ''; proInst.last_http_response = ''; }
+            }
+        } catch(e) {}
+    }, 60000);
+
+    // v9.9.13: prune stale SSE clients every 30s
+    setInterval(() => {
+        for (let i = sseClients.length - 1; i >= 0; i--) {
+            if (sseClients[i].destroyed || sseClients[i].writableEnded) {
+                sseClients.splice(i, 1);
+            }
+        }
+    }, 30000);
+
+    // ─── v9.9.5: PRODUCTION 24/7 MAINTENANCE TIMERS ───────────────────────────
+
+    // v9.9.15: Cache cleanup every 30s (was 60s) — tightened limits to keep memory under 1.5GB
+    setInterval(() => {
+        // Trim per-method trade ID caches — lower caps v9.9.15
+        for (const k of Object.keys(tradeIdCache)) {
+            if (tradeIdCache[k].size > 1500) { const _a=[...tradeIdCache[k]]; tradeIdCache[k] = new Set(_a.slice(-1000)); }
+        }
+        for (const k of Object.keys(ccxtProTradeCache)) {
+            if (ccxtProTradeCache[k].size > 1500) { const _a=[...ccxtProTradeCache[k]]; ccxtProTradeCache[k] = new Set(_a.slice(-500)); }
+        }
+        for (const k of Object.keys(hybridTradeDedup)) {
+            if (hybridTradeDedup[k].size > 2000) { const _a=[...hybridTradeDedup[k]]; hybridTradeDedup[k] = new Set(_a.slice(-1000)); }
+        }
+        // v9.9.18: trim tradeIdCorrelation sub-maps (each entry = {native:Map, ccxtPro:Map, ccxtRest:Map, ...})
+        if (typeof tradeIdCorrelation !== 'undefined') {
+            for (const k of Object.keys(tradeIdCorrelation)) {
+                const entry = tradeIdCorrelation[k];
+                if (entry && typeof entry === 'object') {
+                    for (const src of ['native','ccxtPro','ccxtRest','directRest']) {
+                        const m = entry[src];
+                        if (m instanceof Map && m.size > 5000) { entry[src] = new Map([...m.entries()].slice(-2000)); }
+                    }
+                }
+            }
+        }
+    }, 30*1000);  // every 30s
+
+    // v9.9.15: Memory RSS logging every 3 min; graceful restart threshold raised 1800→3000MB (4GB heap now allocated)
+    setInterval(() => {
+        const mem = process.memoryUsage();
+        const rssMB = Math.round(mem.rss/1024/1024);
+        console.log(`\n  🧠 Memory: RSS=${rssMB}MB Heap=${Math.round(mem.heapUsed/1024/1024)}/${Math.round(mem.heapTotal/1024/1024)}MB`);
+        if (rssMB > 3000) {
+            console.log(`\n  ⚠ RSS ${rssMB}MB > 3000MB threshold — flushing DuckDB and triggering graceful restart`);
+            if (duckEnabled) { try { flushDuckDB(); } catch {} }
+            setTimeout(() => {
+                console.log('  🔄 Restarting process now (PM2 will auto-restart)...\n');
+                process.exit(0);  // PM2 restarts on exit 0; triggers clean reconnect of all streams
+            }, 3000);
+        }
+    }, 3*60*1000);  // every 3 minutes
+
+    // CCXT loadMarkets reload every 6 hours (keep market data fresh, catch new listings)
+    setInterval(async () => {
+        console.log('\n  📋 6h CCXT markets reload...');
+        for (const ex of EXCHANGES.filter(e=>e.ccxtId&&e.ccxtPairs?.length)) {
+            try { if (preloadedRest[ex.name]) await preloadedRest[ex.name].loadMarkets(true); } catch {}
+            try { if (preloadedPro[ex.name]) await preloadedPro[ex.name].loadMarkets(true); } catch {}
+            await sleep(200);
+        }
+        console.log('  ✅ Markets reload complete');
+    }, 6*60*60*1000);
+
+    // CCXT Pro 4-hour connection cycle restart (clear stale Pro connections)
+    setInterval(async () => {
+        console.log('\n  🔄 4h CCXT Pro restart — refreshing connections...');
+        for (const ex of EXCHANGES.filter(e=>e.ccxtId&&ccxt.pro?.[e.ccxtId]&&!e.skipPro)) {
+            // v9.9.8: close + recreate all chunk instances for this exchange
+            const _cSz = 4;
+            const numChunks = Math.max(1, Math.ceil(ex.ccxtPairs.length / _cSz));
+            for (let _ci = 0; _ci < numChunks; _ci++) {
+                const _pKey = _ci === 0 ? ex.name : `${ex.name}_c${_ci}`;
+                try {
+                    if (preloadedPro[_pKey]) { try { await preloadedPro[_pKey].close(); } catch {} }
+                    const inst = new ccxt.pro[ex.ccxtId](buildCCXTOpts(ex.ccxtId));
+                    await inst.loadMarkets();
+                    preloadedPro[_pKey] = inst;
+                } catch(e) { console.log(`  ⚠ CCXT Pro restart failed ${ex.name} c${_ci}: ${e.message?.slice(0,40)}`); }
+            }
+            await sleep(500);
+        }
+        console.log('  ✅ CCXT Pro restart complete');
+    }, 4*60*60*1000);
+
+    // DuckDB WAL checkpoint every 30min + midnight daily file rotation
+    if (duckEnabled) setInterval(async () => {
+        try { duckConn.run('PRAGMA wal_checkpoint(TRUNCATE)'); } catch {}  // 30-min WAL flush
+        const h = new Date().getHours(), m = new Date().getMinutes();
+        if (h === 0 && m < 30) {
+            const yesterday = new Date(Date.now()-86400000).toISOString().slice(0,10).replace(/-/g,'');
+            const archivePath = path.join(__dirname, `crypto_stream_${yesterday}.duckdb`);
+            if (!fs.existsSync(archivePath)) {
+                console.log(`\n  💾 DuckDB midnight rotation → crypto_stream_${yesterday}.duckdb`);
+                try {
+                    flushDuckDB(); await sleep(8000); // v9.9.18: 8s wait for async DuckDB writes to complete
+                    duckDB.close();
+                    fs.renameSync(path.join(__dirname, 'crypto_stream_data.duckdb'), archivePath);
+                    duckDB = new duckdb.Database(path.join(__dirname, 'crypto_stream_data.duckdb'));
+                    duckConn = duckDB.connect();
+                    duckConn.run(`CREATE TABLE IF NOT EXISTS trades (ts BIGINT, exchange VARCHAR, symbol VARCHAR, source VARCHAR, price DOUBLE, amount DOUBLE, side VARCHAR, trade_id VARCHAR)`);
+                    duckConn.run(`CREATE TABLE IF NOT EXISTS orderbook (ts BIGINT, exchange VARCHAR, symbol VARCHAR, source VARCHAR, best_bid DOUBLE, best_ask DOUBLE, bid_depth INTEGER, ask_depth INTEGER, spread DOUBLE)`);
+                    duckConn.run(`CREATE TABLE IF NOT EXISTS tickers (ts BIGINT, exchange VARCHAR, symbol VARCHAR, source VARCHAR, last_price DOUBLE, bid DOUBLE, ask DOUBLE, high_24h DOUBLE, low_24h DOUBLE, base_volume DOUBLE, quote_volume DOUBLE, change_pct DOUBLE)`);
+                    console.log(`  💾 DuckDB rotation complete → ${archivePath}`);
+                } catch(e) { console.log(`  ⚠ DuckDB rotation failed: ${e.message?.slice(0,60)}`); }
+            }
+        }
+    }, 30*60*1000);
+
+    // Health auto-recovery every 30s — restart CCXT Pro for exchanges with score < 80
+    const _lastRecovery = {};
+    setInterval(async () => {
+        for (const ex of EXCHANGES.filter(e=>e.ccxtId&&ccxt.pro?.[e.ccxtId]&&!e.skipPro)) {
+            if (healthMetrics[ex.name] && calcHealthScore(ex.name) < 80) {
+                const lastRec = _lastRecovery[ex.name] || 0;
+                if (Date.now() - lastRec > 10*60*1000) {  // at most once every 10min per exchange
+                    _lastRecovery[ex.name] = Date.now();
+                    console.log(`\n  🏥 Auto-recovery: ${ex.name} health=${calcHealthScore(ex.name)} → restarting CCXT Pro`);
+                    // v9.9.8: close all chunk instances
+                    const _cSz = 4;
+                    const numChunks = Math.max(1, Math.ceil(ex.ccxtPairs.length / _cSz));
+                    for (let _ci = 0; _ci < numChunks; _ci++) {
+                        const _pKey = _ci === 0 ? ex.name : `${ex.name}_c${_ci}`;
+                        try {
+                            if (preloadedPro[_pKey]) { try { await preloadedPro[_pKey].close(); } catch {} }
+                            const inst = new ccxt.pro[ex.ccxtId](buildCCXTOpts(ex.ccxtId));
+                            // v9.9.7: do NOT call loadMarkets() in auto-recovery — it fails for many exchanges (XT.com, Gemini, BingX)
+                            // Markets were already loaded at startup; the new instance will use cached data or reload on-demand
+                            preloadedPro[_pKey] = inst;
+                        } catch(e) { console.log(`  ⚠ Auto-recovery failed ${ex.name} c${_ci}: ${e.message?.slice(0,40)}`); }
+                    }
+                }
+            }
+        }
+    }, 30*1000);
+
+    // ──────────────────────────────────────────────────────────────────────────
 
     // 5-minute summary logging counter (every 30 ticks × 10s = 5 minutes)
     let _fiveMinTick = 0;
@@ -2573,8 +2867,8 @@ async function main() {
                     _fiveMinTradeSnap[n] = cur;
                     return [n, delta, Math.round(delta / 5)];
                 })
-                .filter(([,d]) => d > 0)
-                .sort(([,a],[,b]) => b - a);
+                .filter(([d]) => d > 0)
+                .sort(([a],[b]) => b - a);
             process.stdout.write('\n\n');
             console.log(`  ═══ 5-MIN RATE SNAPSHOT (${mins}m elapsed) — top exchanges by last-5min trades ═══`);
             for (const [n, delta, perMin] of lines.slice(0, 20)) {

@@ -2,3 +2,12 @@ node_modules/
 *.log
 .env
 .DS_Store
+api-keys.txt
+*.duckdb
+*.duckdb.wal
+*.tmp
+*.txt
+pm2-restart.txt
+dash-check.txt
+dash-headers.txt
+pair-check-result.txt

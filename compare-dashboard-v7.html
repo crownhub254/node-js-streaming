@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Hybrid v9 — Subscription Manager Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+:root{--bg:#0a0e17;--bg2:#111827;--bg3:#1e293b;--card:#1a2332;--border:#2d3748;--text:#e2e8f0;--dim:#94a3b8;--green:#22c55e;--red:#ef4444;--blue:#3b82f6;--purple:#a855f7;--orange:#f97316;--cyan:#06b6d4;--yellow:#eab308;--pink:#ec4899;--lime:#84cc16;--gold:#f59e0b}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;font-size:13px;overflow-x:hidden;height:100vh;display:flex;flex-direction:column}
+/* ── HEADER ── */
+.header{background:linear-gradient(135deg,#0f172a,#1e1b4b,#0c4a6e);padding:12px 16px;border-bottom:2px solid var(--gold);flex-shrink:0}
+.header h1{font-size:17px;background:linear-gradient(90deg,var(--gold),var(--orange),var(--yellow));-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-weight:800}
+.header .sub{color:var(--dim);font-size:10px;margin-top:1px}
+.score-cards{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.sc{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:6px 12px;min-width:75px;text-align:center}
+.sc .label{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
+.sc .val{font-size:18px;font-weight:700;margin-top:1px}
+.totals-bar{display:flex;gap:10px;margin-top:6px;flex-wrap:wrap;font-size:10px;color:var(--dim)}
+.totals-bar span{display:flex;align-items:center;gap:3px}.totals-bar b{color:var(--text)}
+.totals-bar .dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex-shrink:0}
+.health-bar{display:flex;align-items:center;gap:8px;margin-top:6px;font-size:10px}
+.health-gauge{width:100px;height:7px;background:var(--bg);border-radius:4px;overflow:hidden}
+.health-gauge .fill{height:100%;border-radius:4px;transition:width .5s}
+/* ── TABS ── */
+.tabs{display:flex;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{padding:8px 14px;cursor:pointer;color:var(--dim);font-size:11px;white-space:nowrap;border-bottom:2px solid transparent;transition:all .2s;flex-shrink:0}
+.tab:hover{color:var(--text);background:var(--bg3)}.tab.active{color:var(--gold);border-bottom-color:var(--gold);background:var(--bg3)}
+/* ── CONTENT: the scroll container ── */
+.content{flex:1;overflow-y:auto;overflow-x:hidden;padding:10px;min-height:0}
+.panel{display:none}.panel.active{display:block}
+/* ── TABLES: fixed layout, no stretch ── */
+.table-wrap{overflow-x:auto;overflow-y:auto;max-height:500px;border:1px solid var(--border);border-radius:6px;margin-bottom:10px}
+table{width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed}
+th{background:var(--bg3);color:var(--dim);padding:5px 6px;text-align:left;position:sticky;top:0;z-index:2;font-weight:600;text-transform:uppercase;font-size:9px;letter-spacing:.3px;cursor:pointer;user-select:none;overflow:hidden;text-overflow:ellipsis}
+td{padding:4px 6px;border-bottom:1px solid var(--border);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+tr:hover td{background:rgba(59,130,246,.05)}
+.clr-n{color:var(--green)}.clr-p{color:var(--blue)}.clr-r{color:var(--orange)}.clr-d{color:var(--purple)}.clr-h{color:var(--gold)}
+.badge{padding:2px 7px;border-radius:10px;font-size:9px;font-weight:600;white-space:nowrap;display:inline-block}
+.badge.native{background:rgba(34,197,94,.15);color:var(--green)}.badge.pro{background:rgba(59,130,246,.15);color:var(--blue)}
+.badge.rest{background:rgba(249,115,22,.15);color:var(--orange)}.badge.direct{background:rgba(168,85,247,.15);color:var(--purple)}
+.badge.tie{background:rgba(6,182,212,.15);color:var(--cyan)}.badge.fail{background:rgba(239,68,68,.15);color:var(--red)}
+.badge.nonly{background:rgba(132,204,22,.15);color:var(--lime)}
+/* ── CHARTS: FIXED height, never grow ── */
+.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.chart-box{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px;overflow:hidden}
+.chart-box h3{font-size:10px;color:var(--dim);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+.chart-box canvas{width:100%!important;max-height:220px}
+/* ── CARDS ── */
+.analytics-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:10px}
+.a-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px}
+.a-card .label{font-size:9px;color:var(--dim);text-transform:uppercase}.a-card .val{font-size:20px;font-weight:700;margin-top:2px}
+/* ── HYBRID HERO ── */
+.hybrid-hero{background:linear-gradient(135deg,rgba(245,158,11,.08),rgba(249,115,22,.05));border:1px solid rgba(245,158,11,.3);border-radius:10px;padding:12px;margin-bottom:10px;display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;align-items:center}
+.hero-item{text-align:center}.hero-item .big{font-size:26px;font-weight:800;color:var(--gold)}
+.hero-item .mid{font-size:18px;font-weight:700}.hero-item .lbl{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
+/* ── FLOW DIAGRAM ── */
+.flow-diagram{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:10px}
+.flow-row{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap}
+.flow-box{padding:8px 14px;border-radius:6px;text-align:center;font-size:11px;font-weight:600;min-width:100px}
+.flow-arrow{font-size:18px;color:var(--dim)}
+.flow-box.src-n{background:rgba(34,197,94,.12);border:1px solid var(--green);color:var(--green)}
+.flow-box.src-p{background:rgba(59,130,246,.12);border:1px solid var(--blue);color:var(--blue)}
+.flow-box.src-r{background:rgba(249,115,22,.12);border:1px solid var(--orange);color:var(--orange)}
+.flow-box.src-d{background:rgba(168,85,247,.12);border:1px solid var(--purple);color:var(--purple)}
+.flow-box.fuse{background:rgba(245,158,11,.15);border:2px solid var(--gold);color:var(--gold);font-size:13px;min-width:140px}
+.flow-box.out{background:rgba(6,182,212,.12);border:1px solid var(--cyan);color:var(--cyan)}
+.flow-box .cnt{font-size:14px;font-weight:800;display:block}
+/* ── DEDUP BAR ── */
+.dedup-bar{display:flex;height:18px;border-radius:4px;overflow:hidden;margin:6px 0;background:var(--bg)}
+.dedup-bar .seg{display:flex;align-items:center;justify-content:center;font-size:8px;color:#fff;font-weight:600;transition:width .5s;min-width:0;overflow:hidden}
+/* ── HEALTH GRID ── */
+.health-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;margin-bottom:10px}
+.h-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px;overflow:hidden}
+.h-card .name{font-weight:700;font-size:12px;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.h-card .score-circle{width:50px;height:50px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;margin:0 auto 6px;position:relative}
+.h-card .score-circle svg{position:absolute;top:0;left:0;width:50px;height:50px;transform:rotate(-90deg)}
+.h-card .score-circle circle{fill:none;stroke-width:4;stroke-linecap:round}
+.h-card .err-cats{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px}
+.h-card .err-cat{font-size:8px;padding:1px 5px;border-radius:3px;background:rgba(239,68,68,.1);color:var(--red)}
+.h-card .fix{font-size:9px;color:var(--yellow);margin-top:4px;padding:3px;background:rgba(234,179,8,.08);border-radius:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.conn-dots{display:flex;gap:3px;margin-top:4px;justify-content:center;font-size:9px}
+/* ── SUB-TABS ── */
+.sub-tabs{display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap}
+.sub-tab{padding:3px 9px;border-radius:4px;background:var(--bg3);color:var(--dim);cursor:pointer;font-size:10px;border:1px solid var(--border)}
+.sub-tab.active{background:var(--gold);color:#000;border-color:var(--gold)}
+/* ── EVENTS LOG ── */
+.events-log{max-height:500px;overflow-y:auto;font-family:'Cascadia Code','Fira Code',monospace;font-size:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px}
+.event-line{padding:1px 0;border-bottom:1px solid rgba(255,255,255,.03);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.event-line .ts{color:var(--dim)}.event-line .ex{color:var(--cyan)}.event-line .m{color:var(--blue)}
+.event-line.error .m{color:var(--red)}.event-line.connect .m{color:var(--green)}
+/* ── SUB MANAGER ── */
+.sm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:10px}
+.sm-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center}
+.sm-card .label{font-size:9px;color:var(--dim);text-transform:uppercase}.sm-card .val{font-size:22px;font-weight:700;margin-top:2px;color:var(--cyan)}
+/* ── TIMER ── */
+.timer{position:fixed;bottom:8px;right:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:10px;z-index:999;display:flex;align-items:center;gap:5px}
+.timer .dot-live{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+/* ── MISC ── */
+::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}::-webkit-scrollbar-thumb:hover{background:var(--dim)}
+@media(max-width:800px){.charts-row{grid-template-columns:1fr}.hybrid-hero{grid-template-columns:repeat(3,1fr)}}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>⚡ Hybrid v9 — Subscription Manager Dashboard</h1>
+  <div class="sub">Native × CCXT Pro × CCXT REST × Direct REST → Hybrid Fusion + Cross-Method Dedup</div>
+  <div class="score-cards" id="scoreCards"></div>
+  <div class="totals-bar" id="totalsBar"></div>
+  <div class="health-bar" id="healthBar"></div>
+</div>
+<div class="tabs" id="tabBar"></div>
+<div class="content"><div id="panelRoot"></div></div>
+<div class="timer" id="timer"><span class="dot-live"></span><span id="timerText">--</span></div>
+
+<script>
+const TABS = ['Hybrid Flow','Per Exchange','Per Pair','Dedup Analysis','Analytics','Correlation','Health','Sub Manager','Live Events'];
+let data = null, prevData = null, sortCol = null, sortDir = 1, activeTab = 0, activeSub = {};
+const chartCache = {};
+const throughputHistory = [];
+const fmt = n => n == null ? '-' : typeof n === 'number' ? n.toLocaleString() : n;
+const fmtK = n => n >= 1e6 ? (n/1e6).toFixed(1)+'M' : n >= 1e3 ? (n/1e3).toFixed(1)+'K' : String(n);
+const fmtTime = ts => ts ? new Date(ts).toLocaleTimeString() : '-';
+const pct = (n,d) => d > 0 ? Math.round(n/d*100) : 0;
+
+function init() {
+  const tabBar = document.getElementById('tabBar');
+  TABS.forEach((t,i)=>{
+    const d = document.createElement('div');
+    d.className = 'tab'+(i===0?' active':'');
+    d.textContent = t;
+    d.onclick = ()=> switchTab(i);
+    tabBar.appendChild(d);
+  });
+  fetchStats();
+  setInterval(fetchStats, 3000);
+  setupSSE();
+}
+
+function switchTab(i) {
+  activeTab = i;
+  document.querySelectorAll('.tab').forEach((t,j)=> t.className='tab'+(j===i?' active':''));
+  destroyTabCharts();
+  render();
+}
+
+function destroyTabCharts() {
+  for (const [k,ch] of Object.entries(chartCache)) {
+    try { ch.destroy(); } catch {}
+    delete chartCache[k];
+  }
+}
+function destroyStaleCharts() {
+  for (const [k,ch] of Object.entries(chartCache)) {
+    const el = document.getElementById(k);
+    if (!el || ch.canvas !== el) {
+      try { ch.destroy(); } catch {}
+      delete chartCache[k];
+    }
+  }
+}
+
+async function fetchStats() {
+  try {
+    const r = await fetch('/api/stats');
+    prevData = data;
+    data = await r.json();
+    const hyb = data.hybridSummary || {};
+    const now = Date.now();
+    throughputHistory.push({ts:now, total:hyb.total||0, trades:hyb.trades||0, ob:hyb.orderbook||0, tickers:hyb.tickers||0, deduped:hyb.deduped||0});
+    if (throughputHistory.length > 120) throughputHistory.shift();
+    updateHeader();
+    render();
+  } catch {}
+}
+
+let _sseConn = null;
+function setupSSE() {
+  if (_sseConn) { try { _sseConn.close(); } catch {} _sseConn = null; }
+  const es = new EventSource('/api/events');
+  _sseConn = es;
+  es.onmessage = e => {
+    try { const ev = JSON.parse(e.data); appendEvent(ev); } catch {}
+  };
+  es.onerror = () => {
+    try { es.close(); } catch {}
+    _sseConn = null;
+    setTimeout(setupSSE, 5000);
+  };
+}
+
+function updateHeader() {
+  if (!data) return;
+  const s = data.summary, hyb = data.hybridSummary||{}, hs = data.healthSummary||{};
+  const exArr = Object.entries(data.exchanges);
+  const tn = exArr.reduce((a,[,x])=>a+x.native.total,0);
+  const tp = exArr.reduce((a,[,x])=>a+x.ccxtPro.total,0);
+  const tr = exArr.reduce((a,[,x])=>a+x.ccxtRest.total,0);
+  const td = exArr.reduce((a,[,x])=>a+(x.directRest?.total||0),0);
+  const raw = tn+tp+tr+td;
+
+  document.getElementById('scoreCards').innerHTML = [
+    `<div class="sc"><div class="label">Hybrid</div><div class="val" style="color:var(--gold)">${fmtK(hyb.total||0)}</div></div>`,
+    `<div class="sc"><div class="label">Deduped</div><div class="val" style="color:var(--red)">-${fmtK(hyb.deduped||0)}</div></div>`,
+    `<div class="sc"><div class="label">Native W</div><div class="val" style="color:var(--green)">${s.nativeWins}</div></div>`,
+    `<div class="sc"><div class="label">Pro W</div><div class="val" style="color:var(--blue)">${s.ccxtProWins}</div></div>`,
+    `<div class="sc"><div class="label">REST W</div><div class="val" style="color:var(--orange)">${s.ccxtRestWins}</div></div>`,
+    `<div class="sc"><div class="label">Dir W</div><div class="val" style="color:var(--purple)">${s.directRestWins||0}</div></div>`,
+    `<div class="sc"><div class="label">Active</div><div class="val" style="color:var(--cyan)">${s.totalActive}</div></div>`,
+    `<div class="sc"><div class="label">Failed</div><div class="val" style="color:var(--red)">${s.bothFailed}</div></div>`
+  ].join('');
+
+  document.getElementById('totalsBar').innerHTML = [
+    `<span><span class="dot" style="background:var(--gold)"></span>Hybrid: <b style="color:var(--gold)">${fmt(hyb.total||0)}</b></span>`,
+    `<span><span class="dot" style="background:var(--green)"></span>N: <b>${fmt(tn)}</b></span>`,
+    `<span><span class="dot" style="background:var(--blue)"></span>P: <b>${fmt(tp)}</b></span>`,
+    `<span><span class="dot" style="background:var(--orange)"></span>R: <b>${fmt(tr)}</b></span>`,
+    `<span><span class="dot" style="background:var(--purple)"></span>D: <b>${fmt(td)}</b></span>`,
+    `<span>Dedup: <b style="color:var(--red)">-${fmt(hyb.deduped||0)}</b> (${pct(hyb.deduped||0,raw)}%)</span>`,
+    `<span>MPS: <b style="color:var(--gold)">${data.uptime>0?fmt(Math.round((hyb.total||0)/data.uptime)):'-'}</b></span>`
+  ].join('');
+
+  const avgH = hs.avgScore||0;
+  const hColor = avgH>=80?'var(--green)':avgH>=50?'var(--yellow)':'var(--red)';
+  document.getElementById('healthBar').innerHTML = `
+    <span style="color:${hColor};font-weight:700">Health: ${avgH}/100</span>
+    <div class="health-gauge"><div class="fill" style="width:${avgH}%;background:${hColor}"></div></div>
+    <span style="color:var(--red)">${(hs.critical||[]).length} crit</span>
+    <span style="color:var(--yellow)">${(hs.warnings||[]).length} warn</span>
+    <span style="color:var(--green)">${(hs.healthy||[]).length} ok</span>`;
+
+  const vk = data.valkey || {};
+  const vkColor = vk.connected ? 'var(--green)' : 'var(--red)';
+  const vkText = vk.connected ? 'Valkey: Connected' : 'Valkey: Disconnected';
+  document.getElementById('healthBar').innerHTML += `
+    <span style="margin-left:12px;color:${vkColor};font-weight:600">
+      <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${vkColor};margin-right:4px;vertical-align:middle;${vk.connected?'animation:pulse 1.5s infinite':''}"></span>
+      ${vkText}
+    </span>`;
+
+  const rem = data.remaining||0;
+  document.getElementById('timerText').textContent = data.running
+    ? `${Math.floor(data.uptime/60)}m${data.uptime%60}s / ${Math.floor(data.duration/60)}m | ${Math.floor(rem/60)}m${rem%60}s left`
+    : `Done (${Math.floor(data.uptime/60)}m${data.uptime%60}s)`;
+}
+
+function render() {
+  const c = document.getElementById('panelRoot');
+  if (!data) { c.innerHTML = '<div style="text-align:center;padding:60px;color:var(--dim);font-size:14px"><div style="font-size:28px;margin-bottom:10px">⏳</div>Connecting to streaming engine...<br><span style="font-size:11px">Waiting for first data from port 3456</span></div>'; return; }
+  switch(activeTab) {
+    case 0: renderHybridFlow(c); break;
+    case 1: renderPerExchange(c); break;
+    case 2: renderPerPair(c); break;
+    case 3: renderDedupAnalysis(c); break;
+    case 4: renderAnalytics(c); break;
+    case 5: renderCorrelation(c); break;
+    case 6: renderHealth(c); break;
+    case 7: renderSubManager(c); break;
+    case 8: renderLiveEvents(c); break;
+  }
+}
+
+function getOrCreateChart(canvasId, config) {
+  const ctx = document.getElementById(canvasId);
+  if (!ctx) return null;
+  if (chartCache[canvasId]) {
+    const ch = chartCache[canvasId];
+    // Check if the canvas element is still the same (innerHTML replaces it)
+    if (ch.canvas === ctx) {
+      ch.data = config.data;
+      if (config.options) Object.assign(ch.options, config.options);
+      ch.update('none');
+      return ch;
+    }
+    // Canvas was replaced by innerHTML — destroy stale chart
+    try { ch.destroy(); } catch {}
+    delete chartCache[canvasId];
+  }
+  // Ensure canvas has dimensions before creating chart
+  if (ctx.clientWidth === 0 || ctx.clientHeight === 0) return null;
+  const ch = new Chart(ctx, config);
+  chartCache[canvasId] = ch;
+  return ch;
+}
+
+const darkChartOpts = {
+  responsive:true, maintainAspectRatio:false, animation:{duration:0},
+  plugins:{legend:{labels:{color:'#94a3b8',font:{size:9}}}},
+  scales:{x:{ticks:{color:'#64748b',font:{size:8},maxRotation:45},grid:{color:'rgba(255,255,255,.04)'}},y:{ticks:{color:'#64748b',font:{size:9}},grid:{color:'rgba(255,255,255,.04)'}}}
+};
+
+function winnerBadge(w) {
+  switch(w) {
+    case 'native': return '<span class="badge native">Native</span>';
+    case 'ccxtPro': return '<span class="badge pro">Pro</span>';
+    case 'ccxtRest': return '<span class="badge rest">REST</span>';
+    case 'directRest': return '<span class="badge direct">Direct</span>';
+    case 'tie': return '<span class="badge tie">Tie</span>';
+    case 'native-only': return '<span class="badge nonly">N-Only</span>';
+    default: return '<span class="badge fail">Failed</span>';
+  }
+}
+
+/* ═══════════════════════════════════════════════
+   TAB 0: HYBRID FLOW — The main visual
+   ═══════════════════════════════════════════════ */
+function renderHybridFlow(c) {
+  const exArr = Object.entries(data.exchanges);
+  const hyb = data.hybridSummary||{};
+  const tn = exArr.reduce((a,[,x])=>a+x.native.total,0);
+  const tp = exArr.reduce((a,[,x])=>a+x.ccxtPro.total,0);
+  const tr = exArr.reduce((a,[,x])=>a+x.ccxtRest.total,0);
+  const td = exArr.reduce((a,[,x])=>a+(x.directRest?.total||0),0);
+  const raw = tn+tp+tr+td;
+  const mps = data.uptime>0?Math.round((hyb.total||0)/data.uptime):0;
+
+  let h = '';
+
+  // ── Hero Stats
+  h += '<div class="hybrid-hero">';
+  h += `<div class="hero-item"><div class="lbl">Hybrid Unique</div><div class="big">${fmtK(hyb.total||0)}</div></div>`;
+  h += `<div class="hero-item"><div class="lbl">Trades</div><div class="mid" style="color:var(--green)">${fmtK(hyb.trades||0)}</div></div>`;
+  h += `<div class="hero-item"><div class="lbl">OrderBook</div><div class="mid" style="color:var(--blue)">${fmtK(hyb.orderbook||0)}</div></div>`;
+  h += `<div class="hero-item"><div class="lbl">Tickers</div><div class="mid" style="color:var(--cyan)">${fmtK(hyb.tickers||0)}</div></div>`;
+  h += `<div class="hero-item"><div class="lbl">Deduped</div><div class="mid" style="color:var(--red)">-${fmtK(hyb.deduped||0)}</div></div>`;
+  h += `<div class="hero-item"><div class="lbl">Msgs/sec</div><div class="mid" style="color:var(--gold)">${fmt(mps)}</div></div>`;
+  h += '</div>';
+
+  // ── Flow Diagram: 4 sources → Fusion Engine → Hybrid Output
+  h += '<div class="flow-diagram">';
+  h += '<div style="font-size:10px;color:var(--dim);margin-bottom:8px;text-align:center">DATA FLOW: 4-METHOD HYBRID FUSION PIPELINE</div>';
+  h += '<div class="flow-row">';
+  h += `<div class="flow-box src-n"><span class="cnt">${fmtK(tn)}</span>Native WS</div>`;
+  h += `<div class="flow-box src-p"><span class="cnt">${fmtK(tp)}</span>CCXT Pro</div>`;
+  h += `<div class="flow-box src-r"><span class="cnt">${fmtK(tr)}</span>CCXT REST</div>`;
+  h += `<div class="flow-box src-d"><span class="cnt">${fmtK(td)}</span>Direct REST</div>`;
+  h += '</div>';
+  h += '<div class="flow-row" style="margin:6px 0"><span class="flow-arrow">↓ ↓ ↓ ↓</span></div>';
+  h += '<div class="flow-row">';
+  h += `<div class="flow-box fuse"><span class="cnt">${fmtK(raw)}</span>Fusion Engine<div style="font-size:9px;margin-top:2px;color:var(--red)">-${fmtK(hyb.deduped||0)} dupes (${pct(hyb.deduped||0,raw)}%)</div></div>`;
+  h += '</div>';
+  h += '<div class="flow-row" style="margin:6px 0"><span class="flow-arrow">↓</span></div>';
+  h += '<div class="flow-row">';
+  h += `<div class="flow-box out"><span class="cnt">${fmtK(hyb.total||0)}</span>Hybrid Output</div>`;
+  h += '</div></div>';
+
+  // ── Source Distribution Bar
+  h += '<div style="font-size:9px;color:var(--dim);margin:8px 0 2px">SOURCE DISTRIBUTION</div>';
+  h += '<div class="dedup-bar">';
+  if (raw > 0) {
+    h += `<div class="seg" style="width:${pct(tn,raw)}%;background:var(--green)" title="Native ${fmt(tn)}">N ${pct(tn,raw)}%</div>`;
+    h += `<div class="seg" style="width:${pct(tp,raw)}%;background:var(--blue)" title="Pro ${fmt(tp)}">P ${pct(tp,raw)}%</div>`;
+    h += `<div class="seg" style="width:${pct(tr,raw)}%;background:var(--orange)" title="REST ${fmt(tr)}">R ${pct(tr,raw)}%</div>`;
+    h += `<div class="seg" style="width:${pct(td,raw)}%;background:var(--purple)" title="Direct ${fmt(td)}">D ${pct(td,raw)}%</div>`;
+  }
+  h += '</div>';
+
+  // ── Charts: Throughput Over Time + Top Exchanges
+  h += '<div class="charts-row" style="margin-top:10px">';
+  h += '<div class="chart-box"><h3>Throughput Over Time</h3><div style="height:200px"><canvas id="chartThroughput"></canvas></div></div>';
+  h += '<div class="chart-box"><h3>Top 15 by Hybrid Total</h3><div style="height:200px"><canvas id="chartHybridTop"></canvas></div></div>';
+  h += '</div>';
+
+  // ── Charts: Data Type Breakdown + Winner Distribution
+  h += '<div class="charts-row">';
+  h += '<div class="chart-box"><h3>Data Type Breakdown</h3><div style="height:200px"><canvas id="chartDataTypes"></canvas></div></div>';
+  h += '<div class="chart-box"><h3>Winner Distribution</h3><div style="height:200px"><canvas id="chartWinners"></canvas></div></div>';
+  h += '</div>';
+
+  // ── Summary Table
+  h += '<div class="table-wrap" style="max-height:400px"><table><thead><tr>';
+  ['#','Exchange','Tier','Hybrid','Dedup','Native','Pro','REST','Direct','Health','Winner'].forEach((col,i) =>
+    h += `<th onclick="sortTable(${i})" style="width:${i===0?'30px':i===1?'120px':i===10?'70px':'auto'}">${col}${sortCol===i?(sortDir>0?' ▲':' ▼'):''}</th>`
+  );
+  h += '</tr></thead><tbody>';
+  const sorted = exArr.sort((a,b) => {
+    if (sortCol===null) return (b[1].hybrid?.total||0)-(a[1].hybrid?.total||0);
+    return getCellVal(a,sortCol,b) * sortDir;
+  });
+  sorted.forEach(([name,x],i) => {
+    const dr=x.directRest||{}, hb=x.hybrid||{}, hs=x.health?.score??100;
+    const hColor = hs>=80?'var(--green)':hs>=50?'var(--yellow)':'var(--red)';
+    h += `<tr><td>${i+1}</td><td><b>${name}</b></td><td>T${x.tier}</td>
+      <td class="clr-h" style="font-weight:700">${fmt(hb.total||0)}</td>
+      <td style="color:var(--red)">${fmt(hb.deduped||0)}</td>
+      <td class="clr-n">${fmt(x.native.total)}</td><td class="clr-p">${fmt(x.ccxtPro.total)}</td>
+      <td class="clr-r">${fmt(x.ccxtRest.total)}</td><td class="clr-d">${fmt(dr.total||0)}</td>
+      <td style="color:${hColor};font-weight:700">${hs}</td><td>${winnerBadge(x.winner)}</td></tr>`;
+  });
+  h += '</tbody></table></div>';
+
+  c.innerHTML = h;
+
+  // ── Build Charts (deferred – allow DOM layout)
+  setTimeout(() => {
+    if (throughputHistory.length > 1) {
+      const labels = throughputHistory.map((p,i)=> i);
+      getOrCreateChart('chartThroughput', {
+        type:'line',
+        data:{ labels, datasets:[
+          {label:'Hybrid',data:throughputHistory.map(p=>p.total),borderColor:'rgb(245,158,11)',backgroundColor:'rgba(245,158,11,.1)',fill:true,tension:.3,pointRadius:0,borderWidth:1.5},
+          {label:'Trades',data:throughputHistory.map(p=>p.trades),borderColor:'rgb(34,197,94)',backgroundColor:'transparent',tension:.3,pointRadius:0,borderWidth:1},
+          {label:'OB',data:throughputHistory.map(p=>p.ob),borderColor:'rgb(59,130,246)',backgroundColor:'transparent',tension:.3,pointRadius:0,borderWidth:1}
+        ]},
+        options:{...darkChartOpts,scales:{...darkChartOpts.scales,x:{display:false}},plugins:{legend:{position:'top',labels:{color:'#94a3b8',font:{size:9},boxWidth:12}}}}
+      });
+    }
+
+    const top15 = [...exArr].sort((a,b)=>(b[1].hybrid?.total||0)-(a[1].hybrid?.total||0)).slice(0,15);
+    getOrCreateChart('chartHybridTop', {
+      type:'bar',
+      data:{ labels:top15.map(([n])=>n), datasets:[
+        {label:'Hybrid',data:top15.map(([,x])=>x.hybrid?.total||0),backgroundColor:'rgba(245,158,11,.6)',borderWidth:0},
+        {label:'Deduped',data:top15.map(([,x])=>x.hybrid?.deduped||0),backgroundColor:'rgba(239,68,68,.4)',borderWidth:0}
+      ]},
+      options:{...darkChartOpts,plugins:{legend:{position:'top',labels:{color:'#94a3b8',font:{size:9},boxWidth:12}}},scales:{...darkChartOpts.scales,x:{stacked:true,ticks:{color:'#64748b',font:{size:7},maxRotation:45}},y:{stacked:true,ticks:{color:'#64748b'},grid:{color:'rgba(255,255,255,.04)'}}}}
+    });
+
+    getOrCreateChart('chartDataTypes', {
+      type:'doughnut',
+      data:{labels:['Trades','OrderBook','Tickers'],datasets:[{data:[hyb.trades||0,hyb.orderbook||0,hyb.tickers||0],backgroundColor:['rgba(34,197,94,.7)','rgba(59,130,246,.7)','rgba(6,182,212,.7)'],borderWidth:0}]},
+      options:{responsive:true,maintainAspectRatio:false,animation:{duration:0},plugins:{legend:{position:'right',labels:{color:'#94a3b8',font:{size:10}}}}}
+    });
+
+    const ws = data.summary;
+    getOrCreateChart('chartWinners', {
+      type:'doughnut',
+      data:{labels:['Native','Pro','REST','Direct','Tie','N-Only','Failed'],datasets:[{data:[ws.nativeWins,ws.ccxtProWins,ws.ccxtRestWins,ws.directRestWins||0,ws.ties,ws.nativeOnly,ws.bothFailed],backgroundColor:['rgba(34,197,94,.7)','rgba(59,130,246,.7)','rgba(249,115,22,.7)','rgba(168,85,247,.7)','rgba(6,182,212,.7)','rgba(132,204,22,.7)','rgba(239,68,68,.7)'],borderWidth:0}]},
+      options:{responsive:true,maintainAspectRatio:false,animation:{duration:0},plugins:{legend:{position:'right',labels:{color:'#94a3b8',font:{size:9}}}}}
+    });
+  }, 50);
+}
+
+function getCellVal(a, col, b) {
+  const [n1,x1]=a,[n2,x2]=b;
+  const v = (x,n) => {const dr=x.directRest||{},hb=x.hybrid||{};
+    switch(col){case 0:return 0;case 1:return n;case 2:return x.tier;case 3:return hb.total||0;case 4:return hb.deduped||0;
+      case 5:return x.native.total;case 6:return x.ccxtPro.total;case 7:return x.ccxtRest.total;case 8:return dr.total||0;
+      case 9:return x.health?.score??100;case 10:return x.winner||'';default:return 0;}};
+  const va=v(x1,n1), vb=v(x2,n2);
+  return typeof va==='string'?va.localeCompare(vb):va-vb;
+}
+
+window.sortTable = function(col) {
+  if (sortCol===col) sortDir*=-1; else {sortCol=col;sortDir=1;}
+  render();
+};
+
+/* ═══════════════════════════════════════════════
+   TAB 1: PER EXCHANGE
+   ═══════════════════════════════════════════════ */
+function renderPerExchange(c) {
+  const exArr = Object.entries(data.exchanges);
+  let h = '';
+  exArr.forEach(([name,x]) => {
+    const dr=x.directRest||{}, hb=x.hybrid||{};
+    const allPairs=[...new Set([...Object.keys(x.native.pairs),...Object.keys(x.ccxtPro.pairs),...Object.keys(x.ccxtRest.pairs),...Object.keys(dr.pairs||{}),...Object.keys(hb.pairs||{})])].sort();
+    const hs=x.health?.score??100, hColor=hs>=80?'var(--green)':hs>=50?'var(--yellow)':'var(--red)';
+    const rawT=x.native.total+x.ccxtPro.total+x.ccxtRest.total+(dr.total||0);
+
+    h += `<div style="margin-bottom:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px">`;
+    h += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:4px">`;
+    h += `<div style="min-width:0"><b style="font-size:13px">${name}</b> <span style="color:var(--dim);font-size:10px">T${x.tier}</span></div>`;
+    h += `<div style="display:flex;gap:8px;align-items:center;font-size:11px;flex-wrap:wrap">`;
+    h += `<span style="color:var(--gold);font-weight:700">H:${fmt(hb.total||0)}</span>`;
+    h += `<span style="color:var(--red);font-size:9px">-${fmt(hb.deduped||0)} (${rawT>0?pct(hb.deduped||0,rawT):0}%)</span>`;
+    h += `<span style="color:${hColor};font-weight:700">${hs}/100</span>`;
+    h += `${winnerBadge(x.winner)}`;
+    h += '</div></div>';
+
+    h += `<div style="display:flex;gap:10px;font-size:10px;color:var(--dim);margin-bottom:4px;flex-wrap:wrap">`;
+    h += `<span class="clr-n">N:${fmt(x.native.total)}</span><span class="clr-p">P:${fmt(x.ccxtPro.total)}</span>`;
+    h += `<span class="clr-r">R:${fmt(x.ccxtRest.total)}</span><span class="clr-d">D:${fmt(dr.total||0)}</span></div>`;
+
+    if (allPairs.length) {
+      h += '<div class="table-wrap" style="max-height:200px"><table><thead><tr><th style="width:90px">Pair</th><th>H-TR</th><th>H-OB</th><th>N-TR</th><th>N-OB</th><th>P-TR</th><th>P-OB</th><th>R-TR</th><th>R-OB</th><th>D-TR</th><th>D-OB</th></tr></thead><tbody>';
+      allPairs.forEach(p => {
+        const np=x.native.pairs[p]||{trades:0,ob:0},pp=x.ccxtPro.pairs[p]||{trades:0,ob:0},rp=x.ccxtRest.pairs[p]||{trades:0,ob:0},dp=dr.pairs?.[p]||{trades:0,ob:0},hp=hb.pairs?.[p]||{trades:0,ob:0};
+        h += `<tr><td><b>${p}</b></td><td class="clr-h">${hp.trades||0}</td><td class="clr-h">${hp.ob||0}</td>`;
+        h += `<td class="clr-n">${np.trades}</td><td class="clr-n">${np.ob}</td>`;
+        h += `<td class="clr-p">${pp.trades}</td><td class="clr-p">${pp.ob}</td>`;
+        h += `<td class="clr-r">${rp.trades}</td><td class="clr-r">${rp.ob}</td>`;
+        h += `<td class="clr-d">${dp.trades||0}</td><td class="clr-d">${dp.ob||0}</td></tr>`;
+      });
+      h += '</tbody></table></div>';
+    }
+    h += '</div>';
+  });
+  c.innerHTML = h;
+}
+
+/* ═══════════════════════════════════════════════
+   TAB 2: PER PAIR
+   ═══════════════════════════════════════════════ */
+function renderPerPair(c) {
+  if (!data.symbols) { c.innerHTML='<p style="color:var(--dim)">No pair data yet</p>'; return; }
+  const exArr = Object.entries(data.exchanges);
+  const hybridByPair={};
+  exArr.forEach(([name,x])=>{for(const[p,v]of Object.entries(x.hybrid?.pairs||{})){if(!hybridByPair[p])hybridByPair[p]={trades:0,ob:0};hybridByPair[p].trades+=(v.trades||0);hybridByPair[p].ob+=(v.ob||0);}});
+  const pairs = Object.entries(data.symbols).sort((a,b)=>{const ha=hybridByPair[a[0]]||{trades:0,ob:0},hb2=hybridByPair[b[0]]||{trades:0,ob:0};return(hb2.trades+hb2.ob)-(ha.trades+ha.ob);});
+
+  let h = '<div class="table-wrap" style="max-height:600px"><table><thead><tr>';
+  h += '<th style="width:30px">#</th><th style="width:100px">Pair</th><th>Exch</th><th>H-TR</th><th>H-OB</th><th>N-TR</th><th>N-OB</th><th>P-TR</th><th>P-OB</th><th>R-TR</th><th>R-OB</th><th>D-TR</th><th>D-OB</th>';
+  h += '</tr></thead><tbody>';
+  pairs.forEach(([sym,v],i)=>{
+    const hp=hybridByPair[sym]||{trades:0,ob:0};
+    h += `<tr><td>${i+1}</td><td><b>${sym}</b></td><td>${v.ec||0}</td>`;
+    h += `<td class="clr-h" style="font-weight:700">${fmt(hp.trades)}</td><td class="clr-h">${fmt(hp.ob)}</td>`;
+    h += `<td class="clr-n">${fmt(v.nT)}</td><td class="clr-n">${fmt(v.nO)}</td>`;
+    h += `<td class="clr-p">${fmt(v.pT)}</td><td class="clr-p">${fmt(v.pO)}</td>`;
+    h += `<td class="clr-r">${fmt(v.rT)}</td><td class="clr-r">${fmt(v.rO)}</td>`;
+    h += `<td class="clr-d">${fmt(v.dT||0)}</td><td class="clr-d">${fmt(v.dO||0)}</td></tr>`;
+  });
+  h += '</tbody></table></div>';
+  c.innerHTML = h;
+}
+
+/* ═══════════════════════════════════════════════
+   TAB 3: DEDUP ANALYSIS
+   ═══════════════════════════════════════════════ */
+function renderDedupAnalysis(c) {
+  const exArr = Object.entries(data.exchanges);
+  const hyb = data.hybridSummary||{};
+  const tn=exArr.reduce((a,[,x])=>a+x.native.total,0), tp=exArr.reduce((a,[,x])=>a+x.ccxtPro.total,0);
+  const tr=exArr.reduce((a,[,x])=>a+x.ccxtRest.total,0), td=exArr.reduce((a,[,x])=>a+(x.directRest?.total||0),0);
+  const raw=tn+tp+tr+td;
+
+  let h = '<div class="analytics-cards">';
+  h += `<div class="a-card"><div class="label">Hybrid Unique</div><div class="val" style="color:var(--gold)">${fmtK(hyb.total||0)}</div></div>`;
+  h += `<div class="a-card"><div class="label">Raw Total</div><div class="val">${fmtK(raw)}</div></div>`;
+  h += `<div class="a-card"><div class="label">Dupes Removed</div><div class="val" style="color:var(--red)">${fmtK(hyb.deduped||0)}</div></div>`;
+  h += `<div class="a-card"><div class="label">Dedup Rate</div><div class="val" style="color:${pct(hyb.deduped||0,raw)>20?'var(--red)':'var(--green)'}"> ${pct(hyb.deduped||0,raw)}%</div></div>`;
+  h += `<div class="a-card"><div class="label">Efficiency</div><div class="val" style="color:var(--green)">${raw>0?Math.round((hyb.total||0)/raw*100):0}%</div></div>`;
+  h += '</div>';
+
+  h += '<div class="charts-row">';
+  h += '<div class="chart-box"><h3>Hybrid vs Deduped (stacked)</h3><div style="height:200px"><canvas id="chartDedupStack"></canvas></div></div>';
+  h += '<div class="chart-box"><h3>Dedup % by Exchange</h3><div style="height:200px"><canvas id="chartDedupPct"></canvas></div></div>';
+  h += '</div>';
+
+  const sorted = [...exArr].sort((a,b)=>(b[1].hybrid?.deduped||0)-(a[1].hybrid?.deduped||0));
+  h += '<div class="table-wrap" style="max-height:400px"><table><thead><tr><th style="width:30px">#</th><th style="width:110px">Exchange</th><th>Hybrid</th><th>Raw</th><th>Deduped</th><th>Rate</th><th>H-TR</th><th>H-OB</th><th>H-TK</th><th>Status</th></tr></thead><tbody>';
+  sorted.forEach(([name,x],i) => {
+    const hb=x.hybrid||{},dr=x.directRest||{};
+    const rawT=x.native.total+x.ccxtPro.total+x.ccxtRest.total+(dr.total||0);
+    const dp=rawT>0?pct(hb.deduped||0,rawT):0;
+    const st=dp===0?'🟢 Clean':dp<10?'🟡 Low':dp<30?'🟠 Mod':'🔴 High';
+    h += `<tr><td>${i+1}</td><td><b>${name}</b></td><td class="clr-h" style="font-weight:700">${fmt(hb.total||0)}</td>`;
+    h += `<td>${fmt(rawT)}</td><td style="color:var(--red)">${fmt(hb.deduped||0)}</td>`;
+    h += `<td style="color:${dp>20?'var(--red)':dp>5?'var(--yellow)':'var(--green)'};font-weight:700">${dp}%</td>`;
+    h += `<td>${fmt(hb.trades||0)}</td><td>${fmt(hb.orderbook||0)}</td><td>${fmt(hb.tickers||0)}</td><td>${st}</td></tr>`;
+  });
+  h += '</tbody></table></div>';
+  c.innerHTML = h;
+
+  setTimeout(() => {
+    const top20=[...sorted].slice(0,20);
+    getOrCreateChart('chartDedupStack',{
+      type:'bar',
+      data:{labels:top20.map(([n])=>n),datasets:[
+        {label:'Unique',data:top20.map(([,x])=>x.hybrid?.total||0),backgroundColor:'rgba(245,158,11,.6)',borderWidth:0},
+        {label:'Deduped',data:top20.map(([,x])=>x.hybrid?.deduped||0),backgroundColor:'rgba(239,68,68,.5)',borderWidth:0}
+      ]},
+      options:{...darkChartOpts,plugins:{legend:{position:'top',labels:{color:'#94a3b8',font:{size:9},boxWidth:12}}},scales:{x:{stacked:true,ticks:{color:'#64748b',font:{size:7},maxRotation:45}},y:{stacked:true,ticks:{color:'#64748b'},grid:{color:'rgba(255,255,255,.04)'}}}}
+    });
+    const withDedup=sorted.filter(([,x])=>(x.hybrid?.deduped||0)>0).slice(0,15);
+    if (withDedup.length) {
+      getOrCreateChart('chartDedupPct',{
+        type:'bar',
+        data:{labels:withDedup.map(([n])=>n),datasets:[{label:'Dedup%',data:withDedup.map(([,x])=>{const r=x.native.total+x.ccxtPro.total+x.ccxtRest.total+(x.directRest?.total||0);return r>0?Math.round((x.hybrid?.deduped||0)/r*100):0;}),
+          backgroundColor:withDedup.map(([,x])=>{const r=x.native.total+x.ccxtPro.total+x.ccxtRest.total+(x.directRest?.total||0);const p=r>0?Math.round((x.hybrid?.deduped||0)/r*100):0;return p>30?'rgba(239,68,68,.6)':p>10?'rgba(249,115,22,.6)':'rgba(34,197,94,.6)';}),borderWidth:0}]},
+        options:{indexAxis:'y',...darkChartOpts,plugins:{legend:{display:false}},scales:{x:{max:100,ticks:{color:'#64748b',callback:v=>v+'%'},grid:{color:'rgba(255,255,255,.04)'}},y:{ticks:{color:'#94a3b8',font:{size:8}}}}}
+      });
+    }
+  }, 50);
+}
+
+/* ═══════════════════════════════════════════════
+   TAB 4: ANALYTICS
+   ═══════════════════════════════════════════════ */
+function renderAnalytics(c) {
+  const exArr=Object.entries(data.exchanges), hyb=data.hybridSummary||{};
+  const tn=exArr.reduce((a,[,x])=>a+x.native.total,0), tp=exArr.reduce((a,[,x])=>a+x.ccxtPro.total,0);
+  const tr=exArr.reduce((a,[,x])=>a+x.ccxtRest.total,0), td=exArr.reduce((a,[,x])=>a+(x.directRest?.total||0),0);
+  const raw=tn+tp+tr+td;
+
+  let h = '<div class="analytics-cards">';
+  h += `<div class="a-card"><div class="label">Hybrid Total</div><div class="val" style="color:var(--gold)">${fmtK(hyb.total||0)}</div></div>`;
+  h += `<div class="a-card"><div class="label">Hybrid/sec</div><div class="val" style="color:var(--gold)">${data.uptime>0?fmt(Math.round((hyb.total||0)/data.uptime)):'-'}</div></div>`;
+  h += `<div class="a-card"><div class="label">Raw Total</div><div class="val">${fmtK(raw)}</div></div>`;
+  h += `<div class="a-card"><div class="label">Active</div><div class="val" style="color:var(--green)">${data.summary.totalActive}</div></div>`;
+  h += `<div class="a-card"><div class="label">Health Avg</div><div class="val" style="color:${(data.healthSummary?.avgScore||0)>=80?'var(--green)':'var(--yellow)'}">${data.healthSummary?.avgScore||0}</div></div>`;
+  h += `<div class="a-card"><div class="label">Pairs</div><div class="val">${Object.keys(data.symbols||{}).length}</div></div>`;
+  h += '</div>';
+
+  h += '<div class="charts-row">';
+  h += '<div class="chart-box"><h3>Method Distribution</h3><div style="height:200px"><canvas id="chartMethodPie"></canvas></div></div>';
+  h += '<div class="chart-box"><h3>Top 10 Exchanges</h3><div style="height:200px"><canvas id="chartTop10Bar"></canvas></div></div>';
+  h += '</div>';
+  h += '<div class="charts-row">';
+  h += '<div class="chart-box"><h3>Tier Breakdown</h3><div style="height:200px"><canvas id="chartTierBar"></canvas></div></div>';
+  h += '<div class="chart-box"><h3>Error Categories</h3><div style="height:200px"><canvas id="chartErrPie"></canvas></div></div>';
+  h += '</div>';
+  c.innerHTML = h;
+
+  setTimeout(() => {
+    getOrCreateChart('chartMethodPie',{type:'doughnut',
+      data:{labels:['Native','CCXT Pro','CCXT REST','Direct REST','Deduped'],datasets:[{data:[tn,tp,tr,td,hyb.deduped||0],backgroundColor:['rgba(34,197,94,.7)','rgba(59,130,246,.7)','rgba(249,115,22,.7)','rgba(168,85,247,.7)','rgba(239,68,68,.4)'],borderWidth:0}]},
+      options:{responsive:true,maintainAspectRatio:false,animation:{duration:0},plugins:{legend:{position:'right',labels:{color:'#94a3b8',font:{size:9}}}}}
+    });
+    const top10=[...exArr].sort((a,b)=>(b[1].hybrid?.total||0)-(a[1].hybrid?.total||0)).slice(0,10);
+    getOrCreateChart('chartTop10Bar',{type:'bar',
+      data:{labels:top10.map(([n])=>n),datasets:[{label:'Hybrid',data:top10.map(([,x])=>x.hybrid?.total||0),backgroundColor:'rgba(245,158,11,.6)',borderWidth:0}]},
+      options:{indexAxis:'y',...darkChartOpts,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#64748b'},grid:{color:'rgba(255,255,255,.04)'}},y:{ticks:{color:'#94a3b8',font:{size:9}}}}}
+    });
+    const tiers={};
+    exArr.forEach(([,x])=>{const t='T'+x.tier;if(!tiers[t])tiers[t]={h:0,n:0,p:0,r:0,d:0};tiers[t].h+=(x.hybrid?.total||0);tiers[t].n+=x.native.total;tiers[t].p+=x.ccxtPro.total;tiers[t].r+=x.ccxtRest.total;tiers[t].d+=(x.directRest?.total||0);});
+    const tl=Object.keys(tiers).sort();
+    getOrCreateChart('chartTierBar',{type:'bar',
+      data:{labels:tl,datasets:[
+        {label:'Hybrid',data:tl.map(t=>tiers[t].h),backgroundColor:'rgba(245,158,11,.6)',borderWidth:0},
+        {label:'Native',data:tl.map(t=>tiers[t].n),backgroundColor:'rgba(34,197,94,.4)',borderWidth:0},
+        {label:'Pro',data:tl.map(t=>tiers[t].p),backgroundColor:'rgba(59,130,246,.4)',borderWidth:0}
+      ]},
+      options:{...darkChartOpts,plugins:{legend:{position:'top',labels:{color:'#94a3b8',font:{size:9},boxWidth:12}}}}
+    });
+    const errCats={};
+    exArr.forEach(([,x])=>{Object.entries(x.health?.errors||{}).forEach(([cat,cnt])=>{if(!errCats[cat])errCats[cat]=0;errCats[cat]+=cnt;});});
+    const sc=Object.entries(errCats).sort((a,b)=>b[1]-a[1]).slice(0,8);
+    if (sc.length) {
+      const cc={'CONNECTION_CLOSED':'rgba(239,68,68,.7)','TIMEOUT':'rgba(249,115,22,.7)','NOT_SUPPORTED':'rgba(234,179,8,.7)','TYPE_ERROR':'rgba(168,85,247,.7)','PAIR_NOT_FOUND':'rgba(236,72,153,.7)','RATE_LIMIT':'rgba(6,182,212,.7)','UNKNOWN':'rgba(148,163,184,.7)'};
+      getOrCreateChart('chartErrPie',{type:'doughnut',
+        data:{labels:sc.map(([c2])=>c2),datasets:[{data:sc.map(([,v])=>v),backgroundColor:sc.map(([c2])=>cc[c2]||'rgba(148,163,184,.7)'),borderWidth:0}]},
+        options:{responsive:true,maintainAspectRatio:false,animation:{duration:0},plugins:{legend:{position:'right',labels:{color:'#94a3b8',font:{size:8}}}}}
+      });
+    }
+  }, 50);
+}
+
+/* ═══════════════════════════════════════════════
+   TAB 5: CORRELATION
+   ═══════════════════════════════════════════════ */
+function renderCorrelation(c) {
+  const sub=activeSub.cor||'tradeId';
+  let h='<div class="sub-tabs">';
+  ['tradeId','obId'].forEach(s=>{h+=`<div class="sub-tab${sub===s?' active':''}" onclick="activeSub.cor='${s}';render()">${s==='tradeId'?'Trade ID':'OB Sequence'}</div>`;});
+  h+='</div>';
+  const exArr=Object.entries(data.exchanges);
+  const key=sub==='tradeId'?'correlation':'obCorrelation';
+  h+='<div class="table-wrap" style="max-height:500px"><table><thead><tr><th style="width:110px">Exchange</th><th>N</th><th>P</th><th>R</th><th>D</th><th>N↔P</th><th>N↔R</th><th>P↔R</th><th>N↔D</th><th>Checked</th></tr></thead><tbody>';
+  exArr.forEach(([name,x])=>{
+    const cor=x[key]||{}, p=cor.pct||{};
+    const pc=v=>v>=70?'var(--green)':v>=30?'var(--yellow)':v>0?'var(--orange)':'var(--dim)';
+    h+=`<tr><td><b>${name}</b></td><td class="clr-n">${fmt(cor.total?.n||0)}</td><td class="clr-p">${fmt(cor.total?.p||0)}</td>`;
+    h+=`<td class="clr-r">${fmt(cor.total?.r||0)}</td><td class="clr-d">${fmt(cor.total?.d||0)}</td>`;
+    h+=`<td style="color:${pc(p.nativePro||0)};font-weight:700">${p.nativePro||0}%</td>`;
+    h+=`<td style="color:${pc(p.nativeRest||0)};font-weight:700">${p.nativeRest||0}%</td>`;
+    h+=`<td style="color:${pc(p.proRest||0)};font-weight:700">${p.proRest||0}%</td>`;
+    h+=`<td style="color:${pc(p.nativeDirect||0)};font-weight:700">${p.nativeDirect||0}%</td>`;
+    h+=`<td>${fmt(cor.checked||0)}</td></tr>`;
+  });
+  h+='</tbody></table></div>';
+  c.innerHTML=h;
+}
+
+/* ═══════════════════════════════════════════════
+   TAB 6: HEALTH
+   ═══════════════════════════════════════════════ */
+function renderHealth(c) {
+  const sub=activeSub.health||'overview';
+  let h='<div class="sub-tabs">';
+  ['overview','errors','fixes','connections'].forEach(s=>{h+=`<div class="sub-tab${sub===s?' active':''}" onclick="activeSub.health='${s}';render()">${s.charAt(0).toUpperCase()+s.slice(1)}</div>`;});
+  h+='</div>';
+  const exArr=Object.entries(data.exchanges);
+
+  if (sub==='overview') {
+    h+='<div class="health-grid">';
+    [...exArr].sort((a,b)=>(a[1].health?.score??100)-(b[1].health?.score??100)).forEach(([name,x])=>{
+      const hs=x.health?.score??100, hColor=hs>=80?'var(--green)':hs>=50?'var(--yellow)':'var(--red)';
+      const errCats=Object.entries(x.health?.errors||{}).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
+      h+=`<div class="h-card"><div class="name">${name}</div>`;
+      h+=`<div class="score-circle"><svg viewBox="0 0 50 50"><circle cx="25" cy="25" r="21" stroke="var(--bg3)"/><circle cx="25" cy="25" r="21" stroke="${hColor}" stroke-dasharray="${hs*1.32} 132"/></svg><span style="color:${hColor}">${hs}</span></div>`;
+      h+=`<div style="text-align:center;font-size:9px;color:var(--dim)">Err:${x.health?.totalErrors||0} | H:${fmt(x.hybrid?.total||0)}</div>`;
+      if(errCats.length){h+='<div class="err-cats">';errCats.slice(0,3).forEach(([cat,cnt])=>h+=`<span class="err-cat">${cat}:${cnt}</span>`);h+='</div>';}
+      h+=`<div class="conn-dots"><span>${x.native.connected?'🟢':'🔴'}N</span><span>${x.ccxtPro.connected?'🟢':'🔴'}P</span><span>${x.ccxtRest.connected?'🟢':'🔴'}R</span><span>${x.directRest?.connected?'🟢':'🔴'}D</span></div>`;
+      h+='</div>';
+    });
+    h+='</div>';
+
+    h+='<div class="chart-box"><h3>Health Scores</h3><div style="height:180px"><canvas id="chartHealthBar"></canvas></div></div>';
+    c.innerHTML=h;
+    setTimeout(()=>{
+      const s=[...exArr].sort((a,b)=>(a[1].health?.score??100)-(b[1].health?.score??100));
+      getOrCreateChart('chartHealthBar',{type:'bar',
+        data:{labels:s.map(([n])=>n),datasets:[{label:'Health',data:s.map(([,x])=>x.health?.score??100),backgroundColor:s.map(([,x])=>{const sc2=x.health?.score??100;return sc2>=80?'rgba(34,197,94,.6)':sc2>=50?'rgba(234,179,8,.6)':'rgba(239,68,68,.6)';}),borderWidth:0}]},
+        options:{...darkChartOpts,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#64748b',font:{size:7},maxRotation:90}},y:{min:0,max:100,ticks:{color:'#64748b'},grid:{color:'rgba(255,255,255,.04)'}}}}
+      });
+    }, 50);
+  } else if (sub==='errors') {
+    const allCats=new Set();
+    exArr.forEach(([,x])=>Object.keys(x.health?.errors||{}).forEach(ct=>allCats.add(ct)));
+    const cats=[...allCats].sort();
+    h+='<div class="table-wrap" style="max-height:500px"><table><thead><tr><th style="width:110px">Exchange</th><th>Score</th><th>Total</th>';
+    cats.forEach(cat=>h+=`<th style="font-size:8px">${cat}</th>`);
+    h+='</tr></thead><tbody>';
+    exArr.forEach(([name,x])=>{
+      const hs=x.health?.score??100, hColor=hs>=80?'var(--green)':hs>=50?'var(--yellow)':'var(--red)';
+      h+=`<tr><td><b>${name}</b></td><td style="color:${hColor};font-weight:700">${hs}</td><td>${x.health?.totalErrors||0}</td>`;
+      cats.forEach(cat=>{const v=x.health?.errors?.[cat]||0;h+=`<td style="text-align:center;${v>0?'color:var(--red)':''}">${v||'-'}</td>`;});
+      h+='</tr>';
+    });
+    h+='</tbody></table></div>';
+    c.innerHTML=h;
+  } else if (sub==='fixes') {
+    h+='<div class="table-wrap" style="max-height:500px"><table><thead><tr><th style="width:110px">Exchange</th><th>Score</th><th>Priority</th><th>Fix</th><th>Detail</th></tr></thead><tbody>';
+    exArr.forEach(([name,x])=>{
+      const fixes=x.health?.fixes||[];if(!fixes.length)return;
+      const hs=x.health?.score??100, hColor=hs>=80?'var(--green)':hs>=50?'var(--yellow)':'var(--red)';
+      fixes.forEach((f,i)=>{
+        h+=`<tr><td>${i===0?'<b>'+name+'</b>':''}</td><td style="color:${hColor}">${i===0?hs:''}</td>`;
+        h+=`<td style="color:${f.priority==='high'?'var(--red)':f.priority==='medium'?'var(--yellow)':'var(--dim)'};font-weight:700">${f.priority.toUpperCase()}</td>`;
+        h+=`<td style="font-size:10px">${f.fix}</td><td style="color:var(--dim);font-size:9px">${f.detail||''}</td></tr>`;
+      });
+    });
+    h+='</tbody></table></div>';
+    c.innerHTML=h;
+  } else {
+    h+='<div class="table-wrap" style="max-height:500px"><table><thead><tr><th style="width:110px">Exchange</th><th>N</th><th>P</th><th>R</th><th>D</th><th>Reconn</th><th>N Last</th><th>P Last</th><th>R Last</th><th>D Last</th></tr></thead><tbody>';
+    exArr.forEach(([name,x])=>{
+      const dr=x.directRest||{};
+      h+=`<tr><td><b>${name}</b></td><td>${x.native.connected?'🟢':'🔴'}</td><td>${x.ccxtPro.connected?'🟢':'🔴'}</td>`;
+      h+=`<td>${x.ccxtRest.connected?'🟢':'🔴'}</td><td>${dr.connected?'🟢':'🔴'}</td><td>${x.native.reconnects||0}</td>`;
+      h+=`<td style="font-size:9px">${fmtTime(x.native.lastMsg)}</td><td style="font-size:9px">${fmtTime(x.ccxtPro.lastMsg)}</td>`;
+      h+=`<td style="font-size:9px">${fmtTime(x.ccxtRest.lastMsg)}</td><td style="font-size:9px">${fmtTime(dr.lastMsg)}</td></tr>`;
+    });
+    h+='</tbody></table></div>';
+    c.innerHTML=h;
+  }
+}
+
+/* ═══════════════════════════════════════════════
+   TAB 7: SUBSCRIPTION MANAGER
+   ═══════════════════════════════════════════════ */
+function renderSubManager(c) {
+  const sm = data.subManager||{};
+  const entries = Object.entries(sm);
+  let totalConns=0, totalSubs=0, totalStale=0, totalForced=0, totalBatches=0, totalFailovers=0;
+  entries.forEach(([,v])=>{totalConns+=(v.connectionPool||0);totalSubs+=(v.totalSubs||0);totalStale+=(v.staleReconnects||0);totalForced+=(v.forcedReconnects||0);totalBatches+=(v.batchesSent||0);totalFailovers+=(v.failoverRotations||0);});
+
+  let h='<div class="sm-grid">';
+  h+=`<div class="sm-card"><div class="label">Total Connections</div><div class="val">${totalConns}</div></div>`;
+  h+=`<div class="sm-card"><div class="label">Total Subs Sent</div><div class="val">${totalSubs}</div></div>`;
+  h+=`<div class="sm-card"><div class="label">Batches Sent</div><div class="val" style="color:var(--green)">${totalBatches}</div></div>`;
+  h+=`<div class="sm-card"><div class="label">Stale Reconnects</div><div class="val" style="color:${totalStale>0?'var(--yellow)':'var(--green)'}">${totalStale}</div></div>`;
+  h+=`<div class="sm-card"><div class="label">Forced Reconnects</div><div class="val" style="color:${totalForced>0?'var(--orange)':'var(--green)'}">${totalForced}</div></div>`;
+  h+=`<div class="sm-card"><div class="label">Failover Rotations</div><div class="val" style="color:${totalFailovers>0?'var(--cyan)':'var(--green)'}">${totalFailovers}</div></div>`;
+  h+=`<div class="sm-card"><div class="label">Exchanges Tracked</div><div class="val">${entries.length}</div></div>`;
+  h+='</div>';
+
+  h+='<div class="charts-row">';
+  h+='<div class="chart-box"><h3>Subscriptions per Exchange</h3><div style="height:200px"><canvas id="chartSmSubs"></canvas></div></div>';
+  h+='<div class="chart-box"><h3>Connection Pool</h3><div style="height:200px"><canvas id="chartSmConns"></canvas></div></div>';
+  h+='</div>';
+
+  const active = entries.filter(([,v])=>(v.totalSubs||0)>0||(v.staleReconnects||0)>0||(v.connectionPool||0)>1||(v.failoverRotations||0)>0);
+  if (active.length) {
+    h+='<div style="font-size:10px;color:var(--dim);margin:8px 0">ACTIVE SUBSCRIPTION MANAGERS</div>';
+    h+='<div class="table-wrap" style="max-height:300px"><table><thead><tr><th style="width:110px">Exchange</th><th>Pool</th><th>Subs</th><th>Batches</th><th>Stale</th><th>Forced</th><th>Failovers</th><th>Status</th></tr></thead><tbody>';
+    active.forEach(([name,v])=>{
+      const status=(v.failoverRotations||0)>0?'🔵 Failover':(v.staleReconnects||0)>0?'🟡 Recovered':(v.totalSubs||0)>0?'🟢 Batched':'🔵 Multi-Conn';
+      h+=`<tr><td><b>${name}</b></td><td>${v.connectionPool||0}</td><td>${v.totalSubs||0}</td>`;
+      h+=`<td>${v.batchesSent||0}</td><td style="color:${(v.staleReconnects||0)>0?'var(--yellow)':'var(--green)'}">${v.staleReconnects||0}</td>`;
+      h+=`<td style="color:${(v.forcedReconnects||0)>0?'var(--orange)':'var(--green)'}">${v.forcedReconnects||0}</td>`;
+      h+=`<td style="color:${(v.failoverRotations||0)>0?'var(--cyan)':'var(--green)'}">${v.failoverRotations||0}</td><td>${status}</td></tr>`;
+    });
+    h+='</tbody></table></div>';
+  }
+
+  h+='<div style="font-size:10px;color:var(--dim);margin:8px 0">ALL EXCHANGES</div>';
+  h+='<div class="table-wrap" style="max-height:400px"><table><thead><tr><th style="width:110px">Exchange</th><th>Pool</th><th>Subs</th><th>Batches</th><th>Stale</th><th>Forced</th><th>Failovers</th></tr></thead><tbody>';
+  entries.forEach(([name,v])=>{
+    h+=`<tr><td>${name}</td><td>${v.connectionPool||0}</td><td>${v.totalSubs||0}</td>`;
+    h+=`<td>${v.batchesSent||0}</td><td>${v.staleReconnects||0}</td><td>${v.forcedReconnects||0}</td><td style="color:${(v.failoverRotations||0)>0?'var(--cyan)':'var(--dim)'}">${v.failoverRotations||0}</td></tr>`;
+  });
+  h+='</tbody></table></div>';
+  c.innerHTML=h;
+
+  setTimeout(()=>{
+    const withSubs=entries.filter(([,v])=>(v.totalSubs||0)>0).sort((a,b)=>(b[1].totalSubs||0)-(a[1].totalSubs||0));
+    if (withSubs.length) {
+      getOrCreateChart('chartSmSubs',{type:'bar',
+        data:{labels:withSubs.map(([n])=>n),datasets:[{label:'Subscriptions',data:withSubs.map(([,v])=>v.totalSubs||0),backgroundColor:'rgba(6,182,212,.6)',borderWidth:0}]},
+        options:{...darkChartOpts,plugins:{legend:{display:false}}}
+      });
+    }
+    const poolData=[...entries].sort((a,b)=>(b[1].connectionPool||0)-(a[1].connectionPool||0)).slice(0,20);
+    getOrCreateChart('chartSmConns',{type:'bar',
+      data:{labels:poolData.map(([n])=>n),datasets:[{label:'Connections',data:poolData.map(([,v])=>v.connectionPool||0),backgroundColor:'rgba(132,204,22,.5)',borderWidth:0}]},
+      options:{...darkChartOpts,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#64748b',font:{size:7},maxRotation:45}},y:{ticks:{color:'#64748b'},grid:{color:'rgba(255,255,255,.04)'}}}}
+    });
+  }, 50);
+}
+
+/* ═══════════════════════════════════════════════
+   TAB 8: LIVE EVENTS
+   ═══════════════════════════════════════════════ */
+const eventBuffer=[];
+function renderLiveEvents(c) {
+  if (!c.querySelector('.events-log')) {
+    c.innerHTML='<div style="font-size:10px;color:var(--dim);margin-bottom:6px">Live SSE events stream (last 500)</div><div class="events-log" id="evLog"></div>';
+    eventBuffer.forEach(ev=>appendEvent(ev));
+  }
+}
+
+function appendEvent(ev) {
+  eventBuffer.push(ev);
+  if (eventBuffer.length>500) eventBuffer.shift();
+  const log=document.getElementById('evLog');
+  if (!log) return;
+  const cls=ev.type==='error'?'error':ev.type==='connect'?'connect':'';
+  const line=document.createElement('div');
+  line.className='event-line '+cls;
+  line.innerHTML=`<span class="ts">${new Date(ev.ts||Date.now()).toLocaleTimeString()}</span> <span class="ex">${ev.exchange||'?'}</span> <span class="m">[${ev.method||ev.source||'?'}]</span> ${(ev.msg||ev.message||'').slice(0,120)}`;
+  log.appendChild(line);
+  if (log.children.length>500) log.removeChild(log.firstChild);
+  log.scrollTop=log.scrollHeight;
+}
+
+init();
+</script>
+</body>
+</html>

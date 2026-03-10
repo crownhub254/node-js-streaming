@@ -25,6 +25,9 @@
   "dependencies": {
     "@duckdb/node-api": "^1.4.4-r.1",
     "ccxt": "^4.5.36",
+    "duckdb": "^1.4.4",
+    "iovalkey": "^0.3.3",
+    "protobufjs": "^7.4.0",
     "ws": "^8.18.0"
   }
 }
